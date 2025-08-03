@@ -1,0 +1,624 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HR Pro - Employee & Payroll Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                fontFamily: {
+                    'sans': ['Inter', 'system-ui', 'sans-serif'],
+                },
+                colors: {
+                    primary: '#2563EB',
+                    secondary: '#64748B',
+                    success: '#059669',
+                    warning: '#D97706',
+                    error: '#DC2626',
+                }
+            }
+        }
+    };
+    </script>
+</head>
+<body class="bg-gray-50 font-sans">
+    <!-- @COMPONENT: MainLayout -->
+    <div class="flex h-screen bg-gray-50">
+        <!-- @COMPONENT: Sidebar -->
+        <aside class="w-64 bg-white shadow-sm border-r border-gray-200 hidden lg:block">
+            <div class="flex items-center px-6 py-4 border-b border-gray-200">
+                <div class="flex items-center">
+                    <div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                        <i class="fas fa-users text-white text-sm"></i>
+                    </div>
+                    <span class="ml-3 text-xl font-semibold text-gray-900">HR Pro</span>
+                </div>
+            </div>
+            
+            <nav class="mt-6">
+                <div class="px-3">
+                    <ul class="space-y-1">
+                        <li>
+                            <a href="#" class="bg-primary text-white group flex items-center px-3 py-2 text-sm font-medium rounded-md" data-event="click:navigateToDashboard">
+                                <i class="fas fa-chart-line mr-3 text-sm"></i>
+                                Dashboard
+                            </a>
+                        </li>
+                        <li>
+                            <a href="#" class="text-gray-700 hover:bg-gray-100 group flex items-center px-3 py-2 text-sm font-medium rounded-md" data-event="click:navigateToEmployees">
+                                <i class="fas fa-users mr-3 text-sm"></i>
+                                Employees
+                            </a>
+                        </li>
+                        <li>
+                            <a href="#" class="text-gray-700 hover:bg-gray-100 group flex items-center px-3 py-2 text-sm font-medium rounded-md" data-event="click:navigateToPayroll">
+                                <i class="fas fa-money-check-alt mr-3 text-sm"></i>
+                                Payroll
+                            </a>
+                        </li>
+                        <li>
+                            <a href="#" class="text-gray-700 hover:bg-gray-100 group flex items-center px-3 py-2 text-sm font-medium rounded-md" data-event="click:navigateToDepartments">
+                                <i class="fas fa-building mr-3 text-sm"></i>
+                                Departments
+                            </a>
+                        </li>
+                        <li>
+                            <a href="#" class="text-gray-700 hover:bg-gray-100 group flex items-center px-3 py-2 text-sm font-medium rounded-md" data-event="click:navigateToReports">
+                                <i class="fas fa-chart-bar mr-3 text-sm"></i>
+                                Reports
+                            </a>
+                        </li>
+                        <li>
+                            <a href="#" class="text-gray-700 hover:bg-gray-100 group flex items-center px-3 py-2 text-sm font-medium rounded-md" data-event="click:navigateToSettings">
+                                <i class="fas fa-cog mr-3 text-sm"></i>
+                                Settings
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+        </aside>
+        <!-- @END_COMPONENT: Sidebar -->
+
+        <!-- @COMPONENT: MainContent -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+            <!-- @COMPONENT: Header -->
+            <header class="bg-white shadow-sm border-b border-gray-200">
+                <div class="px-4 sm:px-6 lg:px-8">
+                    <div class="flex justify-between items-center py-4">
+                        <div class="flex items-center">
+                            <button class="lg:hidden text-gray-500 hover:text-gray-700" data-event="click:toggleMobileSidebar">
+                                <i class="fas fa-bars text-xl"></i>
+                            </button>
+                            <h1 class="ml-4 lg:ml-0 text-2xl font-semibold text-gray-900">Dashboard</h1>
+                        </div>
+                        
+                        <div class="flex items-center space-x-4">
+                            <div class="relative">
+                                <button class="text-gray-500 hover:text-gray-700" data-event="click:showNotifications">
+                                    <i class="fas fa-bell text-xl"></i>
+                                    <span class="absolute -top-1 -right-1 bg-error text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">3</span>
+                                </button>
+                            </div>
+                            
+                            <div class="flex items-center space-x-3">
+                                <div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
+                                    <i class="fas fa-user text-gray-600 text-sm"></i>
+                                </div>
+                                <div class="hidden sm:block">
+                                    <p class="text-sm font-medium text-gray-900" data-bind="currentUser.name">Sarah Johnson</p>
+                                    <p class="text-xs text-gray-500">HR Manager</p>
+                                </div>
+                                <button class="text-gray-500 hover:text-gray-700" data-event="click:showUserMenu">
+                                    <i class="fas fa-chevron-down text-sm"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+            <!-- @END_COMPONENT: Header -->
+
+            <!-- @COMPONENT: DashboardContent -->
+            <main class="flex-1 overflow-y-auto">
+                <div class="px-4 sm:px-6 lg:px-8 py-8">
+                    <!-- Stats Overview -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                        <i class="fas fa-users text-primary text-lg"></i>
+                                    </div>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-sm font-medium text-gray-500">Total Employees</p>
+                                    <p class="text-2xl font-semibold text-gray-900" data-bind="stats.totalEmployees">247</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                                        <i class="fas fa-money-bill-wave text-success text-lg"></i>
+                                    </div>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-sm font-medium text-gray-500">Monthly Payroll</p>
+                                    <p class="text-2xl font-semibold text-gray-900" data-bind="stats.monthlyPayroll">$524,890</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    <div class="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                                        <i class="fas fa-building text-warning text-lg"></i>
+                                    </div>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-sm font-medium text-gray-500">Departments</p>
+                                    <p class="text-2xl font-semibold text-gray-900" data-bind="stats.departments">12</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                                        <i class="fas fa-clock text-purple-600 text-lg"></i>
+                                    </div>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-sm font-medium text-gray-500">Pending Reviews</p>
+                                    <p class="text-2xl font-semibold text-gray-900" data-bind="stats.pendingReviews">8</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <!-- Recent Employees -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+                            <div class="px-6 py-4 border-b border-gray-200">
+                                <div class="flex items-center justify-between">
+                                    <h3 class="text-lg font-medium text-gray-900">Recent Employees</h3>
+                                    <button class="bg-primary text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 transition-colors" data-event="click:addNewEmployee">
+                                        <i class="fas fa-plus mr-2"></i>Add Employee
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="px-6 py-4">
+                                <!-- @MAP: recentEmployees.map(employee => ( -->
+                                <div class="flex items-center space-x-4 py-3 border-b border-gray-100 last:border-b-0">
+                                    <div class="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
+                                        <i class="fas fa-user text-gray-600 text-sm"></i>
+                                    </div>
+                                    <div class="flex-1">
+                                        <p class="text-sm font-medium text-gray-900" data-bind="employee.name">John Smith</p>
+                                        <p class="text-xs text-gray-500" data-bind="employee.position">Software Engineer</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="text-sm text-gray-900" data-bind="employee.department">Engineering</p>
+                                        <p class="text-xs text-gray-500" data-bind="employee.startDate">Jan 15, 2024</p>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center space-x-4 py-3 border-b border-gray-100 last:border-b-0">
+                                    <div class="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
+                                        <i class="fas fa-user text-gray-600 text-sm"></i>
+                                    </div>
+                                    <div class="flex-1">
+                                        <p class="text-sm font-medium text-gray-900" data-bind="employee.name">Maria Garcia</p>
+                                        <p class="text-xs text-gray-500" data-bind="employee.position">UX Designer</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="text-sm text-gray-900" data-bind="employee.department">Design</p>
+                                        <p class="text-xs text-gray-500" data-bind="employee.startDate">Jan 12, 2024</p>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center space-x-4 py-3 border-b border-gray-100 last:border-b-0">
+                                    <div class="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
+                                        <i class="fas fa-user text-gray-600 text-sm"></i>
+                                    </div>
+                                    <div class="flex-1">
+                                        <p class="text-sm font-medium text-gray-900" data-bind="employee.name">David Chen</p>
+                                        <p class="text-xs text-gray-500" data-bind="employee.position">Marketing Manager</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="text-sm text-gray-900" data-bind="employee.department">Marketing</p>
+                                        <p class="text-xs text-gray-500" data-bind="employee.startDate">Jan 8, 2024</p>
+                                    </div>
+                                </div>
+                                <!-- @END_MAP )) -->
+                            </div>
+                            <div class="px-6 py-4 border-t border-gray-200">
+                                <a href="#" class="text-primary text-sm font-medium hover:text-blue-700" data-event="click:viewAllEmployees">
+                                    View all employees <i class="fas fa-arrow-right ml-1"></i>
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- Payroll Overview -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+                            <div class="px-6 py-4 border-b border-gray-200">
+                                <div class="flex items-center justify-between">
+                                    <h3 class="text-lg font-medium text-gray-900">Payroll Overview</h3>
+                                    <button class="bg-success text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-700 transition-colors" data-event="click:generatePayroll">
+                                        <i class="fas fa-calculator mr-2"></i>Generate Payroll
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="px-6 py-4">
+                                <div class="space-y-4">
+                                    <div class="flex justify-between items-center py-2">
+                                        <span class="text-sm text-gray-600">Current Period</span>
+                                        <span class="text-sm font-medium text-gray-900" data-bind="payroll.currentPeriod">Jan 1 - Jan 31, 2024</span>
+                                    </div>
+                                    
+                                    <div class="flex justify-between items-center py-2">
+                                        <span class="text-sm text-gray-600">Gross Payroll</span>
+                                        <span class="text-sm font-medium text-gray-900" data-bind="payroll.grossAmount">$524,890</span>
+                                    </div>
+                                    
+                                    <div class="flex justify-between items-center py-2">
+                                        <span class="text-sm text-gray-600">Total Deductions</span>
+                                        <span class="text-sm font-medium text-gray-900" data-bind="payroll.deductions">$89,432</span>
+                                    </div>
+                                    
+                                    <div class="flex justify-between items-center py-2 border-t border-gray-200 pt-4">
+                                        <span class="text-base font-medium text-gray-900">Net Payroll</span>
+                                        <span class="text-base font-semibold text-gray-900" data-bind="payroll.netAmount">$435,458</span>
+                                    </div>
+                                </div>
+
+                                <div class="mt-6">
+                                    <h4 class="text-sm font-medium text-gray-900 mb-3">Recent Payroll Runs</h4>
+                                    <div class="space-y-2">
+                                        <!-- @MAP: recentPayrolls.map(payroll => ( -->
+                                        <div class="flex justify-between items-center py-2 text-sm">
+                                            <span class="text-gray-600" data-bind="payroll.period">Dec 2023</span>
+                                            <div class="flex items-center space-x-2">
+                                                <span class="text-gray-900" data-bind="payroll.amount">$489,320</span>
+                                                <span class="bg-success text-white px-2 py-1 rounded-full text-xs">Completed</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="flex justify-between items-center py-2 text-sm">
+                                            <span class="text-gray-600" data-bind="payroll.period">Nov 2023</span>
+                                            <div class="flex items-center space-x-2">
+                                                <span class="text-gray-900" data-bind="payroll.amount">$467,890</span>
+                                                <span class="bg-success text-white px-2 py-1 rounded-full text-xs">Completed</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="flex justify-between items-center py-2 text-sm">
+                                            <span class="text-gray-600" data-bind="payroll.period">Oct 2023</span>
+                                            <div class="flex items-center space-x-2">
+                                                <span class="text-gray-900" data-bind="payroll.amount">$478,543</span>
+                                                <span class="bg-success text-white px-2 py-1 rounded-full text-xs">Completed</span>
+                                            </div>
+                                        </div>
+                                        <!-- @END_MAP )) -->
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="px-6 py-4 border-t border-gray-200">
+                                <a href="#" class="text-primary text-sm font-medium hover:text-blue-700" data-event="click:viewPayrollHistory">
+                                    View payroll history <i class="fas fa-arrow-right ml-1"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Employee Management Section -->
+                    <div class="mt-8">
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+                            <div class="px-6 py-4 border-b border-gray-200">
+                                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
+                                    <h3 class="text-lg font-medium text-gray-900">Employee Directory</h3>
+                                    
+                                    <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
+                                        <div class="relative">
+                                            <input type="text" placeholder="Search employees..." class="w-full sm:w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" data-bind="searchQuery" data-event="input:handleSearch">
+                                            <i class="fas fa-search absolute left-3 top-2.5 text-gray-400 text-sm"></i>
+                                        </div>
+                                        
+                                        <select class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" data-bind="departmentFilter" data-event="change:handleDepartmentFilter">
+                                            <option value="">All Departments</option>
+                                            <option value="engineering">Engineering</option>
+                                            <option value="design">Design</option>
+                                            <option value="marketing">Marketing</option>
+                                            <option value="sales">Sales</option>
+                                            <option value="hr">Human Resources</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Position</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Salary</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-gray-200">
+                                        <!-- @MAP: employees.map(employee => ( -->
+                                        <tr class="hover:bg-gray-50">
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                <div class="flex items-center">
+                                                    <div class="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
+                                                        <i class="fas fa-user text-gray-600 text-sm"></i>
+                                                    </div>
+                                                    <div class="ml-4">
+                                                        <div class="text-sm font-medium text-gray-900" data-bind="employee.name">Sarah Wilson</div>
+                                                        <div class="text-sm text-gray-500" data-bind="employee.email">sarah.wilson@company.com</div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" data-bind="employee.position">Senior Developer</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" data-bind="employee.department">Engineering</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" data-bind="employee.salary">$85,000</td>
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Active</span>
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                                <div class="flex justify-end space-x-2">
+                                                    <button class="text-primary hover:text-blue-700" data-event="click:viewEmployee" data-employee-id="1">
+                                                        <i class="fas fa-eye"></i>
+                                                    </button>
+                                                    <button class="text-gray-600 hover:text-gray-900" data-event="click:editEmployee" data-employee-id="1">
+                                                        <i class="fas fa-edit"></i>
+                                                    </button>
+                                                    <button class="text-error hover:text-red-700" data-event="click:deleteEmployee" data-employee-id="1">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+
+                                        <tr class="hover:bg-gray-50">
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                <div class="flex items-center">
+                                                    <div class="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
+                                                        <i class="fas fa-user text-gray-600 text-sm"></i>
+                                                    </div>
+                                                    <div class="ml-4">
+                                                        <div class="text-sm font-medium text-gray-900" data-bind="employee.name">Michael Brown</div>
+                                                        <div class="text-sm text-gray-500" data-bind="employee.email">michael.brown@company.com</div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" data-bind="employee.position">Product Manager</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" data-bind="employee.department">Product</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" data-bind="employee.salary">$95,000</td>
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Active</span>
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                                <div class="flex justify-end space-x-2">
+                                                    <button class="text-primary hover:text-blue-700" data-event="click:viewEmployee" data-employee-id="2">
+                                                        <i class="fas fa-eye"></i>
+                                                    </button>
+                                                    <button class="text-gray-600 hover:text-gray-900" data-event="click:editEmployee" data-employee-id="2">
+                                                        <i class="fas fa-edit"></i>
+                                                    </button>
+                                                    <button class="text-error hover:text-red-700" data-event="click:deleteEmployee" data-employee-id="2">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+
+                                        <tr class="hover:bg-gray-50">
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                <div class="flex items-center">
+                                                    <div class="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
+                                                        <i class="fas fa-user text-gray-600 text-sm"></i>
+                                                    </div>
+                                                    <div class="ml-4">
+                                                        <div class="text-sm font-medium text-gray-900" data-bind="employee.name">Lisa Thompson</div>
+                                                        <div class="text-sm text-gray-500" data-bind="employee.email">lisa.thompson@company.com</div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" data-bind="employee.position">Marketing Specialist</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" data-bind="employee.department">Marketing</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" data-bind="employee.salary">$65,000</td>
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">On Leave</span>
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                                <div class="flex justify-end space-x-2">
+                                                    <button class="text-primary hover:text-blue-700" data-event="click:viewEmployee" data-employee-id="3">
+                                                        <i class="fas fa-eye"></i>
+                                                    </button>
+                                                    <button class="text-gray-600 hover:text-gray-900" data-event="click:editEmployee" data-employee-id="3">
+                                                        <i class="fas fa-edit"></i>
+                                                    </button>
+                                                    <button class="text-error hover:text-red-700" data-event="click:deleteEmployee" data-employee-id="3">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        <!-- @END_MAP )) -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <div class="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+                                <div class="text-sm text-gray-500">
+                                    Showing <span data-bind="pagination.start">1</span> to <span data-bind="pagination.end">10</span> of <span data-bind="pagination.total">247</span> employees
+                                </div>
+                                <div class="flex space-x-2">
+                                    <button class="px-3 py-1 border border-gray-300 rounded-md text-sm text-gray-500 hover:bg-gray-50" data-event="click:previousPage">
+                                        <i class="fas fa-chevron-left"></i>
+                                    </button>
+                                    <button class="px-3 py-1 bg-primary text-white rounded-md text-sm">1</button>
+                                    <button class="px-3 py-1 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50">2</button>
+                                    <button class="px-3 py-1 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50">3</button>
+                                    <button class="px-3 py-1 border border-gray-300 rounded-md text-sm text-gray-500 hover:bg-gray-50" data-event="click:nextPage">
+                                        <i class="fas fa-chevron-right"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+            <!-- @END_COMPONENT: DashboardContent -->
+        </div>
+        <!-- @END_COMPONENT: MainContent -->
+    </div>
+    <!-- @END_COMPONENT: MainLayout -->
+
+    <!-- @COMPONENT: AddEmployeeModal [hidden by default] -->
+    <div id="addEmployeeModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-11/12 max-w-2xl shadow-lg rounded-md bg-white">
+            <div class="flex items-center justify-between border-b border-gray-200 pb-4 mb-6">
+                <h3 class="text-lg font-medium text-gray-900">Add New Employee</h3>
+                <button class="text-gray-400 hover:text-gray-600" data-event="click:closeModal">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            
+            <form class="space-y-6" data-event="submit:handleAddEmployee">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">First Name</label>
+                        <input type="text" required class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" data-bind="newEmployee.firstName">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
+                        <input type="text" required class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" data-bind="newEmployee.lastName">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                        <input type="email" required class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" data-bind="newEmployee.email">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+                        <input type="tel" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" data-bind="newEmployee.phone">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Position</label>
+                        <input type="text" required class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" data-bind="newEmployee.position">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Department</label>
+                        <select required class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" data-bind="newEmployee.department">
+                            <option value="">Select Department</option>
+                            <option value="engineering">Engineering</option>
+                            <option value="design">Design</option>
+                            <option value="marketing">Marketing</option>
+                            <option value="sales">Sales</option>
+                            <option value="hr">Human Resources</option>
+                            <option value="finance">Finance</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Salary</label>
+                        <input type="number" required class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" data-bind="newEmployee.salary">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+                        <input type="date" required class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" data-bind="newEmployee.startDate">
+                    </div>
+                </div>
+                
+                <div class="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+                    <button type="button" class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50" data-event="click:closeModal">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-4 py-2 bg-primary text-white rounded-md text-sm font-medium hover:bg-blue-700">
+                        Add Employee
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- @END_COMPONENT: AddEmployeeModal -->
+
+    <script>
+    (function() {
+        // TODO: Implement business logic, API calls, and state management
+        
+        // Modal handling
+        const addEmployeeModal = document.getElementById('addEmployeeModal');
+        
+        // Show modal when Add Employee button is clicked
+        document.addEventListener('click', function(e) {
+            if (e.target.closest('[data-event*="addNewEmployee"]')) {
+                addEmployeeModal.classList.remove('hidden');
+            }
+            
+            if (e.target.closest('[data-event*="closeModal"]')) {
+                addEmployeeModal.classList.add('hidden');
+            }
+        });
+        
+        // Close modal when clicking outside
+        addEmployeeModal.addEventListener('click', function(e) {
+            if (e.target === addEmployeeModal) {
+                addEmployeeModal.classList.add('hidden');
+            }
+        });
+        
+        // Form validation feedback (visual only)
+        document.addEventListener('input', function(e) {
+            if (e.target.type === 'email') {
+                const isValid = e.target.checkValidity();
+                if (isValid) {
+                    e.target.classList.remove('border-red-300');
+                    e.target.classList.add('border-green-300');
+                } else {
+                    e.target.classList.remove('border-green-300');
+                    e.target.classList.add('border-red-300');
+                }
+            }
+        });
+        
+        // Search functionality (visual feedback only)
+        document.addEventListener('input', function(e) {
+            if (e.target.getAttribute('data-bind') === 'searchQuery') {
+                // TODO: Implement real search functionality
+                console.log('Search query:', e.target.value);
+            }
+        });
+        
+        // Mobile sidebar toggle
+        let sidebarOpen = false;
+        document.addEventListener('click', function(e) {
+            if (e.target.closest('[data-event*="toggleMobileSidebar"]')) {
+                // TODO: Implement mobile sidebar toggle
+                sidebarOpen = !sidebarOpen;
+                console.log('Mobile sidebar:', sidebarOpen ? 'open' : 'closed');
+            }
+        });
+    })();
+    </script>
+</body>
+</html>

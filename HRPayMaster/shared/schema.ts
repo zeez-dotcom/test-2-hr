@@ -1,0 +1,480 @@
+import { sql, relations } from "drizzle-orm";
+import { pgTable, text, varchar, numeric, date, timestamp, boolean, integer } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod";
+
+export const departments = pgTable("departments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+});
+
+export const employees = pgTable("employees", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  nickname: text("nickname"),
+  email: text("email"),
+  phone: text("phone"),
+  position: text("position").notNull(),
+  departmentId: varchar("department_id").references(() => departments.id),
+  salary: numeric("salary", { precision: 10, scale: 2 }).notNull(),
+  workLocation: varchar("work_location", { length: 100 }).default("Office").notNull(),
+  startDate: date("start_date").notNull(),
+  status: text("status").notNull().default("active"), // active, inactive, on_leave, vacation
+  bankIban: text("bank_iban"),
+  bankName: text("bank_name"),
+  emergencyContact: text("emergency_contact"),
+  emergencyPhone: text("emergency_phone"),
+  nationalId: text("national_id"),
+  address: text("address"),
+  dateOfBirth: date("date_of_birth"),
+  
+  // Visa Information
+  visaNumber: text("visa_number"),
+  visaType: text("visa_type"),
+  visaIssueDate: date("visa_issue_date"),
+  visaExpiryDate: date("visa_expiry_date"),
+  visaAlertDays: integer("visa_alert_days").default(30), // Days before expiry to alert
+  
+  // Civil ID Information
+  civilId: text("civil_id"),
+  civilIdIssueDate: date("civil_id_issue_date"),
+  civilIdExpiryDate: date("civil_id_expiry_date"),
+  civilIdAlertDays: integer("civil_id_alert_days").default(60), // Days before expiry to alert
+  
+  // Passport Information
+  passportNumber: text("passport_number"),
+  passportIssueDate: date("passport_issue_date"),
+  passportExpiryDate: date("passport_expiry_date"),
+  passportAlertDays: integer("passport_alert_days").default(90), // Days before expiry to alert
+  // Image uploads
+  profileImage: text("profile_image"), // Base64 or file path for profile picture
+  visaImage: text("visa_image"), // Base64 or file path for visa document
+  civilIdImage: text("civil_id_image"), // Base64 or file path for civil ID document
+  passportImage: text("passport_image"), // Base64 or file path for passport document
+  
+  // Working days configuration
+  standardWorkingDays: integer("standard_working_days").notNull().default(26), // Standard working days per month for this employee
+});
+
+export const vacationRequests = pgTable("vacation_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").references(() => employees.id).notNull(),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date").notNull(),
+  days: integer("days").notNull(),
+  reason: text("reason"),
+  leaveType: text("leave_type").notNull().default("annual"), // annual, sick, emergency, unpaid
+  deductFromSalary: boolean("deduct_from_salary").notNull().default(false),
+  documentUrl: text("document_url"), // For medical certificates, emergency docs, etc.
+  status: text("status").notNull().default("pending"), // pending, approved, rejected
+  approvedBy: varchar("approved_by").references(() => employees.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Sick leave tracking table
+export const sickLeaveTracking = pgTable("sick_leave_tracking", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").references(() => employees.id).notNull(),
+  year: integer("year").notNull(),
+  totalSickDaysUsed: integer("total_sick_days_used").notNull().default(0),
+  remainingSickDays: integer("remaining_sick_days").notNull().default(14), // 14 days max per year
+  lastUpdated: timestamp("last_updated").defaultNow(),
+});
+
+export const loans = pgTable("loans", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").references(() => employees.id).notNull(),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  remainingAmount: numeric("remaining_amount", { precision: 12, scale: 2 }).notNull(),
+  monthlyDeduction: numeric("monthly_deduction", { precision: 10, scale: 2 }).notNull(),
+  interestRate: numeric("interest_rate", { precision: 5, scale: 2 }).default("0"),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date"),
+  status: text("status").notNull().default("active"), // active, completed, cancelled
+  reason: text("reason"),
+  approvedBy: varchar("approved_by").references(() => employees.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const cars = pgTable("cars", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  make: text("make").notNull(),
+  model: text("model").notNull(),
+  year: integer("year").notNull(),
+  plateNumber: text("plate_number").notNull().unique(),
+  vin: text("vin"),
+  color: text("color"),
+  fuelType: text("fuel_type"), // gasoline, diesel, hybrid, electric
+  mileage: integer("mileage").default(0),
+  status: text("status").notNull().default("available"), // available, assigned, maintenance, out_of_service
+  purchaseDate: date("purchase_date"),
+  purchasePrice: numeric("purchase_price", { precision: 12, scale: 2 }),
+  insuranceExpiry: date("insurance_expiry"),
+  registrationExpiry: date("registration_expiry"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const carAssignments = pgTable("car_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  carId: varchar("car_id").references(() => cars.id).notNull(),
+  employeeId: varchar("employee_id").references(() => employees.id).notNull(),
+  assignedDate: date("assigned_date").notNull(),
+  returnDate: date("return_date"),
+  status: text("status").notNull().default("active"), // active, completed
+  assignedBy: varchar("assigned_by").references(() => employees.id),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const payrollRuns = pgTable("payroll_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  period: text("period").notNull(), // e.g., "Jan 2024"
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date").notNull(),
+  grossAmount: numeric("gross_amount", { precision: 12, scale: 2 }).notNull(),
+  totalDeductions: numeric("total_deductions", { precision: 12, scale: 2 }).notNull(),
+  netAmount: numeric("net_amount", { precision: 12, scale: 2 }).notNull(),
+  status: text("status").notNull().default("pending"), // pending, completed, cancelled
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const payrollEntries = pgTable("payroll_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  payrollRunId: varchar("payroll_run_id").references(() => payrollRuns.id).notNull(),
+  employeeId: varchar("employee_id").references(() => employees.id).notNull(),
+  grossPay: numeric("gross_pay", { precision: 10, scale: 2 }).notNull(),
+  baseSalary: numeric("base_salary", { precision: 10, scale: 2 }).notNull().default("0"),
+  bonusAmount: numeric("bonus_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+  workingDays: integer("working_days").notNull().default(30),
+  actualWorkingDays: integer("actual_working_days").notNull().default(30),
+  vacationDays: integer("vacation_days").notNull().default(0),
+  taxDeduction: numeric("tax_deduction", { precision: 10, scale: 2 }).notNull().default("0"),
+  socialSecurityDeduction: numeric("social_security_deduction", { precision: 10, scale: 2 }).notNull().default("0"),
+  healthInsuranceDeduction: numeric("health_insurance_deduction", { precision: 10, scale: 2 }).notNull().default("0"),
+  loanDeduction: numeric("loan_deduction", { precision: 10, scale: 2 }).notNull().default("0"),
+  otherDeductions: numeric("other_deductions", { precision: 10, scale: 2 }).notNull().default("0"),
+  netPay: numeric("net_pay", { precision: 10, scale: 2 }).notNull(),
+  adjustmentReason: text("adjustment_reason"), // Explanation for any adjustments
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Notifications table for document expiry alerts
+export const notifications = pgTable("notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").references(() => employees.id).notNull(),
+  type: text("type").notNull(), // visa_expiry, civil_id_expiry, passport_expiry, loan_deduction, vacation_approved, status_change, salary_adjustment
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  priority: text("priority").notNull().default("medium"), // low, medium, high, critical
+  status: text("status").notNull().default("unread"), // unread, read, dismissed
+  expiryDate: date("expiry_date").notNull(),
+  daysUntilExpiry: integer("days_until_expiry").notNull(),
+  emailSent: boolean("email_sent").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Email alerts log
+export const emailAlerts = pgTable("email_alerts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").references(() => employees.id).notNull(),
+  notificationId: varchar("notification_id").references(() => notifications.id),
+  emailType: text("email_type").notNull(), // expiry_warning, critical_alert
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  recipient: text("recipient").notNull(),
+  status: text("status").notNull().default("pending"), // pending, sent, failed
+  sentAt: timestamp("sent_at"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Employee events for payroll adjustments
+export const employeeEvents = pgTable("employee_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").references(() => employees.id).notNull(),
+  eventType: text("event_type").notNull(), // bonus, deduction, allowance, overtime, penalty
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
+  eventDate: date("event_date").notNull(),
+  affectsPayroll: boolean("affects_payroll").default(true),
+  documentUrl: text("document_url"), // For uploaded supporting documents
+  status: text("status").notNull().default("active"), // active, cancelled, processed
+  addedBy: varchar("added_by").references(() => employees.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Insert schemas
+export const insertDepartmentSchema = createInsertSchema(departments).omit({
+  id: true,
+});
+
+export const insertEmployeeSchema = createInsertSchema(employees).omit({
+  id: true,
+});
+
+export const insertPayrollRunSchema = createInsertSchema(payrollRuns).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertPayrollEntrySchema = createInsertSchema(payrollEntries).omit({
+  id: true,
+});
+
+export const insertVacationRequestSchema = createInsertSchema(vacationRequests).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertLoanSchema = createInsertSchema(loans).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertCarSchema = createInsertSchema(cars).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertCarAssignmentSchema = createInsertSchema(carAssignments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertEmailAlertSchema = createInsertSchema(emailAlerts).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertEmployeeEventSchema = createInsertSchema(employeeEvents).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertSickLeaveTrackingSchema = createInsertSchema(sickLeaveTracking).omit({
+  id: true,
+  lastUpdated: true,
+});
+
+// Types
+export type Department = typeof departments.$inferSelect;
+export type InsertDepartment = z.infer<typeof insertDepartmentSchema>;
+
+export type Employee = typeof employees.$inferSelect;
+export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
+
+export type PayrollRun = typeof payrollRuns.$inferSelect;
+export type InsertPayrollRun = z.infer<typeof insertPayrollRunSchema>;
+
+export type PayrollEntry = typeof payrollEntries.$inferSelect;
+export type InsertPayrollEntry = z.infer<typeof insertPayrollEntrySchema>;
+
+export type VacationRequest = typeof vacationRequests.$inferSelect;
+export type InsertVacationRequest = z.infer<typeof insertVacationRequestSchema>;
+
+export type Loan = typeof loans.$inferSelect;
+export type InsertLoan = z.infer<typeof insertLoanSchema>;
+
+export type Car = typeof cars.$inferSelect;
+export type InsertCar = z.infer<typeof insertCarSchema>;
+
+export type CarAssignment = typeof carAssignments.$inferSelect;
+export type InsertCarAssignment = z.infer<typeof insertCarAssignmentSchema>;
+
+export type VacationRequestWithEmployee = VacationRequest & {
+  employee: Employee;
+};
+
+export type LoanWithEmployee = Loan & {
+  employee: Employee;
+};
+
+export type CarAssignmentWithDetails = CarAssignment & {
+  car: Car;
+  employee: Employee;
+};
+
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+
+export type EmailAlert = typeof emailAlerts.$inferSelect;
+export type InsertEmailAlert = z.infer<typeof insertEmailAlertSchema>;
+
+export type EmployeeEvent = typeof employeeEvents.$inferSelect;
+export type InsertEmployeeEvent = z.infer<typeof insertEmployeeEventSchema>;
+
+export type SickLeaveTracking = typeof sickLeaveTracking.$inferSelect;
+export type InsertSickLeaveTracking = z.infer<typeof insertSickLeaveTrackingSchema>;
+
+// Extended types with relations
+export type NotificationWithEmployee = Notification & {
+  employee: Employee;
+};
+
+export type DocumentExpiryCheck = {
+  employeeId: string;
+  employeeName: string;
+  email: string;
+  visa?: {
+    number: string;
+    expiryDate: string;
+    alertDays: number;
+    daysUntilExpiry: number;
+  };
+  civilId?: {
+    number: string;
+    expiryDate: string;
+    alertDays: number;
+    daysUntilExpiry: number;
+  };
+  passport?: {
+    number: string;
+    expiryDate: string;
+    alertDays: number;
+    daysUntilExpiry: number;
+  };
+};
+
+// Extended types for API responses
+export type EmployeeWithDepartment = Employee & {
+  department?: Department;
+};
+
+export type PayrollRunWithEntries = PayrollRun & {
+  entries?: PayrollEntry[];
+};
+
+export type VacationRequestWithEmployee = VacationRequest & {
+  employee?: Employee;
+  approver?: Employee;
+};
+
+export type LoanWithEmployee = Loan & {
+  employee?: Employee;
+  approver?: Employee;
+};
+
+export type CarWithAssignment = Car & {
+  currentAssignment?: CarAssignment & {
+    employee?: Employee;
+  };
+};
+
+export type CarAssignmentWithDetails = CarAssignment & {
+  car?: Car;
+  employee?: Employee;
+  assigner?: Employee;
+};
+
+// Relations
+export const departmentsRelations = relations(departments, ({ many }) => ({
+  employees: many(employees),
+}));
+
+export const employeesRelations = relations(employees, ({ one, many }) => ({
+  department: one(departments, {
+    fields: [employees.departmentId],
+    references: [departments.id],
+  }),
+  vacationRequests: many(vacationRequests),
+  loans: many(loans),
+  carAssignments: many(carAssignments),
+  notifications: many(notifications),
+  emailAlerts: many(emailAlerts),
+}));
+
+export const vacationRequestsRelations = relations(vacationRequests, ({ one }) => ({
+  employee: one(employees, {
+    fields: [vacationRequests.employeeId],
+    references: [employees.id],
+  }),
+  approver: one(employees, {
+    fields: [vacationRequests.approvedBy],
+    references: [employees.id],
+  }),
+}));
+
+export const loansRelations = relations(loans, ({ one }) => ({
+  employee: one(employees, {
+    fields: [loans.employeeId],
+    references: [employees.id],
+  }),
+  approver: one(employees, {
+    fields: [loans.approvedBy],
+    references: [employees.id],
+  }),
+}));
+
+export const carsRelations = relations(cars, ({ many }) => ({
+  assignments: many(carAssignments),
+}));
+
+export const carAssignmentsRelations = relations(carAssignments, ({ one }) => ({
+  car: one(cars, {
+    fields: [carAssignments.carId],
+    references: [cars.id],
+  }),
+  employee: one(employees, {
+    fields: [carAssignments.employeeId],
+    references: [employees.id],
+  }),
+  assigner: one(employees, {
+    fields: [carAssignments.assignedBy],
+    references: [employees.id],
+  }),
+}));
+
+export const payrollRunsRelations = relations(payrollRuns, ({ many }) => ({
+  entries: many(payrollEntries),
+}));
+
+export const payrollEntriesRelations = relations(payrollEntries, ({ one }) => ({
+  payrollRun: one(payrollRuns, {
+    fields: [payrollEntries.payrollRunId],
+    references: [payrollRuns.id],
+  }),
+  employee: one(employees, {
+    fields: [payrollEntries.employeeId],
+    references: [employees.id],
+  }),
+}));
+
+export const notificationsRelations = relations(notifications, ({ one, many }) => ({
+  employee: one(employees, {
+    fields: [notifications.employeeId],
+    references: [employees.id],
+  }),
+  emailAlerts: many(emailAlerts),
+}));
+
+export const emailAlertsRelations = relations(emailAlerts, ({ one }) => ({
+  employee: one(employees, {
+    fields: [emailAlerts.employeeId],
+    references: [employees.id],
+  }),
+  notification: one(notifications, {
+    fields: [emailAlerts.notificationId],
+    references: [notifications.id],
+  }),
+}));
+
+export const employeeEventsRelations = relations(employeeEvents, ({ one }) => ({
+  employee: one(employees, {
+    fields: [employeeEvents.employeeId],
+    references: [employees.id],
+  }),
+  addedBy: one(employees, {
+    fields: [employeeEvents.addedBy],
+    references: [employees.id],
+  }),
+}));
