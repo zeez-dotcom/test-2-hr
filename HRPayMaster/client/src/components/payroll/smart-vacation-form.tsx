@@ -50,10 +50,8 @@ export function SmartVacationForm({
   });
 
   const updatePayrollMutation = useMutation({
-    mutationFn: (data: any) => apiRequest(`/api/payroll/entries/${payrollEntryId}`, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    }),
+    mutationFn: (data: any) =>
+      apiRequest("PUT", `/api/payroll/entries/${payrollEntryId}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
       toast({

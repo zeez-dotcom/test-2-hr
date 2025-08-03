@@ -32,7 +32,7 @@ export default function Vacations() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("/api/vacations", "POST", data),
+    mutationFn: (data: any) => apiRequest("POST", "/api/vacations", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vacations"] });
       setIsCreateDialogOpen(false);
@@ -44,8 +44,8 @@ export default function Vacations() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => 
-      apiRequest(`/api/vacations/${id}`, "PUT", data),
+    mutationFn: ({ id, data }: { id: string; data: any }) =>
+      apiRequest("PUT", `/api/vacations/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vacations"] });
       toast({ title: "Vacation request updated successfully" });
@@ -56,7 +56,7 @@ export default function Vacations() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => apiRequest(`/api/vacations/${id}`, "DELETE"),
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/vacations/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vacations"] });
       toast({ title: "Vacation request deleted successfully" });
