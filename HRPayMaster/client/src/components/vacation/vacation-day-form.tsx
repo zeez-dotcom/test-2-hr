@@ -12,7 +12,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { ImageUpload } from "@/components/ui/image-upload";
+import ImageUpload from "@/components/ui/image-upload";
 import { Calendar, AlertTriangle, FileImage } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
