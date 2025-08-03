@@ -41,6 +41,7 @@ export default function EmployeeForm({
       email: initialData?.email || "",
       phone: initialData?.phone || "",
       position: initialData?.position || "",
+      role: initialData?.role || "employee",
       departmentId: initialData?.departmentId || undefined,
       salary: initialData?.salary || "",
       startDate: initialData?.startDate || new Date().toISOString().split('T')[0],
@@ -219,6 +220,28 @@ export default function EmployeeForm({
                     <SelectItem value="active">Active</SelectItem>
                     <SelectItem value="inactive">Inactive</SelectItem>
                     <SelectItem value="on_leave">On Leave</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="role"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Role</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value || "employee"}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Role" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="employee">Employee</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />

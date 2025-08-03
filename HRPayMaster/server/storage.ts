@@ -188,6 +188,7 @@ export class DatabaseStorage implements IStorage {
       .insert(employees)
       .values({
         ...employee,
+        role: employee.role || "employee",
         status: employee.status || "active",
         visaAlertDays: employee.visaAlertDays || 30,
         civilIdAlertDays: employee.civilIdAlertDays || 60,
