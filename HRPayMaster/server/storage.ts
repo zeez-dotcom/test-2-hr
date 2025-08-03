@@ -241,7 +241,6 @@ export class DatabaseStorage implements IStorage {
       adjustmentReason: payrollEntries.adjustmentReason,
       employee: {
         id: employees.id,
-        name: employees.name,
         firstName: employees.firstName,
         lastName: employees.lastName,
       }

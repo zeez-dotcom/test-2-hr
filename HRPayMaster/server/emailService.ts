@@ -21,19 +21,25 @@ interface EmailParams {
 }
 
 export async function sendEmail(params: EmailParams): Promise<boolean> {
+  if (!params.to) {
+    console.warn('No recipient email provided');
+    return false;
+  }
+
   if (!process.env.SENDGRID_API_KEY) {
     console.log('Email would be sent:', params.subject);
     return false;
   }
 
   try {
-    await mailService.send({
+    const message: any = {
       to: params.to,
       from: params.from,
       subject: params.subject,
-      text: params.text,
-      html: params.html,
-    });
+    };
+    if (params.text) message.text = params.text;
+    if (params.html) message.html = params.html;
+    await mailService.send(message);
     return true;
   } catch (error) {
     console.error('SendGrid email error:', error);

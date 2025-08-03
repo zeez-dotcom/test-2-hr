@@ -278,7 +278,7 @@ export default function Vacations() {
                 <CardHeader className="pb-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                      {getTypeIcon(request.vacationType || "vacation")}
+                      {getTypeIcon(request.leaveType || "vacation")}
                       <div>
                         <CardTitle className="text-lg">
                           {request.employee?.firstName} {request.employee?.lastName}
