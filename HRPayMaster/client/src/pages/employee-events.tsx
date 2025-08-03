@@ -34,7 +34,9 @@ export default function EmployeeEvents() {
 
   const form = useForm<InsertEmployeeEvent>({
     resolver: zodResolver(insertEmployeeEventSchema.extend({
-      eventDate: insertEmployeeEventSchema.shape.eventDate.transform((val) => val instanceof Date ? format(val, 'yyyy-MM-dd') : val),
+      eventDate: insertEmployeeEventSchema.shape.eventDate.transform((val) =>
+        typeof val === 'string' ? val : format(val, 'yyyy-MM-dd')
+      ),
     })),
     defaultValues: {
       eventType: "bonus",
@@ -343,9 +345,10 @@ export default function EmployeeEvents() {
                     <FormItem>
                       <FormLabel>Document URL (Optional)</FormLabel>
                       <FormControl>
-                        <Input 
-                          placeholder="Upload document link or reference" 
-                          {...field} 
+                        <Input
+                          placeholder="Upload document link or reference"
+                          {...field}
+                          value={field.value ?? ""}
                         />
                       </FormControl>
                       <FormMessage />

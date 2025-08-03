@@ -791,7 +791,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Send email if configured
           const emailSent = await sendEmail({
-            to: employee.email,
+            to: employee.email || '',
             from: process.env.FROM_EMAIL || 'hr@company.com',
             subject: emailContent.subject,
             html: emailContent.html,
@@ -824,7 +824,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
 
           const emailSent = await sendEmail({
-            to: employee.email,
+            to: employee.email || '',
             from: process.env.FROM_EMAIL || 'hr@company.com',
             subject: emailContent.subject,
             html: emailContent.html,
@@ -857,7 +857,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
 
           const emailSent = await sendEmail({
-            to: employee.email,
+            to: employee.email || '',
             from: process.env.FROM_EMAIL || 'hr@company.com',
             subject: emailContent.subject,
             html: emailContent.html,

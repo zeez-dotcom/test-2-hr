@@ -98,7 +98,7 @@ export default function Employees() {
   const filteredEmployees = employees?.filter((employee) => {
     const matchesSearch = searchQuery === "" || 
       `${employee.firstName} ${employee.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      employee.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      employee.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       employee.position.toLowerCase().includes(searchQuery.toLowerCase());
     
     const matchesDepartment = departmentFilter === "" || departmentFilter === "all" || employee.departmentId === departmentFilter;

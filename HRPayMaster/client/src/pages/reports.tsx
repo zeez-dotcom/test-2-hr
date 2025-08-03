@@ -56,10 +56,14 @@ export default function Reports() {
   const currentYear = new Date().getFullYear();
   const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
-  // Get unique work locations
-  const workLocations = [...new Set(
-    employees?.map(emp => emp.workLocation || "Office").filter(Boolean) || []
-  )];
+    // Get unique work locations without using Set iteration
+    const workLocations = employees
+      ? employees.reduce<string[]>((acc, emp) => {
+          const loc = emp.workLocation || "Office";
+          if (loc && !acc.includes(loc)) acc.push(loc);
+          return acc;
+        }, [])
+      : [];
 
   // Filter employee events based on selected criteria
   const filteredEvents = employeeEvents?.filter(event => {
@@ -711,8 +715,8 @@ export default function Reports() {
               <div class="employee-profile">
                 <div class="employee-photo-container">
                   <div class="employee-photo">
-                    ${employee.imageUrl ? 
-                      `<img src="${employee.imageUrl}" alt="Employee Photo">` :
+                    ${employee.profileImage ?
+                      `<img src="${employee.profileImage}" alt="Employee Photo">` :
                       '<div class="photo-placeholder">No Photo<br>Available</div>'
                     }
                   </div>
@@ -755,8 +759,8 @@ export default function Reports() {
                       <div class="info-value">${formatCurrency(employee.salary)}</div>
                     </div>
                     <div class="info-card">
-                      <div class="info-label">Working Days</div>
-                      <div class="info-value">${employee.workingDaysPerWeek || 5} days/week</div>
+                      <div class="info-label">Standard Working Days</div>
+                      <div class="info-value">${employee.standardWorkingDays ?? 26} days/month</div>
                     </div>
                   </div>
                 </div>
@@ -769,44 +773,44 @@ export default function Reports() {
                 </div>
                 <div class="documents-grid">
                   <div class="document-card ${
-                    employee.civilIdExpiry ? 
-                      (new Date(employee.civilIdExpiry) < new Date() ? 'expired' : 
-                       new Date(employee.civilIdExpiry) < new Date(Date.now() + 30*24*60*60*1000) ? 'expiring' : 'valid') : 
+                    employee.civilIdExpiryDate ?
+                      (new Date(employee.civilIdExpiryDate) < new Date() ? 'expired' :
+                       new Date(employee.civilIdExpiryDate) < new Date(Date.now() + 30*24*60*60*1000) ? 'expiring' : 'valid') :
                       'expired'
                   }">
                     <div class="document-icon">🆔</div>
                     <div class="document-title">Civil ID</div>
-                    <div class="document-number">${employee.civilIdNumber || 'Not Provided'}</div>
+                    <div class="document-number">${employee.civilId || 'Not Provided'}</div>
                     <div class="document-expiry">
-                      ${employee.civilIdExpiry ? `Expires: ${formatDate(employee.civilIdExpiry)}` : 'No expiry date'}
+                      ${employee.civilIdExpiryDate ? `Expires: ${formatDate(employee.civilIdExpiryDate)}` : 'No expiry date'}
                     </div>
                   </div>
-                  
+
                   <div class="document-card ${
-                    employee.passportExpiry ? 
-                      (new Date(employee.passportExpiry) < new Date() ? 'expired' : 
-                       new Date(employee.passportExpiry) < new Date(Date.now() + 30*24*60*60*1000) ? 'expiring' : 'valid') : 
+                    employee.passportExpiryDate ?
+                      (new Date(employee.passportExpiryDate) < new Date() ? 'expired' :
+                       new Date(employee.passportExpiryDate) < new Date(Date.now() + 30*24*60*60*1000) ? 'expiring' : 'valid') :
                       'expired'
                   }">
                     <div class="document-icon">📘</div>
                     <div class="document-title">Passport</div>
                     <div class="document-number">${employee.passportNumber || 'Not Provided'}</div>
                     <div class="document-expiry">
-                      ${employee.passportExpiry ? `Expires: ${formatDate(employee.passportExpiry)}` : 'No expiry date'}
+                      ${employee.passportExpiryDate ? `Expires: ${formatDate(employee.passportExpiryDate)}` : 'No expiry date'}
                     </div>
                   </div>
-                  
+
                   <div class="document-card ${
-                    employee.visaExpiry ? 
-                      (new Date(employee.visaExpiry) < new Date() ? 'expired' : 
-                       new Date(employee.visaExpiry) < new Date(Date.now() + 30*24*60*60*1000) ? 'expiring' : 'valid') : 
+                    employee.visaExpiryDate ?
+                      (new Date(employee.visaExpiryDate) < new Date() ? 'expired' :
+                       new Date(employee.visaExpiryDate) < new Date(Date.now() + 30*24*60*60*1000) ? 'expiring' : 'valid') :
                       'expired'
                   }">
                     <div class="document-icon">🎫</div>
                     <div class="document-title">Visa</div>
                     <div class="document-number">${employee.visaNumber || 'Not Provided'}</div>
                     <div class="document-expiry">
-                      ${employee.visaExpiry ? `Expires: ${formatDate(employee.visaExpiry)}` : 'No expiry date'}
+                      ${employee.visaExpiryDate ? `Expires: ${formatDate(employee.visaExpiryDate)}` : 'No expiry date'}
                     </div>
                   </div>
                 </div>

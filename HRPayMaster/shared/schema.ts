@@ -291,19 +291,6 @@ export type InsertCar = z.infer<typeof insertCarSchema>;
 export type CarAssignment = typeof carAssignments.$inferSelect;
 export type InsertCarAssignment = z.infer<typeof insertCarAssignmentSchema>;
 
-export type VacationRequestWithEmployee = VacationRequest & {
-  employee: Employee;
-};
-
-export type LoanWithEmployee = Loan & {
-  employee: Employee;
-};
-
-export type CarAssignmentWithDetails = CarAssignment & {
-  car: Car;
-  employee: Employee;
-};
-
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 
@@ -324,7 +311,7 @@ export type NotificationWithEmployee = Notification & {
 export type DocumentExpiryCheck = {
   employeeId: string;
   employeeName: string;
-  email: string;
+  email: string | null;
   visa?: {
     number: string;
     expiryDate: string;

@@ -11,15 +11,13 @@ import type { DocumentExpiryCheck } from "@shared/schema";
 export default function DocumentsPage() {
   const { toast } = useToast();
 
-  const { data: expiryChecks = [], isLoading } = useQuery({
+  const { data: expiryChecks = [], isLoading } = useQuery<DocumentExpiryCheck[]>({
     queryKey: ["/api/documents/expiry-check"],
   });
 
   const sendAlertsMutation = useMutation({
-    mutationFn: () => apiRequest("/api/documents/send-alerts", {
-      method: "POST",
-    }),
-    onSuccess: (data) => {
+    mutationFn: () => apiRequest("POST", "/api/documents/send-alerts"),
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/documents/expiry-check"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       toast({

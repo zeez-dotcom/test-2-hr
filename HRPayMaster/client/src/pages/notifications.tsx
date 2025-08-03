@@ -12,18 +12,16 @@ import type { NotificationWithEmployee } from "@shared/schema";
 export default function NotificationsPage() {
   const { toast } = useToast();
 
-  const { data: notifications = [], isLoading } = useQuery({
+  const { data: notifications = [], isLoading } = useQuery<NotificationWithEmployee[]>({
     queryKey: ["/api/notifications"],
   });
 
-  const { data: unreadNotifications = [] } = useQuery({
+  const { data: unreadNotifications = [] } = useQuery<NotificationWithEmployee[]>({
     queryKey: ["/api/notifications/unread"],
   });
 
   const markAsReadMutation = useMutation({
-    mutationFn: (id: string) => apiRequest(`/api/notifications/${id}/read`, {
-      method: "PUT",
-    }),
+    mutationFn: (id: string) => apiRequest("PUT", `/api/notifications/${id}/read`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread"] });
@@ -42,9 +40,7 @@ export default function NotificationsPage() {
   });
 
   const deleteNotificationMutation = useMutation({
-    mutationFn: (id: string) => apiRequest(`/api/notifications/${id}`, {
-      method: "DELETE",
-    }),
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/notifications/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread"] });
