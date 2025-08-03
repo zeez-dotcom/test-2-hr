@@ -32,7 +32,7 @@ export default function Loans() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("/api/loans", "POST", data),
+    mutationFn: (data: any) => apiRequest("POST", "/api/loans", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/loans"] });
       setIsCreateDialogOpen(false);
@@ -44,8 +44,8 @@ export default function Loans() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => 
-      apiRequest(`/api/loans/${id}`, "PUT", data),
+    mutationFn: ({ id, data }: { id: string; data: any }) =>
+      apiRequest("PUT", `/api/loans/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/loans"] });
       toast({ title: "Loan updated successfully" });
@@ -56,7 +56,7 @@ export default function Loans() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => apiRequest(`/api/loans/${id}`, "DELETE"),
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/loans/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/loans"] });
       toast({ title: "Loan deleted successfully" });

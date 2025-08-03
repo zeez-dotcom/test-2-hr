@@ -70,10 +70,8 @@ export function VacationDayForm({
   const watchedDays = form.watch("days");
 
   const updatePayrollMutation = useMutation({
-    mutationFn: (data: any) => apiRequest(`/api/payroll/entries/${payrollEntryId}`, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    }),
+    mutationFn: (data: any) =>
+      apiRequest("PUT", `/api/payroll/entries/${payrollEntryId}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
       toast({
@@ -93,10 +91,7 @@ export function VacationDayForm({
   });
 
   const createVacationRequestMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("/api/vacations", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
+    mutationFn: (data: any) => apiRequest("POST", "/api/vacations", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vacations"] });
     },
@@ -147,12 +142,9 @@ export function VacationDayForm({
 
       // Update sick leave balance if it's sick leave
       if (data.leaveType === "sick") {
-        await apiRequest(`/api/employees/${employeeId}/sick-leave-balance`, {
-          method: "POST",
-          body: JSON.stringify({
-            daysUsed: data.days,
-            year: new Date().getFullYear(),
-          }),
+        await apiRequest("POST", `/api/employees/${employeeId}/sick-leave-balance`, {
+          daysUsed: data.days,
+          year: new Date().getFullYear(),
         });
       }
 

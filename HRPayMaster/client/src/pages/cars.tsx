@@ -38,7 +38,7 @@ export default function Cars() {
   });
 
   const createCarMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("/api/cars", "POST", data),
+    mutationFn: (data: any) => apiRequest("POST", "/api/cars", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
       setIsCreateCarDialogOpen(false);
@@ -50,7 +50,7 @@ export default function Cars() {
   });
 
   const assignCarMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("/api/car-assignments", "POST", data),
+    mutationFn: (data: any) => apiRequest("POST", "/api/car-assignments", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
       queryClient.invalidateQueries({ queryKey: ["/api/car-assignments"] });
@@ -63,8 +63,8 @@ export default function Cars() {
   });
 
   const updateAssignmentMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => 
-      apiRequest(`/api/car-assignments/${id}`, "PUT", data),
+    mutationFn: ({ id, data }: { id: string; data: any }) =>
+      apiRequest("PUT", `/api/car-assignments/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
       queryClient.invalidateQueries({ queryKey: ["/api/car-assignments"] });
@@ -76,7 +76,7 @@ export default function Cars() {
   });
 
   const deleteCarMutation = useMutation({
-    mutationFn: (id: string) => apiRequest(`/api/cars/${id}`, "DELETE"),
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/cars/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
       toast({ title: "Car deleted successfully" });
