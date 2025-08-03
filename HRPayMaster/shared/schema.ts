@@ -17,6 +17,7 @@ export const employees = pgTable("employees", {
   email: text("email"),
   phone: text("phone"),
   position: text("position").notNull(),
+  role: text("role").notNull().default("employee"),
   departmentId: varchar("department_id").references(() => departments.id),
   salary: numeric("salary", { precision: 10, scale: 2 }).notNull(),
   workLocation: varchar("work_location", { length: 100 }).default("Office").notNull(),

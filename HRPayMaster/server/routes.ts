@@ -111,7 +111,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/employees", async (req, res) => {
     try {
       const employee = insertEmployeeSchema.parse(req.body);
-      const newEmployee = await storage.createEmployee(employee);
+      const newEmployee = await storage.createEmployee({
+        ...employee,
+        role: employee.role || "employee",
+      });
       res.status(201).json(newEmployee);
     } catch (error) {
       if (error instanceof z.ZodError) {
