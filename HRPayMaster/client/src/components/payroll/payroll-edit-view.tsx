@@ -574,6 +574,5 @@ function EmployeeEventForm({
         </Button>
       </div>
     </form>
-    </div>
   );
 }

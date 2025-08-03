@@ -11,7 +11,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { ImageUpload } from "@/components/ui/image-upload";
+import ImageUpload from "@/components/ui/image-upload";
 import { Minus, FileImage } from "lucide-react";
 
 const deductionFormSchema = z.object({
