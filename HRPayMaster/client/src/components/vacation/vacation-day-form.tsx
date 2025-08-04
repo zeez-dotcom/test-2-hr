@@ -289,12 +289,12 @@ export function VacationDayForm({
                   </FormLabel>
                   <div className="space-y-2">
                     <ImageUpload
-                      onImageUpload={(base64) => {
-                        setUploadedImage(base64);
+                      onChange={(base64) => {
+                        setUploadedImage(base64 || "");
                         field.onChange(base64);
                       }}
-                      currentImage={uploadedImage}
-                      placeholder="Upload medical certificate, emergency documentation, etc."
+                      value={uploadedImage || undefined}
+                      label="Upload medical certificate, emergency documentation, etc."
                     />
                     {watchedLeaveType === "sick" && (
                       <p className="text-xs text-muted-foreground">

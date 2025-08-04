@@ -240,12 +240,12 @@ export function DeductionForm({
                   </FormLabel>
                   <div className="space-y-2">
                     <ImageUpload
-                      onImageUpload={(base64) => {
-                        setUploadedImage(base64);
+                      onChange={(base64) => {
+                        setUploadedImage(base64 || "");
                         field.onChange(base64);
                       }}
-                      currentImage={uploadedImage}
-                      placeholder="Upload receipt, penalty notice, etc."
+                      value={uploadedImage || undefined}
+                      label="Upload receipt, penalty notice, etc."
                     />
                     {watchedDeductionType === "penalty" && (
                       <p className="text-xs text-muted-foreground">
