@@ -356,7 +356,9 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     <div className="flex items-center space-x-2">
                       <span>{formatCurrency(calculateRowTotal(entry))}</span>
-                      <HealthIcon className={`h-4 w-4 ${healthIndicator.color}`} title={healthIndicator.label} />
+                      <span title={healthIndicator.label}>
+                        <HealthIcon className={`h-4 w-4 ${healthIndicator.color}`} />
+                      </span>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
