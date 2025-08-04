@@ -42,7 +42,15 @@ import {
   employeeEvents
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
+
+export interface EmployeeReportPeriod {
+  period: string;
+  payrollEntries: PayrollEntry[];
+  employeeEvents: EmployeeEvent[];
+  loans: Loan[];
+  vacationRequests: VacationRequest[];
+}
 
 export interface IStorage {
   // Department methods
@@ -118,7 +126,13 @@ export interface IStorage {
   createEmployeeEvent(event: InsertEmployeeEvent): Promise<EmployeeEvent>;
   updateEmployeeEvent(id: string, event: Partial<InsertEmployeeEvent>): Promise<EmployeeEvent | undefined>;
   deleteEmployeeEvent(id: string): Promise<boolean>;
-  
+
+  // Reports
+  getEmployeeReport(
+    employeeId: string,
+    range: { startDate: string; endDate: string; groupBy: "month" | "year" }
+  ): Promise<EmployeeReportPeriod[]>;
+
   // Document expiry check methods
   checkDocumentExpiries(): Promise<DocumentExpiryCheck[]>;
 }
@@ -695,6 +709,101 @@ export class DatabaseStorage implements IStorage {
   async deleteEmployeeEvent(id: string): Promise<boolean> {
     const result = await db.delete(employeeEvents).where(eq(employeeEvents.id, id));
     return (result.rowCount ?? 0) > 0;
+  }
+
+  async getEmployeeReport(
+    employeeId: string,
+    range: { startDate: string; endDate: string; groupBy: "month" | "year" }
+  ): Promise<EmployeeReportPeriod[]> {
+    const { startDate, endDate, groupBy } = range;
+    const format = groupBy === "year" ? "YYYY" : "YYYY-MM";
+
+    const payrollRows = await db
+      .select({
+        period: sql<string>`to_char(${payrollRuns.startDate}, '${format}')`,
+        entry: payrollEntries,
+      })
+      .from(payrollEntries)
+      .innerJoin(payrollRuns, eq(payrollEntries.payrollRunId, payrollRuns.id))
+      .where(
+        and(
+          eq(payrollEntries.employeeId, employeeId),
+          gte(payrollRuns.startDate, startDate),
+          lte(payrollRuns.startDate, endDate)
+        )
+      );
+
+    const eventRows = await db
+      .select({
+        period: sql<string>`to_char(${employeeEvents.eventDate}, '${format}')`,
+        event: employeeEvents,
+      })
+      .from(employeeEvents)
+      .where(
+        and(
+          eq(employeeEvents.employeeId, employeeId),
+          gte(employeeEvents.eventDate, startDate),
+          lte(employeeEvents.eventDate, endDate),
+          eq(employeeEvents.affectsPayroll, true)
+        )
+      );
+
+    const loanRows = await db
+      .select({
+        period: sql<string>`to_char(${loans.startDate}, '${format}')`,
+        loan: loans,
+      })
+      .from(loans)
+      .where(
+        and(
+          eq(loans.employeeId, employeeId),
+          gte(loans.startDate, startDate),
+          lte(loans.startDate, endDate)
+        )
+      );
+
+    const vacationRows = await db
+      .select({
+        period: sql<string>`to_char(${vacationRequests.startDate}, '${format}')`,
+        vacation: vacationRequests,
+      })
+      .from(vacationRequests)
+      .where(
+        and(
+          eq(vacationRequests.employeeId, employeeId),
+          gte(vacationRequests.startDate, startDate),
+          lte(vacationRequests.startDate, endDate)
+        )
+      );
+
+    const grouped: Record<string, EmployeeReportPeriod> = {};
+    const ensure = (period: string) => {
+      if (!grouped[period]) {
+        grouped[period] = {
+          period,
+          payrollEntries: [],
+          employeeEvents: [],
+          loans: [],
+          vacationRequests: [],
+        };
+      }
+      return grouped[period];
+    };
+
+    payrollRows.forEach(({ period, entry }) => {
+      ensure(period).payrollEntries.push(entry);
+    });
+    eventRows.forEach(({ period, event }) => {
+      ensure(period).employeeEvents.push(event);
+    });
+    loanRows.forEach(({ period, loan }) => {
+      ensure(period).loans.push(loan);
+    });
+    vacationRows.forEach(({ period, vacation }) => {
+      ensure(period).vacationRequests.push(vacation);
+    });
+
+    return Object.values(grouped);
   }
 
   // Document expiry check methods
