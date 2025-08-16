@@ -13,15 +13,18 @@ import {
   insertNotificationSchema,
   insertEmailAlertSchema,
   insertEmployeeEventSchema,
-  type InsertEmployeeEvent
+  type InsertEmployeeEvent,
+  type InsertEmployee
 } from "@shared/schema";
-import { 
-  sendEmail, 
-  generateExpiryWarningEmail, 
-  calculateDaysUntilExpiry, 
-  shouldSendAlert 
+import {
+  sendEmail,
+  generateExpiryWarningEmail,
+  calculateDaysUntilExpiry,
+  shouldSendAlert
 } from "./emailService";
 import { z } from "zod";
+import multer from "multer";
+import * as XLSX from "xlsx";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/login", passport.authenticate("local"), (req, res) => {
@@ -39,6 +42,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (req.isAuthenticated()) return next();
     next(new HttpError(401, "Unauthorized"));
   };
+
+  const upload = multer({ storage: multer.memoryStorage() });
 
   app.use("/api", ensureAuth);
 
@@ -116,6 +121,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(employees);
     } catch (error) {
       next(new HttpError(500, "Failed to fetch employees"));
+    }
+  });
+
+  app.post("/api/employees/import", upload.single("file"), async (req, res, next) => {
+    const file = (req as Request & { file?: Express.Multer.File }).file;
+    if (!file) {
+      return next(new HttpError(400, "No file uploaded"));
+    }
+    try {
+      const workbook = XLSX.read(file.buffer, { type: "buffer" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows: any[] = XLSX.utils.sheet_to_json(sheet);
+      const existing = await storage.getEmployees();
+      const existingCodes = new Set(existing.map(e => e.employeeCode));
+      const valid: InsertEmployee[] = [];
+      let failed = 0;
+      const seen = new Set<string>();
+
+      for (const row of rows) {
+        const code = row.employeeCode;
+        if (!code || seen.has(code) || existingCodes.has(code)) {
+          failed++;
+          continue;
+        }
+        seen.add(code);
+        try {
+          const emp = insertEmployeeSchema.parse(row);
+          valid.push(emp);
+        } catch {
+          failed++;
+        }
+      }
+
+      const { success, failed: insertFailed } = await storage.createEmployeesBulk(valid);
+      res.json({ success, failed: failed + insertFailed });
+    } catch {
+      next(new HttpError(500, "Failed to import employees"));
     }
   });
 

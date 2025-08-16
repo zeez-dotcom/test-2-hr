@@ -72,6 +72,9 @@ export interface IStorage {
   getEmployees(): Promise<EmployeeWithDepartment[]>;
   getEmployee(id: string): Promise<EmployeeWithDepartment | undefined>;
   createEmployee(employee: InsertEmployee): Promise<Employee>;
+  createEmployeesBulk(
+    employees: InsertEmployee[]
+  ): Promise<{ success: number; failed: number }>;
   updateEmployee(
     id: string,
     employee: Partial<Omit<InsertEmployee, "employeeCode">>
@@ -235,6 +238,31 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return newEmployee;
+  }
+
+  async createEmployeesBulk(
+    employeeList: InsertEmployee[]
+  ): Promise<{ success: number; failed: number }> {
+    let success = 0;
+    let failed = 0;
+    await db.transaction(async tx => {
+      for (const emp of employeeList) {
+        try {
+          await tx.insert(employees).values({
+            ...emp,
+            role: emp.role || "employee",
+            status: emp.status || "active",
+            visaAlertDays: emp.visaAlertDays || 30,
+            civilIdAlertDays: emp.civilIdAlertDays || 60,
+            passportAlertDays: emp.passportAlertDays || 90,
+          });
+          success++;
+        } catch {
+          failed++;
+        }
+      }
+    });
+    return { success, failed };
   }
 
   async updateEmployee(
@@ -1023,4 +1051,4 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-export const storage = new DatabaseStorage();
+  export const storage = new DatabaseStorage();
