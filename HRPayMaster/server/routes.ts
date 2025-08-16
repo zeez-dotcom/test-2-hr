@@ -160,6 +160,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       "company",
       "residency on company or not",
       "profession department",
+      "profession code",
+      "group1",
+      "group2",
+      "additions",
+      "command",
+      "salary deductions",
+      "fines",
+      "bonuses",
+      "total loans",
+      "vacation return date",
+      "profession category",
+      "rec salary vacation",
     ];
 
     const ws = XLSX.utils.aoa_to_sheet([headers]);
@@ -369,6 +381,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "visaImage",
           "civilIdImage",
           "passportImage",
+          "drivingLicenseNumber",
+          "drivingLicenseIssueDate",
+          "drivingLicenseExpiryDate",
+          "drivingLicenseImage",
+          "otherDocs",
         ]);
         const isDocumentUpdate = changedFields.some(field => documentFields.has(field));
         const event: InsertEmployeeEvent = {

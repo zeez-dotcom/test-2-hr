@@ -80,6 +80,10 @@
 
 ### Default employee fields
 
+The following fields are surfaced in the employee form and table. These
+columns are also present in the bulk-import template available via the
+Employees → Import screen or the `/api/employees/import/template` endpoint.
+
 | Field | Description |
 | --- | --- |
 | employeeCode | Unique employee identifier |
@@ -120,5 +124,30 @@
 | civilIdImage | Civil ID document image |
 | passportImage | Passport document image |
 | standardWorkingDays | Standard working days per month |
+| nationality | Employee nationality |
+| professionCode | Profession code |
+| profession | Profession name |
+| paymentMethod | Payment method |
+| transferable | Whether the employee is transferable |
+| group1 | Group 1 |
+| group2 | Group 2 |
+| additions | Additional compensation |
+| command | Command notes |
+| drivingLicenseNumber | Driving license number |
+| drivingLicenseIssueDate | Driving license issue date |
+| drivingLicenseExpiryDate | Driving license expiry date |
+| drivingLicenseImage | Driving license document image |
+| otherDocs | Other documents |
+| salaryDeductions | Salary deductions |
+| fines | Fines |
+| totalLoans | Total loans |
+| bonuses | Bonuses |
+| iban | IBAN |
+| swiftCode | Bank SWIFT code |
+| company | Company name |
+| vacationReturnDate | Vacation return date |
+| residencyOnCompany | Residency on company |
+| professionCategory | Profession category |
+| recSalaryVacation | Recorded salary during vacation |
 
 
