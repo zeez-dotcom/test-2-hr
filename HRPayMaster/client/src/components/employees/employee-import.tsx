@@ -131,34 +131,43 @@ export default function EmployeeImport() {
       </div>
 
       {headers.length > 0 && (
-        <div className="space-y-2">
-          {headers.map(h => (
-            <div key={h} className="flex items-center space-x-2">
-              <span className="w-40 text-sm truncate" title={h}>{h}</span>
-              <Select onValueChange={v => handleSelectionChange(h, v)} value={selections[h] || ""}>
-                <SelectTrigger className="w-44">
-                  <SelectValue placeholder="Select field" />
-                </SelectTrigger>
-                <SelectContent>
-                  {systemFields.map(f => (
-                    <SelectItem key={f.value} value={f.value}>
-                      {f.label}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value="custom">Custom field</SelectItem>
-                </SelectContent>
-              </Select>
-              {selections[h] === "custom" && (
-                <Input
-                  placeholder="Custom name"
-                  value={customFields[h] || ""}
-                  onChange={e => handleCustomChange(h, e.target.value)}
-                  className="w-44"
-                />
-              )}
-            </div>
-          ))}
-        </div>
+        <>
+          <div className="space-y-2">
+            {headers.map(h => (
+              <div key={h} className="flex items-center space-x-2">
+                <span className="w-40 text-sm truncate" title={h}>{h}</span>
+                <Select onValueChange={v => handleSelectionChange(h, v)} value={selections[h] || ""}>
+                  <SelectTrigger className="w-44">
+                    <SelectValue placeholder="Select field" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {systemFields.map(f => (
+                      <SelectItem key={f.value} value={f.value}>
+                        {f.label}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="custom">Custom field</SelectItem>
+                  </SelectContent>
+                </Select>
+                {selections[h] === "custom" && (
+                  <Input
+                    placeholder="Custom name"
+                    value={customFields[h] || ""}
+                    onChange={e => handleCustomChange(h, e.target.value)}
+                    className="w-44"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+          <Button
+            variant="secondary"
+            onClick={handleImport}
+            disabled={!file || isSubmitting}
+          >
+            Import
+          </Button>
+        </>
       )}
 
       {result && (
