@@ -11,6 +11,9 @@ vi.mock('./storage', () => {
       createEmployee: vi.fn(),
       createEmployeesBulk: vi.fn(),
       updateEmployee: vi.fn(),
+      getEmployeeCustomFields: vi.fn(),
+      createEmployeeCustomField: vi.fn(),
+      createEmployeeCustomValue: vi.fn(),
       getPayrollRuns: vi.fn(),
       getLoans: vi.fn(),
       getCars: vi.fn(),
@@ -131,6 +134,69 @@ describe('employee routes', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ success: 1, failed: 0 });
     expect(storage.createEmployeesBulk).toHaveBeenCalled();
+  });
+
+  it('POST /api/employees/import creates custom fields and values', async () => {
+    (storage.getEmployees as any).mockResolvedValue([]);
+    (storage.getEmployeeCustomFields as any).mockResolvedValue([]);
+    (storage.createEmployeesBulk as any).mockResolvedValue({
+      success: 1,
+      failed: 0,
+      employees: [
+        {
+          id: '1',
+          employeeCode: 'E001',
+          firstName: 'John',
+          lastName: 'Doe',
+          position: 'Dev',
+          salary: '0',
+          workLocation: 'Office',
+          startDate: '2024-01-01',
+        },
+      ],
+    });
+    (storage.createEmployeeCustomField as any).mockImplementation(async ({ name }) => ({
+      id: 'f1',
+      name,
+    }));
+    const wb = XLSX.utils.book_new();
+    const data = [
+      {
+        Code: 'E001',
+        First: 'John',
+        Last: 'Doe',
+        Position: 'Dev',
+        Salary: '0',
+        Start: '2024-01-01',
+        Color: 'blue',
+      },
+    ];
+    const ws = XLSX.utils.json_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    const mapping = {
+      Code: 'employeeCode',
+      First: 'firstName',
+      Last: 'lastName',
+      Position: 'position',
+      Salary: 'salary',
+      Start: 'startDate',
+      Color: 'favoriteColor',
+    };
+
+    const res = await request(app)
+      .post('/api/employees/import')
+      .field('mapping', JSON.stringify(mapping))
+      .attach('file', buffer, 'employees.xlsx');
+
+    expect(res.status).toBe(200);
+    expect(storage.createEmployeeCustomField).toHaveBeenCalledWith({ name: 'favoriteColor' });
+    expect(storage.createEmployeeCustomValue).toHaveBeenCalledWith({
+      employeeId: '1',
+      fieldId: 'f1',
+      value: 'blue',
+    });
   });
 
   it('POST /api/employees/import errors when required mapping missing', async () => {

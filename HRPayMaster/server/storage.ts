@@ -35,8 +35,14 @@ import {
   type EmployeeEvent,
   type InsertEmployeeEvent,
   type DocumentExpiryCheck,
+  type EmployeeCustomField,
+  type InsertEmployeeCustomField,
+  type EmployeeCustomValue,
+  type InsertEmployeeCustomValue,
   departments,
   employees,
+  employeeCustomFields,
+  employeeCustomValues,
   payrollRuns,
   payrollEntries,
   vacationRequests,
@@ -74,12 +80,30 @@ export interface IStorage {
   createEmployee(employee: InsertEmployee): Promise<Employee>;
   createEmployeesBulk(
     employees: InsertEmployee[]
-  ): Promise<{ success: number; failed: number }>;
+  ): Promise<{ success: number; failed: number; employees?: Employee[] }>;
   updateEmployee(
     id: string,
     employee: Partial<Omit<InsertEmployee, "employeeCode">>
   ): Promise<Employee | undefined>;
   deleteEmployee(id: string): Promise<boolean>;
+
+  // Employee custom field methods
+  getEmployeeCustomFields(): Promise<EmployeeCustomField[]>;
+  createEmployeeCustomField(field: InsertEmployeeCustomField): Promise<EmployeeCustomField>;
+  updateEmployeeCustomField(
+    id: string,
+    field: Partial<InsertEmployeeCustomField>
+  ): Promise<EmployeeCustomField | undefined>;
+  deleteEmployeeCustomField(id: string): Promise<boolean>;
+
+  // Employee custom value methods
+  getEmployeeCustomValues(employeeId: string): Promise<EmployeeCustomValue[]>;
+  createEmployeeCustomValue(value: InsertEmployeeCustomValue): Promise<EmployeeCustomValue>;
+  updateEmployeeCustomValue(
+    id: string,
+    value: Partial<InsertEmployeeCustomValue>
+  ): Promise<EmployeeCustomValue | undefined>;
+  deleteEmployeeCustomValue(id: string): Promise<boolean>;
 
   // Payroll methods
   getPayrollRuns(): Promise<PayrollRun[]>;
@@ -242,27 +266,32 @@ export class DatabaseStorage implements IStorage {
 
   async createEmployeesBulk(
     employeeList: InsertEmployee[]
-  ): Promise<{ success: number; failed: number }> {
+  ): Promise<{ success: number; failed: number; employees?: Employee[] }> {
     let success = 0;
     let failed = 0;
+    const inserted: Employee[] = [];
     await db.transaction(async tx => {
       for (const emp of employeeList) {
         try {
-          await tx.insert(employees).values({
-            ...emp,
-            role: emp.role || "employee",
-            status: emp.status || "active",
-            visaAlertDays: emp.visaAlertDays || 30,
-            civilIdAlertDays: emp.civilIdAlertDays || 60,
-            passportAlertDays: emp.passportAlertDays || 90,
-          });
+          const [created] = await tx
+            .insert(employees)
+            .values({
+              ...emp,
+              role: emp.role || "employee",
+              status: emp.status || "active",
+              visaAlertDays: emp.visaAlertDays || 30,
+              civilIdAlertDays: emp.civilIdAlertDays || 60,
+              passportAlertDays: emp.passportAlertDays || 90,
+            })
+            .returning();
+          inserted.push(created);
           success++;
         } catch {
           failed++;
         }
       }
     });
-    return { success, failed };
+    return { success, failed, employees: inserted };
   }
 
   async updateEmployee(
@@ -282,6 +311,79 @@ export class DatabaseStorage implements IStorage {
 
   async deleteEmployee(id: string): Promise<boolean> {
     const result = await db.delete(employees).where(eq(employees.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  // Employee custom field methods
+  async getEmployeeCustomFields(): Promise<EmployeeCustomField[]> {
+    return await db.select().from(employeeCustomFields);
+  }
+
+  async createEmployeeCustomField(
+    field: InsertEmployeeCustomField
+  ): Promise<EmployeeCustomField> {
+    const [created] = await db
+      .insert(employeeCustomFields)
+      .values(field)
+      .returning();
+    return created;
+  }
+
+  async updateEmployeeCustomField(
+    id: string,
+    field: Partial<InsertEmployeeCustomField>
+  ): Promise<EmployeeCustomField | undefined> {
+    const [updated] = await db
+      .update(employeeCustomFields)
+      .set(field)
+      .where(eq(employeeCustomFields.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteEmployeeCustomField(id: string): Promise<boolean> {
+    const result = await db
+      .delete(employeeCustomFields)
+      .where(eq(employeeCustomFields.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  // Employee custom value methods
+  async getEmployeeCustomValues(
+    employeeId: string
+  ): Promise<EmployeeCustomValue[]> {
+    return await db
+      .select()
+      .from(employeeCustomValues)
+      .where(eq(employeeCustomValues.employeeId, employeeId));
+  }
+
+  async createEmployeeCustomValue(
+    value: InsertEmployeeCustomValue
+  ): Promise<EmployeeCustomValue> {
+    const [created] = await db
+      .insert(employeeCustomValues)
+      .values(value)
+      .returning();
+    return created;
+  }
+
+  async updateEmployeeCustomValue(
+    id: string,
+    value: Partial<InsertEmployeeCustomValue>
+  ): Promise<EmployeeCustomValue | undefined> {
+    const [updated] = await db
+      .update(employeeCustomValues)
+      .set(value)
+      .where(eq(employeeCustomValues.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteEmployeeCustomValue(id: string): Promise<boolean> {
+    const result = await db
+      .delete(employeeCustomValues)
+      .where(eq(employeeCustomValues.id, id));
     return (result.rowCount ?? 0) > 0;
   }
 
