@@ -1,4 +1,5 @@
 import type { Express, Request, Response, NextFunction } from "express";
+import { HttpError } from "./errorHandler";
 import passport from "passport";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
@@ -37,7 +38,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const ensureAuth = (req: Request, res: Response, next: NextFunction) => {
     if (req.isAuthenticated()) return next();
-    res.status(401).json({ message: "Unauthorized" });
+    next(new HttpError(401, "Unauthorized"));
   };
 
   app.use("/api", ensureAuth);
@@ -47,91 +48,91 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Department routes
-  app.get("/api/departments", async (req, res) => {
+  app.get("/api/departments", async (req, res, next) => {
     try {
       const departments = await storage.getDepartments();
       res.json(departments);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch departments" });
+      next(new HttpError(500, "Failed to fetch departments"));
     }
   });
 
-  app.get("/api/departments/:id", async (req, res) => {
+  app.get("/api/departments/:id", async (req, res, next) => {
     try {
       const department = await storage.getDepartment(req.params.id);
       if (!department) {
-        return res.status(404).json({ message: "Department not found" });
+        return next(new HttpError(404, "Department not found"));
       }
       res.json(department);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch department" });
+      next(new HttpError(500, "Failed to fetch department"));
     }
   });
 
-  app.post("/api/departments", async (req, res) => {
+  app.post("/api/departments", async (req, res, next) => {
     try {
       const department = insertDepartmentSchema.parse(req.body);
       const newDepartment = await storage.createDepartment(department);
       res.status(201).json(newDepartment);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid department data", errors: error.errors });
+        return next(new HttpError(400, "Invalid department data", error.errors));
       }
-      res.status(500).json({ message: "Failed to create department" });
+      next(new HttpError(500, "Failed to create department"));
     }
   });
 
-  app.put("/api/departments/:id", async (req, res) => {
+  app.put("/api/departments/:id", async (req, res, next) => {
     try {
       const updates = insertDepartmentSchema.partial().parse(req.body);
       const updatedDepartment = await storage.updateDepartment(req.params.id, updates);
       if (!updatedDepartment) {
-        return res.status(404).json({ message: "Department not found" });
+        return next(new HttpError(404, "Department not found"));
       }
       res.json(updatedDepartment);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid department data", errors: error.errors });
+        return next(new HttpError(400, "Invalid department data", error.errors));
       }
-      res.status(500).json({ message: "Failed to update department" });
+      next(new HttpError(500, "Failed to update department"));
     }
   });
 
-  app.delete("/api/departments/:id", async (req, res) => {
+  app.delete("/api/departments/:id", async (req, res, next) => {
     try {
       const deleted = await storage.deleteDepartment(req.params.id);
       if (!deleted) {
-        return res.status(404).json({ message: "Department not found" });
+        return next(new HttpError(404, "Department not found"));
       }
       res.status(204).send();
     } catch (error) {
-      res.status(500).json({ message: "Failed to delete department" });
+      next(new HttpError(500, "Failed to delete department"));
     }
   });
 
   // Employee routes
-  app.get("/api/employees", async (req, res) => {
+  app.get("/api/employees", async (req, res, next) => {
     try {
       const employees = await storage.getEmployees();
       res.json(employees);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch employees" });
+      next(new HttpError(500, "Failed to fetch employees"));
     }
   });
 
-  app.get("/api/employees/:id", async (req, res) => {
+  app.get("/api/employees/:id", async (req, res, next) => {
     try {
       const employee = await storage.getEmployee(req.params.id);
       if (!employee) {
-        return res.status(404).json({ message: "Employee not found" });
+        return next(new HttpError(404, "Employee not found"));
       }
       res.json(employee);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch employee" });
+      next(new HttpError(500, "Failed to fetch employee"));
     }
   });
 
-  app.post("/api/employees", async (req, res) => {
+  app.post("/api/employees", async (req, res, next) => {
     try {
       const employee = insertEmployeeSchema.parse(req.body);
       const newEmployee = await storage.createEmployee({
@@ -141,81 +142,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(201).json(newEmployee);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid employee data", errors: error.errors });
+        return next(new HttpError(400, "Invalid employee data", error.errors));
       }
-      res.status(500).json({ message: "Failed to create employee" });
+      next(new HttpError(500, "Failed to create employee"));
     }
   });
 
-  app.put("/api/employees/:id", async (req, res) => {
+  app.put("/api/employees/:id", async (req, res, next) => {
     try {
       const updates = insertEmployeeSchema.partial().parse(req.body);
       const updatedEmployee = await storage.updateEmployee(req.params.id, updates);
       if (!updatedEmployee) {
-        return res.status(404).json({ message: "Employee not found" });
+        return next(new HttpError(404, "Employee not found"));
       }
       res.json(updatedEmployee);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid employee data", errors: error.errors });
+        return next(new HttpError(400, "Invalid employee data", error.errors));
       }
-      res.status(500).json({ message: "Failed to update employee" });
+      next(new HttpError(500, "Failed to update employee"));
     }
   });
 
-  app.delete("/api/employees/:id", async (req, res) => {
+  app.delete("/api/employees/:id", async (req, res, next) => {
     try {
       const deleted = await storage.deleteEmployee(req.params.id);
       if (!deleted) {
-        return res.status(404).json({ message: "Employee not found" });
+        return next(new HttpError(404, "Employee not found"));
       }
       res.status(204).send();
     } catch (error) {
-      res.status(500).json({ message: "Failed to delete employee" });
+      next(new HttpError(500, "Failed to delete employee"));
     }
   });
 
   // Payroll routes
-  app.get("/api/payroll", async (req, res) => {
+  app.get("/api/payroll", async (req, res, next) => {
     try {
       const payrollRuns = await storage.getPayrollRuns();
       res.json(payrollRuns);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch payroll runs" });
+      next(new HttpError(500, "Failed to fetch payroll runs"));
     }
   });
 
-  app.get("/api/payroll/:id", async (req, res) => {
+  app.get("/api/payroll/:id", async (req, res, next) => {
     try {
       const payrollRun = await storage.getPayrollRun(req.params.id);
       if (!payrollRun) {
-        return res.status(404).json({ message: "Payroll run not found" });
+        return next(new HttpError(404, "Payroll run not found"));
       }
       res.json(payrollRun);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch payroll run" });
+      next(new HttpError(500, "Failed to fetch payroll run"));
     }
   });
 
-  app.post("/api/payroll", async (req, res) => {
+  app.post("/api/payroll", async (req, res, next) => {
     try {
       const payrollRun = insertPayrollRunSchema.parse(req.body);
       const newPayrollRun = await storage.createPayrollRun(payrollRun);
       res.status(201).json(newPayrollRun);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid payroll data", errors: error.errors });
+        return next(new HttpError(400, "Invalid payroll data", error.errors));
       }
-      res.status(500).json({ message: "Failed to create payroll run" });
+      next(new HttpError(500, "Failed to create payroll run"));
     }
   });
 
-  app.post("/api/payroll/generate", async (req, res) => {
+  app.post("/api/payroll/generate", async (req, res, next) => {
     try {
       const { period, startDate, endDate } = req.body;
       
       if (!period || !startDate || !endDate) {
-        return res.status(400).json({ message: "Period, start date, and end date are required" });
+        return next(new HttpError(400, "Period, start date, and end date are required"));
       }
 
       // Get all active employees
@@ -223,7 +224,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const activeEmployees = employees.filter(emp => emp.status === "active");
 
       if (activeEmployees.length === 0) {
-        return res.status(400).json({ message: "No active employees found" });
+        return next(new HttpError(400, "No active employees found"));
       }
 
       // Get loans, vacation requests, and employee events for the period
@@ -405,40 +406,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(201).json(payrollRun);
     } catch (error) {
       console.error("Payroll generation error:", error);
-      res.status(500).json({ message: "Failed to generate payroll" });
+      next(new HttpError(500, "Failed to generate payroll"));
     }
   });
 
-  app.put("/api/payroll/:id", async (req, res) => {
+  app.put("/api/payroll/:id", async (req, res, next) => {
     try {
       const updates = insertPayrollRunSchema.partial().parse(req.body);
       const updatedPayrollRun = await storage.updatePayrollRun(req.params.id, updates);
       if (!updatedPayrollRun) {
-        return res.status(404).json({ message: "Payroll run not found" });
+        return next(new HttpError(404, "Payroll run not found"));
       }
       res.json(updatedPayrollRun);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid payroll data", errors: error.errors });
+        return next(new HttpError(400, "Invalid payroll data", error.errors));
       }
-      res.status(500).json({ message: "Failed to update payroll run" });
+      next(new HttpError(500, "Failed to update payroll run"));
     }
   });
 
-  app.delete("/api/payroll/:id", async (req, res) => {
+  app.delete("/api/payroll/:id", async (req, res, next) => {
     try {
       const deleted = await storage.deletePayrollRun(req.params.id);
       if (!deleted) {
-        return res.status(404).json({ message: "Payroll run not found" });
+        return next(new HttpError(404, "Payroll run not found"));
       }
       res.status(204).send();
     } catch (error) {
-      res.status(500).json({ message: "Failed to delete payroll run" });
+      next(new HttpError(500, "Failed to delete payroll run"));
     }
   });
 
   // Dashboard stats route
-  app.get("/api/dashboard/stats", async (req, res) => {
+  app.get("/api/dashboard/stats", async (req, res, next) => {
     try {
       const employees = await storage.getEmployees();
       const payrollRuns = await storage.getPayrollRuns();
@@ -461,329 +462,329 @@ export async function registerRoutes(app: Express): Promise<Server> {
         pendingReviews
       });
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch dashboard stats" });
+      next(new HttpError(500, "Failed to fetch dashboard stats"));
     }
   });
 
   // Vacation request routes
-  app.get("/api/vacations", async (req, res) => {
+  app.get("/api/vacations", async (req, res, next) => {
     try {
       const vacationRequests = await storage.getVacationRequests();
       res.json(vacationRequests);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch vacation requests" });
+      next(new HttpError(500, "Failed to fetch vacation requests"));
     }
   });
 
-  app.get("/api/vacations/:id", async (req, res) => {
+  app.get("/api/vacations/:id", async (req, res, next) => {
     try {
       const vacationRequest = await storage.getVacationRequest(req.params.id);
       if (!vacationRequest) {
-        return res.status(404).json({ message: "Vacation request not found" });
+        return next(new HttpError(404, "Vacation request not found"));
       }
       res.json(vacationRequest);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch vacation request" });
+      next(new HttpError(500, "Failed to fetch vacation request"));
     }
   });
 
-  app.post("/api/vacations", async (req, res) => {
+  app.post("/api/vacations", async (req, res, next) => {
     try {
       const vacationRequest = insertVacationRequestSchema.parse(req.body);
       const newVacationRequest = await storage.createVacationRequest(vacationRequest);
       res.status(201).json(newVacationRequest);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid vacation request data", errors: error.errors });
+        return next(new HttpError(400, "Invalid vacation request data", error.errors));
       }
-      res.status(500).json({ message: "Failed to create vacation request" });
+      next(new HttpError(500, "Failed to create vacation request"));
     }
   });
 
-  app.put("/api/vacations/:id", async (req, res) => {
+  app.put("/api/vacations/:id", async (req, res, next) => {
     try {
       const updates = insertVacationRequestSchema.partial().parse(req.body);
       const updatedVacationRequest = await storage.updateVacationRequest(req.params.id, updates);
       if (!updatedVacationRequest) {
-        return res.status(404).json({ message: "Vacation request not found" });
+        return next(new HttpError(404, "Vacation request not found"));
       }
       res.json(updatedVacationRequest);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid vacation request data", errors: error.errors });
+        return next(new HttpError(400, "Invalid vacation request data", error.errors));
       }
-      res.status(500).json({ message: "Failed to update vacation request" });
+      next(new HttpError(500, "Failed to update vacation request"));
     }
   });
 
-  app.delete("/api/vacations/:id", async (req, res) => {
+  app.delete("/api/vacations/:id", async (req, res, next) => {
     try {
       const deleted = await storage.deleteVacationRequest(req.params.id);
       if (!deleted) {
-        return res.status(404).json({ message: "Vacation request not found" });
+        return next(new HttpError(404, "Vacation request not found"));
       }
       res.status(204).send();
     } catch (error) {
-      res.status(500).json({ message: "Failed to delete vacation request" });
+      next(new HttpError(500, "Failed to delete vacation request"));
     }
   });
 
   // Loan routes
-  app.get("/api/loans", async (req, res) => {
+  app.get("/api/loans", async (req, res, next) => {
     try {
       const loans = await storage.getLoans();
       res.json(loans);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch loans" });
+      next(new HttpError(500, "Failed to fetch loans"));
     }
   });
 
-  app.get("/api/loans/:id", async (req, res) => {
+  app.get("/api/loans/:id", async (req, res, next) => {
     try {
       const loan = await storage.getLoan(req.params.id);
       if (!loan) {
-        return res.status(404).json({ message: "Loan not found" });
+        return next(new HttpError(404, "Loan not found"));
       }
       res.json(loan);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch loan" });
+      next(new HttpError(500, "Failed to fetch loan"));
     }
   });
 
-  app.post("/api/loans", async (req, res) => {
+  app.post("/api/loans", async (req, res, next) => {
     try {
       const loan = insertLoanSchema.parse(req.body);
       const newLoan = await storage.createLoan(loan);
       res.status(201).json(newLoan);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid loan data", errors: error.errors });
+        return next(new HttpError(400, "Invalid loan data", error.errors));
       }
-      res.status(500).json({ message: "Failed to create loan" });
+      next(new HttpError(500, "Failed to create loan"));
     }
   });
 
-  app.put("/api/loans/:id", async (req, res) => {
+  app.put("/api/loans/:id", async (req, res, next) => {
     try {
       const updates = insertLoanSchema.partial().parse(req.body);
       const updatedLoan = await storage.updateLoan(req.params.id, updates);
       if (!updatedLoan) {
-        return res.status(404).json({ message: "Loan not found" });
+        return next(new HttpError(404, "Loan not found"));
       }
       res.json(updatedLoan);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid loan data", errors: error.errors });
+        return next(new HttpError(400, "Invalid loan data", error.errors));
       }
-      res.status(500).json({ message: "Failed to update loan" });
+      next(new HttpError(500, "Failed to update loan"));
     }
   });
 
-  app.delete("/api/loans/:id", async (req, res) => {
+  app.delete("/api/loans/:id", async (req, res, next) => {
     try {
       const deleted = await storage.deleteLoan(req.params.id);
       if (!deleted) {
-        return res.status(404).json({ message: "Loan not found" });
+        return next(new HttpError(404, "Loan not found"));
       }
       res.status(204).send();
     } catch (error) {
-      res.status(500).json({ message: "Failed to delete loan" });
+      next(new HttpError(500, "Failed to delete loan"));
     }
   });
 
   // Car routes
-  app.get("/api/cars", async (req, res) => {
+  app.get("/api/cars", async (req, res, next) => {
     try {
       const cars = await storage.getCars();
       res.json(cars);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch cars" });
+      next(new HttpError(500, "Failed to fetch cars"));
     }
   });
 
-  app.get("/api/cars/:id", async (req, res) => {
+  app.get("/api/cars/:id", async (req, res, next) => {
     try {
       const car = await storage.getCar(req.params.id);
       if (!car) {
-        return res.status(404).json({ message: "Car not found" });
+        return next(new HttpError(404, "Car not found"));
       }
       res.json(car);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch car" });
+      next(new HttpError(500, "Failed to fetch car"));
     }
   });
 
-  app.post("/api/cars", async (req, res) => {
+  app.post("/api/cars", async (req, res, next) => {
     try {
       const car = insertCarSchema.parse(req.body);
       const newCar = await storage.createCar(car);
       res.status(201).json(newCar);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid car data", errors: error.errors });
+        return next(new HttpError(400, "Invalid car data", error.errors));
       }
-      res.status(500).json({ message: "Failed to create car" });
+      next(new HttpError(500, "Failed to create car"));
     }
   });
 
-  app.put("/api/cars/:id", async (req, res) => {
+  app.put("/api/cars/:id", async (req, res, next) => {
     try {
       const updates = insertCarSchema.partial().parse(req.body);
       const updatedCar = await storage.updateCar(req.params.id, updates);
       if (!updatedCar) {
-        return res.status(404).json({ message: "Car not found" });
+        return next(new HttpError(404, "Car not found"));
       }
       res.json(updatedCar);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid car data", errors: error.errors });
+        return next(new HttpError(400, "Invalid car data", error.errors));
       }
-      res.status(500).json({ message: "Failed to update car" });
+      next(new HttpError(500, "Failed to update car"));
     }
   });
 
-  app.delete("/api/cars/:id", async (req, res) => {
+  app.delete("/api/cars/:id", async (req, res, next) => {
     try {
       const deleted = await storage.deleteCar(req.params.id);
       if (!deleted) {
-        return res.status(404).json({ message: "Car not found" });
+        return next(new HttpError(404, "Car not found"));
       }
       res.status(204).send();
     } catch (error) {
-      res.status(500).json({ message: "Failed to delete car" });
+      next(new HttpError(500, "Failed to delete car"));
     }
   });
 
   // Car assignment routes
-  app.get("/api/car-assignments", async (req, res) => {
+  app.get("/api/car-assignments", async (req, res, next) => {
     try {
       const carAssignments = await storage.getCarAssignments();
       res.json(carAssignments);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch car assignments" });
+      next(new HttpError(500, "Failed to fetch car assignments"));
     }
   });
 
-  app.get("/api/car-assignments/:id", async (req, res) => {
+  app.get("/api/car-assignments/:id", async (req, res, next) => {
     try {
       const carAssignment = await storage.getCarAssignment(req.params.id);
       if (!carAssignment) {
-        return res.status(404).json({ message: "Car assignment not found" });
+        return next(new HttpError(404, "Car assignment not found"));
       }
       res.json(carAssignment);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch car assignment" });
+      next(new HttpError(500, "Failed to fetch car assignment"));
     }
   });
 
-  app.post("/api/car-assignments", async (req, res) => {
+  app.post("/api/car-assignments", async (req, res, next) => {
     try {
       const carAssignment = insertCarAssignmentSchema.parse(req.body);
       const newCarAssignment = await storage.createCarAssignment(carAssignment);
       res.status(201).json(newCarAssignment);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid car assignment data", errors: error.errors });
+        return next(new HttpError(400, "Invalid car assignment data", error.errors));
       }
-      res.status(500).json({ message: "Failed to create car assignment" });
+      next(new HttpError(500, "Failed to create car assignment"));
     }
   });
 
-  app.put("/api/car-assignments/:id", async (req, res) => {
+  app.put("/api/car-assignments/:id", async (req, res, next) => {
     try {
       const updates = insertCarAssignmentSchema.partial().parse(req.body);
       const updatedCarAssignment = await storage.updateCarAssignment(req.params.id, updates);
       if (!updatedCarAssignment) {
-        return res.status(404).json({ message: "Car assignment not found" });
+        return next(new HttpError(404, "Car assignment not found"));
       }
       res.json(updatedCarAssignment);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid car assignment data", errors: error.errors });
+        return next(new HttpError(400, "Invalid car assignment data", error.errors));
       }
-      res.status(500).json({ message: "Failed to update car assignment" });
+      next(new HttpError(500, "Failed to update car assignment"));
     }
   });
 
-  app.delete("/api/car-assignments/:id", async (req, res) => {
+  app.delete("/api/car-assignments/:id", async (req, res, next) => {
     try {
       const deleted = await storage.deleteCarAssignment(req.params.id);
       if (!deleted) {
-        return res.status(404).json({ message: "Car assignment not found" });
+        return next(new HttpError(404, "Car assignment not found"));
       }
       res.status(204).send();
     } catch (error) {
-      res.status(500).json({ message: "Failed to delete car assignment" });
+      next(new HttpError(500, "Failed to delete car assignment"));
     }
   });
 
   // Notification routes
-  app.get("/api/notifications", async (req, res) => {
+  app.get("/api/notifications", async (req, res, next) => {
     try {
       const notifications = await storage.getNotifications();
       res.json(notifications);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch notifications" });
+      next(new HttpError(500, "Failed to fetch notifications"));
     }
   });
 
-  app.get("/api/notifications/unread", async (req, res) => {
+  app.get("/api/notifications/unread", async (req, res, next) => {
     try {
       const notifications = await storage.getUnreadNotifications();
       res.json(notifications);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch unread notifications" });
+      next(new HttpError(500, "Failed to fetch unread notifications"));
     }
   });
 
-  app.post("/api/notifications", async (req, res) => {
+  app.post("/api/notifications", async (req, res, next) => {
     try {
       const notification = insertNotificationSchema.parse(req.body);
       const newNotification = await storage.createNotification(notification);
       res.status(201).json(newNotification);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid notification data", errors: error.errors });
+        return next(new HttpError(400, "Invalid notification data", error.errors));
       }
-      res.status(500).json({ message: "Failed to create notification" });
+      next(new HttpError(500, "Failed to create notification"));
     }
   });
 
-  app.put("/api/notifications/:id/read", async (req, res) => {
+  app.put("/api/notifications/:id/read", async (req, res, next) => {
     try {
       const marked = await storage.markNotificationAsRead(req.params.id);
       if (!marked) {
-        return res.status(404).json({ message: "Notification not found" });
+        return next(new HttpError(404, "Notification not found"));
       }
       res.json({ message: "Notification marked as read" });
     } catch (error) {
-      res.status(500).json({ message: "Failed to mark notification as read" });
+      next(new HttpError(500, "Failed to mark notification as read"));
     }
   });
 
-  app.delete("/api/notifications/:id", async (req, res) => {
+  app.delete("/api/notifications/:id", async (req, res, next) => {
     try {
       const deleted = await storage.deleteNotification(req.params.id);
       if (!deleted) {
-        return res.status(404).json({ message: "Notification not found" });
+        return next(new HttpError(404, "Notification not found"));
       }
       res.status(204).send();
     } catch (error) {
-      res.status(500).json({ message: "Failed to delete notification" });
+      next(new HttpError(500, "Failed to delete notification"));
     }
   });
 
   // Document expiry tracking routes
-  app.get("/api/documents/expiry-check", async (req, res) => {
+  app.get("/api/documents/expiry-check", async (req, res, next) => {
     try {
       const expiryChecks = await storage.checkDocumentExpiries();
       res.json(expiryChecks);
     } catch (error) {
-      res.status(500).json({ message: "Failed to check document expiries" });
+      next(new HttpError(500, "Failed to check document expiries"));
     }
   });
 
-  app.post("/api/documents/send-alerts", async (req, res) => {
+  app.post("/api/documents/send-alerts", async (req, res, next) => {
     try {
       const expiryChecks = await storage.checkDocumentExpiries();
       const alerts = [];
@@ -902,85 +903,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
         alerts
       });
     } catch (error) {
-      res.status(500).json({ message: "Failed to send document expiry alerts" });
+      next(new HttpError(500, "Failed to send document expiry alerts"));
     }
   });
 
   // Email alerts routes
-  app.get("/api/email-alerts", async (req, res) => {
+  app.get("/api/email-alerts", async (req, res, next) => {
     try {
       const alerts = await storage.getEmailAlerts();
       res.json(alerts);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch email alerts" });
+      next(new HttpError(500, "Failed to fetch email alerts"));
     }
   });
 
   // Employee events routes
-  app.get("/api/employee-events", async (req, res) => {
+  app.get("/api/employee-events", async (req, res, next) => {
     try {
       const events = await storage.getEmployeeEvents();
       res.json(events);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch employee events" });
+      next(new HttpError(500, "Failed to fetch employee events"));
     }
   });
 
-  app.get("/api/employee-events/:id", async (req, res) => {
+  app.get("/api/employee-events/:id", async (req, res, next) => {
     try {
       const event = await storage.getEmployeeEvent(req.params.id);
       if (!event) {
-        return res.status(404).json({ message: "Employee event not found" });
+        return next(new HttpError(404, "Employee event not found"));
       }
       res.json(event);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch employee event" });
+      next(new HttpError(500, "Failed to fetch employee event"));
     }
   });
 
-  app.post("/api/employee-events", async (req, res) => {
+  app.post("/api/employee-events", async (req, res, next) => {
     try {
       const event = insertEmployeeEventSchema.parse(req.body);
       const newEvent = await storage.createEmployeeEvent(event);
       res.status(201).json(newEvent);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid employee event data", errors: error.errors });
+        return next(new HttpError(400, "Invalid employee event data", error.errors));
       }
-      res.status(500).json({ message: "Failed to create employee event" });
+      next(new HttpError(500, "Failed to create employee event"));
     }
   });
 
-  app.put("/api/employee-events/:id", async (req, res) => {
+  app.put("/api/employee-events/:id", async (req, res, next) => {
     try {
       const updates = insertEmployeeEventSchema.partial().parse(req.body);
       const updatedEvent = await storage.updateEmployeeEvent(req.params.id, updates);
       if (!updatedEvent) {
-        return res.status(404).json({ message: "Employee event not found" });
+        return next(new HttpError(404, "Employee event not found"));
       }
       res.json(updatedEvent);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid employee event data", errors: error.errors });
+        return next(new HttpError(400, "Invalid employee event data", error.errors));
       }
-      res.status(500).json({ message: "Failed to update employee event" });
+      next(new HttpError(500, "Failed to update employee event"));
     }
   });
 
-  app.delete("/api/employee-events/:id", async (req, res) => {
+  app.delete("/api/employee-events/:id", async (req, res, next) => {
     try {
       const deleted = await storage.deleteEmployeeEvent(req.params.id);
       if (!deleted) {
-        return res.status(404).json({ message: "Employee event not found" });
+        return next(new HttpError(404, "Employee event not found"));
       }
       res.status(204).send();
     } catch (error) {
-      res.status(500).json({ message: "Failed to delete employee event" });
+      next(new HttpError(500, "Failed to delete employee event"));
     }
   });
 
   // Employee report route
-  app.get("/api/reports/employees/:id", async (req, res) => {
+  app.get("/api/reports/employees/:id", async (req, res, next) => {
     const querySchema = z.object({
       startDate: z
         .string()
@@ -1047,28 +1048,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(response);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res
-          .status(400)
-          .json({ message: "Invalid query parameters", errors: error.errors });
+        return next(new HttpError(400, "Invalid query parameters", error.errors));
       }
-      res.status(500).json({ message: "Failed to fetch employee report" });
+      next(new HttpError(500, "Failed to fetch employee report"));
     }
   });
 
   // Payroll entry routes
-  app.put("/api/payroll/entries/:id", async (req, res) => {
+  app.put("/api/payroll/entries/:id", async (req, res, next) => {
     try {
       const updates = insertPayrollEntrySchema.partial().parse(req.body);
       const updatedEntry = await storage.updatePayrollEntry(req.params.id, updates);
       if (!updatedEntry) {
-        return res.status(404).json({ message: "Payroll entry not found" });
+        return next(new HttpError(404, "Payroll entry not found"));
       }
       res.json(updatedEntry);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid payroll entry data", errors: error.errors });
+        return next(new HttpError(400, "Invalid payroll entry data", error.errors));
       }
-      res.status(500).json({ message: "Failed to update payroll entry" });
+      next(new HttpError(500, "Failed to update payroll entry"));
     }
   });
 
