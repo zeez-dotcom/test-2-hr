@@ -269,10 +269,12 @@ export class DatabaseStorage implements IStorage {
     id: string,
     employee: Partial<Omit<InsertEmployee, "employeeCode">>
   ): Promise<Employee | undefined> {
-    const { employeeCode, ...rest } = employee as any;
+    if ("employeeCode" in (employee as any)) {
+      delete (employee as any).employeeCode;
+    }
     const [updated] = await db
       .update(employees)
-      .set(rest)
+      .set(employee)
       .where(eq(employees.id, id))
       .returning();
     return updated || undefined;

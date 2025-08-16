@@ -10,6 +10,7 @@ vi.mock('./storage', () => {
       getEmployees: vi.fn(),
       createEmployee: vi.fn(),
       createEmployeesBulk: vi.fn(),
+      updateEmployee: vi.fn(),
       getPayrollRuns: vi.fn(),
       getLoans: vi.fn(),
       getCars: vi.fn(),
@@ -72,6 +73,14 @@ describe('employee routes', () => {
     const res = await request(app).post('/api/employees').send({});
     expect(res.status).toBe(400);
     expect(res.body.error.message).toBe('Invalid employee data');
+  });
+
+  it('PUT /api/employees/:id rejects employeeCode updates', async () => {
+    const res = await request(app)
+      .put('/api/employees/1')
+      .send({ employeeCode: 'NEW' });
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toBe('Employee code cannot be updated');
   });
 
   it('POST /api/employees/import imports employees from excel', async () => {
