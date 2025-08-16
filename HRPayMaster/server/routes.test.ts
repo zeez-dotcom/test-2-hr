@@ -9,6 +9,8 @@ vi.mock('./storage', () => {
       getEmployees: vi.fn(),
       createEmployee: vi.fn(),
       getPayrollRuns: vi.fn(),
+      getLoans: vi.fn(),
+      getCars: vi.fn(),
     },
   };
 });
@@ -70,5 +72,27 @@ describe('employee routes', () => {
     const res = await request(app).get('/api/payroll');
     expect(res.status).toBe(200);
     expect(res.body).toEqual(mockRuns);
+  });
+
+  it('GET /api/loans returns loans list', async () => {
+    const mockLoans = [
+      { id: '1', employeeId: '1', amount: '1000', status: 'active', remainingAmount: '500', monthlyDeduction: '100' }
+    ];
+    (storage.getLoans as any).mockResolvedValue(mockLoans);
+
+    const res = await request(app).get('/api/loans');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(mockLoans);
+  });
+
+  it('GET /api/cars returns cars list', async () => {
+    const mockCars = [
+      { id: '1', make: 'Toyota', model: 'Corolla', year: 2020, status: 'available' }
+    ];
+    (storage.getCars as any).mockResolvedValue(mockCars);
+
+    const res = await request(app).get('/api/cars');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(mockCars);
   });
 });
