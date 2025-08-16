@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 
 import EmployeeTable from "@/components/employees/employee-table";
 import EmployeeForm from "@/components/employees/employee-form";
+import EmployeeImport from "@/components/employees/employee-import";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -187,6 +188,7 @@ export default function Employees() {
                   />
                 </DialogContent>
                 </Dialog>
+              <EmployeeImport />
             </div>
           </div>
         </div>
