@@ -1,4 +1,5 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
+import passport from "passport";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { 
@@ -23,6 +24,28 @@ import {
 import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  app.post("/login", passport.authenticate("local"), (req, res) => {
+    res.json({ user: req.user });
+  });
+
+  app.post("/logout", (req, res, next) => {
+    req.logout(err => {
+      if (err) return next(err);
+      res.json({ ok: true });
+    });
+  });
+
+  const ensureAuth = (req: Request, res: Response, next: NextFunction) => {
+    if (req.isAuthenticated()) return next();
+    res.status(401).json({ message: "Unauthorized" });
+  };
+
+  app.use("/api", ensureAuth);
+
+  app.get("/api/me", (req, res) => {
+    res.json(req.user);
+  });
+
   // Department routes
   app.get("/api/departments", async (req, res) => {
     try {

@@ -1,10 +1,57 @@
 import express, { type Request, Response, NextFunction } from "express";
+import session from "express-session";
+import passport from "passport";
+import { Strategy as LocalStrategy } from "passport-local";
+import createMemoryStore from "memorystore";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+
+interface User {
+  id: string;
+  username: string;
+  password: string;
+}
+
+const users: User[] = [
+  { id: "1", username: "admin", password: "password" },
+];
+
+passport.use(
+  new LocalStrategy((username, password, done) => {
+    const user = users.find(
+      (u) => u.username === username && u.password === password,
+    );
+    if (!user) return done(null, false);
+    return done(null, user);
+  }),
+);
+
+passport.serializeUser((user: Express.User, done) => {
+  done(null, (user as User).id);
+});
+
+passport.deserializeUser((id: string, done) => {
+  const user = users.find((u) => u.id === id);
+  done(null, user || false);
+});
+
+const MemoryStore = createMemoryStore(session);
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "secret",
+    resave: false,
+    saveUninitialized: false,
+    store: new MemoryStore({ checkPeriod: 86400000 }),
+  }),
+);
+
+app.use(passport.initialize());
+app.use(passport.session());
 
 app.use((req, res, next) => {
   const start = Date.now();
