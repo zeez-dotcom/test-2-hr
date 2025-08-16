@@ -21,6 +21,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 import type { EmployeeWithDepartment, Department } from "@shared/schema";
+import { formatCurrency, formatDate } from "@/lib/utils";
 
 interface EmployeesResponse {
   data: EmployeeWithDepartment[];
@@ -97,13 +98,6 @@ export default function EmployeeTable({
   const employees: EmployeeWithDepartment[] = data?.data ?? [];
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / pageSize));
 
-  const formatCurrency = (amount: string) => {
-    const num = parseFloat(amount);
-    return new Intl.NumberFormat('en-KW', {
-      style: 'currency',
-      currency: 'KWD',
-    }).format(num);
-  };
 
   const getStatusColor = (status: string) => {
     switch (status) {

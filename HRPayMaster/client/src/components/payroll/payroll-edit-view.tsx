@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { formatCurrency, formatDate } from "@/lib/utils";
 import type { PayrollRunWithEntries, PayrollEntry, InsertEmployeeEvent } from "@shared/schema";
 import { VacationDayForm } from "@/components/vacation/vacation-day-form";
 import { DeductionForm } from "@/components/payroll/deduction-form";
@@ -114,23 +115,6 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
     },
   });
 
-  const formatCurrency = (amount: number | string) => {
-    const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-    return new Intl.NumberFormat('en-KW', {
-      style: 'currency',
-      currency: 'KWD',
-      minimumFractionDigits: 3,
-      maximumFractionDigits: 3,
-    }).format(num);
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric'
-    });
-  };
 
   const handleCellEdit = (entryId: string, field: string, value: string) => {
     const cellKey = `${entryId}-${field}`;

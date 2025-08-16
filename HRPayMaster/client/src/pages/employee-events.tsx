@@ -14,7 +14,7 @@ import { Plus, Calendar as CalendarIcon, TrendingUp, TrendingDown, Award, AlertT
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency, formatDate } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { EmployeeEvent, Employee, InsertEmployeeEvent } from "@shared/schema";
@@ -88,21 +88,6 @@ export default function EmployeeEvents() {
     },
   });
 
-  const formatCurrency = (amount: number | string) => {
-    const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-    return new Intl.NumberFormat('en-KW', {
-      style: 'currency',
-      currency: 'KWD',
-    }).format(num);
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-  };
 
   const getEventTypeIcon = (eventType: string) => {
     switch (eventType) {
