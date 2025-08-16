@@ -3,11 +3,13 @@ import { HttpError } from "./errorHandler";
 import passport from "passport";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { 
+import { assetService } from "./assetService";
+import {
   insertDepartmentSchema,
   insertEmployeeSchema,
   insertVacationRequestSchema,
-  insertCarAssignmentSchema,
+  insertAssetSchema,
+  insertAssetAssignmentSchema,
   insertNotificationSchema,
   insertEmailAlertSchema,
   insertEmployeeEventSchema
@@ -263,11 +265,137 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Car assignment routes
+  // Asset routes
+  app.get("/api/assets", async (req, res, next) => {
+    try {
+      const assets = await assetService.getAssets();
+      res.json(assets);
+    } catch (error) {
+      next(new HttpError(500, "Failed to fetch assets"));
+    }
+  });
+
+  app.get("/api/assets/:id", async (req, res, next) => {
+    try {
+      const asset = await assetService.getAsset(req.params.id);
+      if (!asset) {
+        return next(new HttpError(404, "Asset not found"));
+      }
+      res.json(asset);
+    } catch (error) {
+      next(new HttpError(500, "Failed to fetch asset"));
+    }
+  });
+
+  app.post("/api/assets", async (req, res, next) => {
+    try {
+      const asset = insertAssetSchema.parse(req.body);
+      const newAsset = await assetService.createAsset(asset);
+      res.status(201).json(newAsset);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return next(new HttpError(400, "Invalid asset data", error.errors));
+      }
+      next(new HttpError(500, "Failed to create asset"));
+    }
+  });
+
+  app.put("/api/assets/:id", async (req, res, next) => {
+    try {
+      const updates = insertAssetSchema.partial().parse(req.body);
+      const updated = await assetService.updateAsset(req.params.id, updates);
+      if (!updated) {
+        return next(new HttpError(404, "Asset not found"));
+      }
+      res.json(updated);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return next(new HttpError(400, "Invalid asset data", error.errors));
+      }
+      next(new HttpError(500, "Failed to update asset"));
+    }
+  });
+
+  app.delete("/api/assets/:id", async (req, res, next) => {
+    try {
+      const deleted = await assetService.deleteAsset(req.params.id);
+      if (!deleted) {
+        return next(new HttpError(404, "Asset not found"));
+      }
+      res.status(204).send();
+    } catch (error) {
+      next(new HttpError(500, "Failed to delete asset"));
+    }
+  });
+
+  // Asset assignment routes
+  app.get("/api/asset-assignments", async (req, res, next) => {
+    try {
+      const assignments = await assetService.getAssignments();
+      res.json(assignments);
+    } catch (error) {
+      next(new HttpError(500, "Failed to fetch asset assignments"));
+    }
+  });
+
+  app.get("/api/asset-assignments/:id", async (req, res, next) => {
+    try {
+      const assignment = await assetService.getAssignment(req.params.id);
+      if (!assignment) {
+        return next(new HttpError(404, "Asset assignment not found"));
+      }
+      res.json(assignment);
+    } catch (error) {
+      next(new HttpError(500, "Failed to fetch asset assignment"));
+    }
+  });
+
+  app.post("/api/asset-assignments", async (req, res, next) => {
+    try {
+      const assignment = insertAssetAssignmentSchema.parse(req.body);
+      const newAssignment = await assetService.createAssignment(assignment);
+      res.status(201).json(newAssignment);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return next(new HttpError(400, "Invalid asset assignment data", error.errors));
+      }
+      next(new HttpError(500, "Failed to create asset assignment"));
+    }
+  });
+
+  app.put("/api/asset-assignments/:id", async (req, res, next) => {
+    try {
+      const updates = insertAssetAssignmentSchema.partial().parse(req.body);
+      const updated = await assetService.updateAssignment(req.params.id, updates);
+      if (!updated) {
+        return next(new HttpError(404, "Asset assignment not found"));
+      }
+      res.json(updated);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return next(new HttpError(400, "Invalid asset assignment data", error.errors));
+      }
+      next(new HttpError(500, "Failed to update asset assignment"));
+    }
+  });
+
+  app.delete("/api/asset-assignments/:id", async (req, res, next) => {
+    try {
+      const deleted = await assetService.deleteAssignment(req.params.id);
+      if (!deleted) {
+        return next(new HttpError(404, "Asset assignment not found"));
+      }
+      res.status(204).send();
+    } catch (error) {
+      next(new HttpError(500, "Failed to delete asset assignment"));
+    }
+  });
+
+  // Car assignment routes (using asset service)
   app.get("/api/car-assignments", async (req, res, next) => {
     try {
-      const carAssignments = await storage.getCarAssignments();
-      res.json(carAssignments);
+      const assignments = await assetService.getAssignments();
+      res.json(assignments.filter(a => a.asset?.type === "car"));
     } catch (error) {
       next(new HttpError(500, "Failed to fetch car assignments"));
     }
@@ -275,11 +403,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/car-assignments/:id", async (req, res, next) => {
     try {
-      const carAssignment = await storage.getCarAssignment(req.params.id);
-      if (!carAssignment) {
+      const assignment = await assetService.getAssignment(req.params.id);
+      if (!assignment || assignment.asset?.type !== "car") {
         return next(new HttpError(404, "Car assignment not found"));
       }
-      res.json(carAssignment);
+      res.json(assignment);
     } catch (error) {
       next(new HttpError(500, "Failed to fetch car assignment"));
     }
@@ -287,9 +415,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/car-assignments", async (req, res, next) => {
     try {
-      const carAssignment = insertCarAssignmentSchema.parse(req.body);
-      const newCarAssignment = await storage.createCarAssignment(carAssignment);
-      res.status(201).json(newCarAssignment);
+      const assignment = insertAssetAssignmentSchema.parse({
+        ...req.body,
+        assetId: req.body.carId,
+      });
+      const newAssignment = await assetService.createAssignment(assignment);
+      res.status(201).json(newAssignment);
     } catch (error) {
       if (error instanceof z.ZodError) {
         return next(new HttpError(400, "Invalid car assignment data", error.errors));
@@ -300,12 +431,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/car-assignments/:id", async (req, res, next) => {
     try {
-      const updates = insertCarAssignmentSchema.partial().parse(req.body);
-      const updatedCarAssignment = await storage.updateCarAssignment(req.params.id, updates);
-      if (!updatedCarAssignment) {
+      const updates = insertAssetAssignmentSchema.partial().parse({
+        ...req.body,
+        assetId: req.body.carId,
+      });
+      const updated = await assetService.updateAssignment(req.params.id, updates);
+      if (!updated) {
         return next(new HttpError(404, "Car assignment not found"));
       }
-      res.json(updatedCarAssignment);
+      res.json(updated);
     } catch (error) {
       if (error instanceof z.ZodError) {
         return next(new HttpError(400, "Invalid car assignment data", error.errors));
@@ -316,7 +450,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/car-assignments/:id", async (req, res, next) => {
     try {
-      const deleted = await storage.deleteCarAssignment(req.params.id);
+      const deleted = await assetService.deleteAssignment(req.params.id);
       if (!deleted) {
         return next(new HttpError(404, "Car assignment not found"));
       }
