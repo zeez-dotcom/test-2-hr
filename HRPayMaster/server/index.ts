@@ -45,9 +45,19 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+const sessionSecret = process.env.SESSION_SECRET;
+if (!sessionSecret) {
+  const message = "SESSION_SECRET environment variable is required";
+  if (app.get("env") === "production") {
+    throw new Error(message);
+  } else {
+    log(`warning: ${message}; using default 'secret'`);
+  }
+}
+
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || "secret",
+    secret: sessionSecret || "secret",
     resave: false,
     saveUninitialized: false,
     store: new MemoryStore({ checkPeriod: 86400000 }),
