@@ -8,11 +8,15 @@ vi.mock('./storage', () => {
     storage: {
       getEmployees: vi.fn(),
       createEmployee: vi.fn(),
+      getPayrollRuns: vi.fn(),
     },
   };
 });
 
 import { registerRoutes } from './routes';
+import { payrollRouter } from './routes/payroll';
+import { loansRouter } from './routes/loans';
+import { carsRouter } from './routes/cars';
 import { storage } from './storage';
 
 function createApp() {
@@ -33,6 +37,9 @@ describe('employee routes', () => {
   beforeEach(async () => {
     app = createApp();
     await registerRoutes(app);
+    app.use('/api/payroll', payrollRouter);
+    app.use('/api/loans', loansRouter);
+    app.use('/api/cars', carsRouter);
     app.use(errorHandler);
     vi.clearAllMocks();
   });
@@ -52,5 +59,16 @@ describe('employee routes', () => {
     const res = await request(app).post('/api/employees').send({});
     expect(res.status).toBe(400);
     expect(res.body.error.message).toBe('Invalid employee data');
+  });
+
+  it('GET /api/payroll returns payroll runs', async () => {
+    const mockRuns = [
+      { id: '1', period: '2024-01', startDate: '2024-01-01', endDate: '2024-01-31', grossAmount: '0', totalDeductions: '0', netAmount: '0', status: 'completed' }
+    ];
+    (storage.getPayrollRuns as any).mockResolvedValue(mockRuns);
+
+    const res = await request(app).get('/api/payroll');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(mockRuns);
   });
 });
