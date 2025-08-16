@@ -391,6 +391,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const assignment = insertAssetAssignmentSchema.parse(req.body);
       const newAssignment = await assetService.createAssignment(assignment);
+      const detailed = await assetService.getAssignment(newAssignment.id);
+      if (detailed?.asset?.type === "car") {
+        const event: InsertEmployeeEvent = {
+          employeeId: detailed.employeeId,
+          eventType: "fleet_assignment",
+          title: `Assigned vehicle ${detailed.asset?.name ?? ""}`.trim(),
+          description: `Assigned vehicle ${detailed.asset?.name ?? ""} to ${detailed.employee?.firstName ?? ""} ${detailed.employee?.lastName ?? ""}`.trim(),
+          amount: "0",
+          eventDate: new Date().toISOString().split("T")[0],
+          affectsPayroll: false,
+          addedBy: (req.user as any)?.id,
+        };
+        await storage.createEmployeeEvent(event);
+      }
       res.status(201).json(newAssignment);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -407,6 +421,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!updated) {
         return next(new HttpError(404, "Asset assignment not found"));
       }
+      const detailed = await assetService.getAssignment(req.params.id);
+      if (detailed?.asset?.type === "car") {
+        const event: InsertEmployeeEvent = {
+          employeeId: detailed.employeeId,
+          eventType: "fleet_update",
+          title: `Updated assignment for vehicle ${detailed.asset?.name ?? ""}`.trim(),
+          description: `Updated vehicle ${detailed.asset?.name ?? ""} assignment for ${detailed.employee?.firstName ?? ""} ${detailed.employee?.lastName ?? ""}`.trim(),
+          amount: "0",
+          eventDate: new Date().toISOString().split("T")[0],
+          affectsPayroll: false,
+          addedBy: (req.user as any)?.id,
+        };
+        await storage.createEmployeeEvent(event);
+      }
       res.json(updated);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -418,9 +446,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/asset-assignments/:id", async (req, res, next) => {
     try {
+      const existing = await assetService.getAssignment(req.params.id);
       const deleted = await assetService.deleteAssignment(req.params.id);
       if (!deleted) {
         return next(new HttpError(404, "Asset assignment not found"));
+      }
+      if (existing?.asset?.type === "car") {
+        const event: InsertEmployeeEvent = {
+          employeeId: existing.employeeId,
+          eventType: "fleet_removal",
+          title: `Removed vehicle ${existing.asset?.name ?? ""} assignment`.trim(),
+          description: `Removed vehicle ${existing.asset?.name ?? ""} from ${existing.employee?.firstName ?? ""} ${existing.employee?.lastName ?? ""}`.trim(),
+          amount: "0",
+          eventDate: new Date().toISOString().split("T")[0],
+          affectsPayroll: false,
+          addedBy: (req.user as any)?.id,
+        };
+        await storage.createEmployeeEvent(event);
       }
       res.status(204).send();
     } catch (error) {
@@ -457,6 +499,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         assetId: req.body.carId,
       });
       const newAssignment = await assetService.createAssignment(assignment);
+      const detailed = await assetService.getAssignment(newAssignment.id);
+      if (detailed) {
+        const event: InsertEmployeeEvent = {
+          employeeId: detailed.employeeId,
+          eventType: "fleet_assignment",
+          title: `Assigned vehicle ${detailed.asset?.name ?? ""}`.trim(),
+          description: `Assigned vehicle ${detailed.asset?.name ?? ""} to ${detailed.employee?.firstName ?? ""} ${detailed.employee?.lastName ?? ""}`.trim(),
+          amount: "0",
+          eventDate: new Date().toISOString().split("T")[0],
+          affectsPayroll: false,
+          addedBy: (req.user as any)?.id,
+        };
+        await storage.createEmployeeEvent(event);
+      }
       res.status(201).json(newAssignment);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -476,6 +532,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!updated) {
         return next(new HttpError(404, "Car assignment not found"));
       }
+      const detailed = await assetService.getAssignment(req.params.id);
+      if (detailed) {
+        const event: InsertEmployeeEvent = {
+          employeeId: detailed.employeeId,
+          eventType: "fleet_update",
+          title: `Updated assignment for vehicle ${detailed.asset?.name ?? ""}`.trim(),
+          description: `Updated vehicle ${detailed.asset?.name ?? ""} assignment for ${detailed.employee?.firstName ?? ""} ${detailed.employee?.lastName ?? ""}`.trim(),
+          amount: "0",
+          eventDate: new Date().toISOString().split("T")[0],
+          affectsPayroll: false,
+          addedBy: (req.user as any)?.id,
+        };
+        await storage.createEmployeeEvent(event);
+      }
       res.json(updated);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -487,9 +557,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/car-assignments/:id", async (req, res, next) => {
     try {
+      const existing = await assetService.getAssignment(req.params.id);
       const deleted = await assetService.deleteAssignment(req.params.id);
       if (!deleted) {
         return next(new HttpError(404, "Car assignment not found"));
+      }
+      if (existing) {
+        const event: InsertEmployeeEvent = {
+          employeeId: existing.employeeId,
+          eventType: "fleet_removal",
+          title: `Removed vehicle ${existing.asset?.name ?? ""} assignment`.trim(),
+          description: `Removed vehicle ${existing.asset?.name ?? ""} from ${existing.employee?.firstName ?? ""} ${existing.employee?.lastName ?? ""}`.trim(),
+          amount: "0",
+          eventDate: new Date().toISOString().split("T")[0],
+          affectsPayroll: false,
+          addedBy: (req.user as any)?.id,
+        };
+        await storage.createEmployeeEvent(event);
       }
       res.status(204).send();
     } catch (error) {
