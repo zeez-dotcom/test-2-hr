@@ -793,6 +793,10 @@ export class DatabaseStorage implements IStorage {
       .insert(cars)
       .values({
         ...car,
+        serial: car.serial,
+        company: car.company,
+        registrationBookName: car.registrationBookName,
+        notes: car.notes,
         status: car.status || "available",
         mileage: car.mileage || 0,
       })
@@ -803,7 +807,13 @@ export class DatabaseStorage implements IStorage {
   async updateCar(id: string, car: Partial<InsertCar>): Promise<Car | undefined> {
     const [updated] = await db
       .update(cars)
-      .set(car)
+      .set({
+        ...car,
+        serial: car.serial,
+        company: car.company,
+        registrationBookName: car.registrationBookName,
+        notes: car.notes,
+      })
       .where(eq(cars.id, id))
       .returning();
     return updated || undefined;
