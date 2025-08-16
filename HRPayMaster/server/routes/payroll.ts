@@ -118,7 +118,8 @@ payrollRouter.post("/generate", async (req, res, next) => {
         event.affectsPayroll &&
         event.status === "active" &&
         new Date(event.eventDate) >= periodStart &&
-        new Date(event.eventDate) <= periodEnd
+        new Date(event.eventDate) <= periodEnd &&
+        event.eventType !== "vacation"
       );
 
       const bonusAmount = employeeEventsInPeriod
