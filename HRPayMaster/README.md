@@ -13,14 +13,22 @@
      SESSION_SECRET="<random session secret>"
      ```
 
-3. **Install dependencies and push the database schema**
+3. **Install dependencies**
 
    ```bash
    npm install
+   ```
+
+4. **Run migrations**
+
+   ```bash
    npm run db:push
    ```
 
-4. **Start the application**
+   - Requires the `DATABASE_URL` environment variable.
+   - Run this step whenever you pull changes that modify the database schema.
+
+5. **Start the application**
    - Development: `npm run dev`
    - Production: `npm run build` followed by `npm run start`
 
