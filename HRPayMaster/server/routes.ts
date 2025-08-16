@@ -191,6 +191,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/employees/:id", async (req, res, next) => {
     try {
+      if ("employeeCode" in req.body) {
+        return next(new HttpError(400, "Employee code cannot be updated"));
+      }
       const updates = insertEmployeeSchema
         .omit({ employeeCode: true })
         .partial()
