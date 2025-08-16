@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Eye,
   Edit,
@@ -52,6 +53,7 @@ export default function EmployeeTable({
   const [page, setPage] = useState(1);
   const pageSize = 10;
   const { toast } = useToast();
+  const [viewEmployee, setViewEmployee] = useState<EmployeeWithDepartment | null>(null);
 
   const { data: departments } = useQuery<Department[]>({
     queryKey: ["/api/departments"],
@@ -394,6 +396,7 @@ export default function EmployeeTable({
                     variant="ghost"
                     size="sm"
                     className="text-primary hover:text-blue-700"
+                    onClick={() => setViewEmployee(employee)}
                   >
                     <Eye size={16} />
                   </Button>
@@ -441,6 +444,80 @@ export default function EmployeeTable({
           Next
         </Button>
       </div>
+
+      <Dialog open={!!viewEmployee} onOpenChange={(open) => !open && setViewEmployee(null)}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {viewEmployee?.firstName} {viewEmployee?.lastName}
+            </DialogTitle>
+          </DialogHeader>
+          {viewEmployee && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+              <span className="font-medium">Nationality</span>
+              <span>{viewEmployee.nationality || "-"}</span>
+              <span className="font-medium">Profession Code</span>
+              <span>{viewEmployee.professionCode || "-"}</span>
+              <span className="font-medium">Profession</span>
+              <span>{viewEmployee.profession || "-"}</span>
+              <span className="font-medium">Payment Method</span>
+              <span>{viewEmployee.paymentMethod || "-"}</span>
+              <span className="font-medium">Transferable</span>
+              <span>{viewEmployee.transferable ? "Yes" : "No"}</span>
+              <span className="font-medium">Group 1</span>
+              <span>{viewEmployee.group1 || "-"}</span>
+              <span className="font-medium">Group 2</span>
+              <span>{viewEmployee.group2 || "-"}</span>
+              <span className="font-medium">Additions</span>
+              <span>{viewEmployee.additions || "-"}</span>
+              <span className="font-medium">Command</span>
+              <span>{viewEmployee.command || "-"}</span>
+              <span className="font-medium">Driving License Number</span>
+              <span>{viewEmployee.drivingLicenseNumber || "-"}</span>
+              <span className="font-medium">Driving License Issue Date</span>
+              <span>{viewEmployee.drivingLicenseIssueDate ? formatDate(viewEmployee.drivingLicenseIssueDate) : "-"}</span>
+              <span className="font-medium">Driving License Expiry Date</span>
+              <span>{viewEmployee.drivingLicenseExpiryDate ? formatDate(viewEmployee.drivingLicenseExpiryDate) : "-"}</span>
+              <span className="font-medium">Salary Deductions</span>
+              <span>{viewEmployee.salaryDeductions || "-"}</span>
+              <span className="font-medium">Fines</span>
+              <span>{viewEmployee.fines || "-"}</span>
+              <span className="font-medium">Total Loans</span>
+              <span>{viewEmployee.totalLoans || "-"}</span>
+              <span className="font-medium">Bonuses</span>
+              <span>{viewEmployee.bonuses || "-"}</span>
+              <span className="font-medium">IBAN</span>
+              <span>{viewEmployee.iban || "-"}</span>
+              <span className="font-medium">SWIFT Code</span>
+              <span>{viewEmployee.swiftCode || "-"}</span>
+              <span className="font-medium">Company</span>
+              <span>{viewEmployee.company || "-"}</span>
+              <span className="font-medium">Vacation Return Date</span>
+              <span>{viewEmployee.vacationReturnDate ? formatDate(viewEmployee.vacationReturnDate) : "-"}</span>
+              <span className="font-medium">Residency On Company</span>
+              <span>{viewEmployee.residencyOnCompany ? "Yes" : "No"}</span>
+              <span className="font-medium">Profession Category</span>
+              <span>{viewEmployee.professionCategory || "-"}</span>
+              <span className="font-medium">Rec Salary Vacation</span>
+              <span>{viewEmployee.recSalaryVacation || "-"}</span>
+            </div>
+          )}
+          {viewEmployee?.drivingLicenseImage && (
+            <img
+              src={viewEmployee.drivingLicenseImage}
+              alt="Driving License"
+              className="mt-4 max-w-xs"
+            />
+          )}
+          {viewEmployee?.otherDocs && (
+            <img
+              src={viewEmployee.otherDocs}
+              alt="Other Documents"
+              className="mt-4 max-w-xs"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
