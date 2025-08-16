@@ -1,14 +1,18 @@
 import { MailService } from '@sendgrid/mail';
 import type { DocumentExpiryCheck, Employee } from '@shared/schema';
 
-if (!process.env.SENDGRID_API_KEY) {
-  console.warn("SENDGRID_API_KEY environment variable not set. Email notifications will be disabled.");
-}
-
 const mailService = new MailService();
-if (process.env.SENDGRID_API_KEY && process.env.SENDGRID_API_KEY.startsWith('SG.')) {
-  mailService.setApiKey(process.env.SENDGRID_API_KEY);
-} else if (process.env.SENDGRID_API_KEY) {
+const apiKey = process.env.SENDGRID_API_KEY;
+let sendGridConfigured = false;
+
+if (!apiKey) {
+  console.warn(
+    'SENDGRID_API_KEY environment variable not set. Email notifications will be disabled.'
+  );
+} else if (apiKey.startsWith('SG.')) {
+  mailService.setApiKey(apiKey);
+  sendGridConfigured = true;
+} else {
   console.warn("Invalid SendGrid API key format. Key should start with 'SG.'");
 }
 
@@ -20,14 +24,24 @@ interface EmailParams {
   html?: string;
 }
 
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const mockEmails: EmailParams[] = [];
+
 export async function sendEmail(params: EmailParams): Promise<boolean> {
   if (!params.to) {
     console.warn('No recipient email provided');
     return false;
   }
 
-  if (!process.env.SENDGRID_API_KEY) {
-    console.log('Email would be sent:', params.subject);
+  if (!params.from || !emailRegex.test(params.from)) {
+    console.warn('Invalid sender email provided');
+    return false;
+  }
+
+  if (!sendGridConfigured) {
+    // Mock transport when SendGrid isn't configured
+    mockEmails.push(params);
+    console.error('SENDGRID_API_KEY not set or invalid. Email not sent.');
     return false;
   }
 
