@@ -132,7 +132,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const workbook = XLSX.read(file.buffer, { type: "buffer" });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows: any[] = XLSX.utils.sheet_to_json(sheet);
+      const headerRow = (XLSX.utils.sheet_to_json(sheet, { header: 1 })[0] || []) as string[];
+
+      // If no mapping provided, return detected headers for client-side mapping
+      const mappingRaw = (req.body as any)?.mapping;
+      if (!mappingRaw) {
+        return res.json({ headers: headerRow });
+      }
+
+      let mapping: Record<string, string>;
+      try {
+        mapping = JSON.parse(mappingRaw);
+      } catch {
+        return next(new HttpError(400, "Invalid mapping JSON"));
+      }
+
+      // Ensure required fields are mapped
+      const requiredFields = [
+        "employeeCode",
+        "firstName",
+        "lastName",
+        "position",
+        "salary",
+        "startDate",
+      ];
+      const mappedFields = new Set(Object.values(mapping));
+      const missingMappings = requiredFields.filter(f => !mappedFields.has(f));
+      if (missingMappings.length > 0) {
+        return next(
+          new HttpError(
+            400,
+            `Missing mapping for required fields: ${missingMappings.join(", ")}`
+          )
+        );
+      }
+
+      // Validate that provided headers exist in the file
+      for (const source of Object.keys(mapping)) {
+        if (!headerRow.includes(source)) {
+          return next(new HttpError(400, `Column '${source}' not found in uploaded file`));
+        }
+      }
+
+      const rows: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet);
       const existing = await storage.getEmployees();
       const existingCodes = new Set(existing.map(e => e.employeeCode));
       const valid: InsertEmployee[] = [];
@@ -140,14 +182,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const seen = new Set<string>();
 
       for (const row of rows) {
-        const code = row.employeeCode;
+        const translated: Record<string, any> = {};
+        for (const [source, target] of Object.entries(mapping)) {
+          translated[target] = row[source];
+        }
+
+        const code = translated.employeeCode as string | undefined;
         if (!code || seen.has(code) || existingCodes.has(code)) {
           failed++;
           continue;
         }
         seen.add(code);
         try {
-          const emp = insertEmployeeSchema.parse(row);
+          const emp = insertEmployeeSchema.parse(translated);
           valid.push(emp);
         } catch {
           failed++;
