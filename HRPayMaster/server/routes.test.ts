@@ -381,4 +381,22 @@ describe('employee routes', () => {
     expect(res.body).toEqual({ success: 1, failed: 0 });
     expect(storage.createCar).toHaveBeenCalled();
   });
+
+  it('POST /api/cars/import errors when required mapping missing', async () => {
+    const wb = XLSX.utils.book_new();
+    const data = [{ Model: 'Corolla', Plate: 'ABC123' }];
+    const ws = XLSX.utils.json_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    const mapping = { Model: 'model' }; // missing plateNumber mapping
+
+    const res = await request(app)
+      .post('/api/cars/import')
+      .field('mapping', JSON.stringify(mapping))
+      .attach('file', buffer, 'cars.xlsx');
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toMatch('Missing mapping for required fields');
+  });
 });
