@@ -1,0 +1,56 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import express from 'express';
+import request from 'supertest';
+import { errorHandler } from './errorHandler';
+
+vi.mock('./storage', () => {
+  return {
+    storage: {
+      getEmployees: vi.fn(),
+      createEmployee: vi.fn(),
+    },
+  };
+});
+
+import { registerRoutes } from './routes';
+import { storage } from './storage';
+
+function createApp() {
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => {
+    // Stub authentication for tests
+    // @ts-ignore
+    req.isAuthenticated = () => true;
+    next();
+  });
+  return app;
+}
+
+describe('employee routes', () => {
+  let app: express.Express;
+
+  beforeEach(async () => {
+    app = createApp();
+    await registerRoutes(app);
+    app.use(errorHandler);
+    vi.clearAllMocks();
+  });
+
+  it('GET /api/employees returns employees list', async () => {
+    const mockEmployees = [
+      { id: '1', firstName: 'John', lastName: 'Doe', position: 'Dev', salary: '0', workLocation: 'Office', startDate: '2024-01-01' },
+    ];
+    (storage.getEmployees as any).mockResolvedValue(mockEmployees);
+
+    const res = await request(app).get('/api/employees');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(mockEmployees);
+  });
+
+  it('POST /api/employees validates input data', async () => {
+    const res = await request(app).post('/api/employees').send({});
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toBe('Invalid employee data');
+  });
+});
