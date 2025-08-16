@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 
-import { insertCarSchema, insertCarAssignmentSchema, type CarWithAssignment, type CarAssignmentWithDetails } from "@shared/schema";
+import { insertCarSchema, insertCarAssignmentSchema, type CarWithAssignment, type CarAssignmentWithDetails, type InsertCarAssignment } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
 
@@ -98,14 +98,15 @@ export default function Cars() {
     }
   });
 
-  const assignmentForm = useForm({
+  const assignmentForm = useForm<InsertCarAssignment>({
     resolver: zodResolver(insertCarAssignmentSchema),
     defaultValues: {
       carId: "",
       employeeId: "",
       assignedDate: new Date().toISOString().split('T')[0],
-      status: "active"
-    }
+      status: "active",
+      notes: "",
+    },
   });
 
   const onSubmitCar = (data: any) => {

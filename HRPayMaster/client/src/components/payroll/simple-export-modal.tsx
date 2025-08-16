@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -16,9 +17,10 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import type { PayrollRunWithEntries, PayrollEntry, Employee } from "@shared/schema";
 
 interface SimpleExportModalProps {
-  payrollRun: any;
+  payrollRun: PayrollRunWithEntries;
   isOpen: boolean;
   onClose: () => void;
 }
@@ -28,21 +30,35 @@ export function SimpleExportModal({ payrollRun, isOpen, onClose }: SimpleExportM
   const [exportFormat, setExportFormat] = useState<string>("pdf");
   const { toast } = useToast();
 
-  if (!payrollRun || !payrollRun.entries) return null;
+  const { data: employees } = useQuery<Employee[]>({
+    queryKey: ["/api/employees"],
+  });
+
+  const entries: (PayrollEntry & { employee?: Employee })[] =
+    (payrollRun.entries ?? []).map(entry => ({
+      ...entry,
+      employee: employees?.find(e => e.id === entry.employeeId),
+    }));
+
+  if (!isOpen) return null;
 
   // Get unique work locations
-  const workLocations = [...new Set(
-    payrollRun.entries
-      .map((entry: any) => entry.employee?.workLocation || "Office")
-      .filter(Boolean)
-  )];
+  const workLocations = Array.from(
+    new Set(
+      entries
+        .map(entry => entry.employee?.workLocation || "Office")
+        .filter(Boolean)
+    )
+  );
 
   // Filter entries by work location
-  const filteredEntries = selectedLocation === "all" 
-    ? payrollRun.entries 
-    : payrollRun.entries.filter((entry: any) => 
-        (entry.employee?.workLocation || "Office") === selectedLocation
-      );
+  const filteredEntries =
+    selectedLocation === "all"
+      ? entries
+      : entries.filter(
+          entry =>
+            (entry.employee?.workLocation || "Office") === selectedLocation
+        );
 
   const generatePDFPayslips = () => {
     const locationLabel = selectedLocation === "all" ? "All Locations" : selectedLocation;
@@ -92,10 +108,10 @@ export function SimpleExportModal({ payrollRun, isOpen, onClose }: SimpleExportM
           <div class="header">
             <h1>HR Pro - Payroll Summary</h1>
             <h2>${locationLabel}</h2>
-            <p>Period: ${formatDate(payrollRun.periodStart)} to ${formatDate(payrollRun.periodEnd)}</p>
+            <p>Period: ${formatDate(payrollRun.startDate)} to ${formatDate(payrollRun.endDate)}</p>
           </div>
 
-          ${filteredEntries.map((entry: any) => {
+            ${filteredEntries.map(entry => {
             const grossPay = parseFloat(entry.grossPay?.toString() || "0");
             const totalDeductions = (
               parseFloat(entry.taxDeduction?.toString() || "0") +
@@ -267,10 +283,11 @@ export function SimpleExportModal({ payrollRun, isOpen, onClose }: SimpleExportM
                   <div>
                     <p className="text-2xl font-bold">
                       {formatCurrency(
-                        filteredEntries.reduce((sum: number, entry: any) => 
-                          sum + parseFloat(entry.grossPay?.toString() || "0"), 0
-                        )
-                      )}
+                          filteredEntries.reduce((sum, entry) =>
+                            sum + parseFloat(entry.grossPay?.toString() || "0"),
+                            0
+                          )
+                        )}
                     </p>
                     <p className="text-xs text-muted-foreground">Gross Pay</p>
                   </div>
@@ -285,7 +302,7 @@ export function SimpleExportModal({ payrollRun, isOpen, onClose }: SimpleExportM
                   <div>
                     <p className="text-2xl font-bold">
                       {formatCurrency(
-                        filteredEntries.reduce((sum: number, entry: any) => {
+                          filteredEntries.reduce((sum, entry) => {
                           const grossPay = parseFloat(entry.grossPay?.toString() || "0");
                           const totalDeductions = (
                             parseFloat(entry.taxDeduction?.toString() || "0") +
@@ -309,10 +326,10 @@ export function SimpleExportModal({ payrollRun, isOpen, onClose }: SimpleExportM
           <div>
             <h3 className="text-lg font-semibold mb-3">Available Work Locations</h3>
             <div className="flex flex-wrap gap-2">
-              {workLocations.map((location: string) => {
-                const locationCount = payrollRun.entries.filter((entry: any) => 
-                  (entry.employee?.workLocation || "Office") === location
-                ).length;
+                {workLocations.map((location: string) => {
+                  const locationCount = entries.filter(
+                    entry => (entry.employee?.workLocation || "Office") === location
+                  ).length;
                 
                 return (
                   <Badge 

@@ -58,6 +58,20 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
     queryKey: ["/api/employees"],
   });
 
+  const generatePayrollMutation = useMutation({
+    mutationFn: async (data: { period: string; startDate: string; endDate: string }) => {
+      await apiRequest("POST", "/api/payroll/generate", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
+      toast({ title: "Success", description: "Payroll regenerated successfully" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to regenerate payroll", variant: "destructive" });
+    },
+  });
+
   const updatePayrollEntryMutation = useMutation({
     mutationFn: async ({ entryId, updates }: { entryId: string; updates: Partial<PayrollEntry> }) => {
       await apiRequest("PUT", `/api/payroll/entries/${entryId}`, updates);

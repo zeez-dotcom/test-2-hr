@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import type { PayrollRunWithEntries, Employee } from "@shared/schema";
+import type { PayrollRunWithEntries, PayrollEntry, Employee } from "@shared/schema";
 
 interface ExportPayrollProps {
   payrollRun: PayrollRunWithEntries;
@@ -36,20 +36,29 @@ export function ExportPayroll({ payrollRun, isOpen, onClose }: ExportPayrollProp
   });
 
   if (!isOpen) return null;
+  const entries: (PayrollEntry & { employee?: Employee })[] =
+    (payrollRun.entries ?? []).map(entry => ({
+      ...entry,
+      employee: employees?.find(e => e.id === entry.employeeId),
+    }));
 
   // Get unique work locations
-  const workLocations = [...new Set(
-    payrollRun.entries
-      .map(entry => entry.employee?.workLocation || "Office")
-      .filter(Boolean)
-  )];
+  const workLocations = Array.from(
+    new Set(
+      entries
+        .map(entry => entry.employee?.workLocation || "Office")
+        .filter(Boolean)
+    )
+  );
 
   // Filter entries by work location
-  const filteredEntries = selectedLocation === "all" 
-    ? payrollRun.entries 
-    : payrollRun.entries.filter(entry => 
-        (entry.employee?.workLocation || "Office") === selectedLocation
-      );
+  const filteredEntries =
+    selectedLocation === "all"
+      ? entries
+      : entries.filter(
+          entry =>
+            (entry.employee?.workLocation || "Office") === selectedLocation
+        );
 
   const generatePDFPayslips = () => {
     const locationLabel = selectedLocation === "all" ? "All Locations" : selectedLocation;
@@ -69,7 +78,7 @@ export function ExportPayroll({ payrollRun, isOpen, onClose }: ExportPayrollProp
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Payroll - ${locationLabel} - ${formatDate(payrollRun.periodStart)} to ${formatDate(payrollRun.periodEnd)}</title>
+          <title>Payroll - ${locationLabel} - ${formatDate(payrollRun.startDate)} to ${formatDate(payrollRun.endDate)}</title>
           <style>
             body { font-family: Arial, sans-serif; margin: 20px; }
             .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 15px; }
@@ -113,19 +122,19 @@ export function ExportPayroll({ payrollRun, isOpen, onClose }: ExportPayrollProp
           <div class="header">
             <h1>HR Pro - Payroll Summary</h1>
             <h2>${locationLabel}</h2>
-            <p>Period: ${formatDate(payrollRun.periodStart)} to ${formatDate(payrollRun.periodEnd)}</p>
+            <p>Period: ${formatDate(payrollRun.startDate)} to ${formatDate(payrollRun.endDate)}</p>
           </div>
           
           <div class="payroll-info">
             <div>
               <strong>Payroll Run ID:</strong> ${payrollRun.id}<br>
               <strong>Status:</strong> ${payrollRun.status}<br>
-              <strong>Generated:</strong> ${formatDate(payrollRun.createdAt)}
+              <strong>Generated:</strong> ${formatDate(payrollRun.createdAt ?? new Date())}
             </div>
             <div>
               <strong>Total Employees:</strong> ${filteredEntries.length}<br>
               <strong>Work Location:</strong> ${locationLabel}<br>
-              <strong>Total Amount:</strong> ${formatCurrency(payrollRun.totalAmount)}
+              <strong>Total Amount:</strong> ${formatCurrency(payrollRun.netAmount)}
             </div>
           </div>
 
@@ -321,7 +330,7 @@ export function ExportPayroll({ payrollRun, isOpen, onClose }: ExportPayrollProp
 
     const csvContent = [
       [`HR Pro Payroll Export - ${locationLabel}`],
-      [`Period: ${formatDate(payrollRun.periodStart)} to ${formatDate(payrollRun.periodEnd)}`],
+      [`Period: ${formatDate(payrollRun.startDate)} to ${formatDate(payrollRun.endDate)}`],
       [`Generated: ${formatDate(new Date())}`],
       [],
       headers,
@@ -333,7 +342,7 @@ export function ExportPayroll({ payrollRun, isOpen, onClose }: ExportPayrollProp
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    link.setAttribute("download", `payroll_${locationLabel.replace(/\s+/g, '_')}_${formatDate(payrollRun.periodStart).replace(/\s+/g, '_')}.csv`);
+    link.setAttribute("download", `payroll_${locationLabel.replace(/\s+/g, '_')}_${formatDate(payrollRun.startDate).replace(/\s+/g, '_')}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -368,14 +377,14 @@ export function ExportPayroll({ payrollRun, isOpen, onClose }: ExportPayrollProp
           iban: entry.employee?.bankIban,
           bankName: entry.employee?.bankName || 'Unknown Bank',
           amount: netPay.toFixed(3),
-          reference: `Salary_${entry.employeeId}_${formatDate(payrollRun.periodStart).replace(/\s+/g, '')}`
+          reference: `Salary_${entry.employeeId}_${formatDate(payrollRun.startDate).replace(/\s+/g, '')}`
         };
       });
 
     const bankFileContent = [
       `Bank Transfer File - ${locationLabel}`,
       `Date: ${formatDate(new Date())}`,
-      `Period: ${formatDate(payrollRun.periodStart)} to ${formatDate(payrollRun.periodEnd)}`,
+      `Period: ${formatDate(payrollRun.startDate)} to ${formatDate(payrollRun.endDate)}`,
       `Total Transfers: ${bankData.length}`,
       `Total Amount: ${formatCurrency(bankData.reduce((sum, item) => sum + parseFloat(item.amount), 0))}`,
       '',
@@ -389,7 +398,7 @@ export function ExportPayroll({ payrollRun, isOpen, onClose }: ExportPayrollProp
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    link.setAttribute("download", `bank_transfer_${locationLabel.replace(/\s+/g, '_')}_${formatDate(payrollRun.periodStart).replace(/\s+/g, '_')}.txt`);
+    link.setAttribute("download", `bank_transfer_${locationLabel.replace(/\s+/g, '_')}_${formatDate(payrollRun.startDate).replace(/\s+/g, '_')}.txt`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -542,8 +551,8 @@ export function ExportPayroll({ payrollRun, isOpen, onClose }: ExportPayrollProp
             <h3 className="text-lg font-semibold mb-3">Available Work Locations</h3>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
               {workLocations.map(location => {
-                const locationCount = payrollRun.entries.filter(entry => 
-                  (entry.employee?.workLocation || "Office") === location
+                const locationCount = entries.filter(
+                  entry => (entry.employee?.workLocation || "Office") === location
                 ).length;
                 
                 return (

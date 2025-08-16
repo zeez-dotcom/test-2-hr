@@ -40,11 +40,11 @@ export function SmartVacationForm({
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const form = useForm({
+  const form = useForm<z.infer<typeof vacationFormSchema>>({
     resolver: zodResolver(vacationFormSchema),
     defaultValues: {
       days: currentVacationDays || 1,
-      leaveType: "annual" as const,
+      leaveType: "annual",
       deductFromSalary: false,
     },
   });
