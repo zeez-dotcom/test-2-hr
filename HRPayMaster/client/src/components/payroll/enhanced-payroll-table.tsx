@@ -23,6 +23,7 @@ import { formatCurrency } from "@/lib/utils";
 import type { PayrollEntry } from "@shared/schema";
 import { SmartVacationForm } from "@/components/payroll/smart-vacation-form";
 import { SmartDeductionForm } from "@/components/payroll/smart-deduction-form";
+import { apiRequest } from "@/lib/queryClient";
 
 interface EnhancedPayrollTableProps {
   entries: any[];
@@ -46,13 +47,8 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
 
   const updatePayrollEntryMutation = useMutation({
     mutationFn: async ({ entryId, updates }: { entryId: string; updates: Partial<PayrollEntry> }) => {
-      const response = await fetch(`/api/payroll/entries/${entryId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updates),
-      });
-      if (!response.ok) throw new Error("Failed to update payroll entry");
-      return response.json();
+      const res = await apiRequest("PUT", `/api/payroll/entries/${entryId}`, updates);
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });

@@ -108,13 +108,14 @@ export function SmartDeductionForm({
 
     // Create event first, then update payroll
     try {
-      await fetch("/api/employee-events", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(eventData),
-      });
-    } catch (error) {
+      await apiRequest("POST", "/api/employee-events", eventData);
+    } catch (error: any) {
       console.error("Failed to create employee event:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create employee event",
+        variant: "destructive",
+      });
     }
 
     await updatePayrollMutation.mutateAsync(updateData);
