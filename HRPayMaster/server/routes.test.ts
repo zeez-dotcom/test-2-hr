@@ -17,6 +17,9 @@ vi.mock('./storage', () => {
       getPayrollRuns: vi.fn(),
       getLoans: vi.fn(),
       getCars: vi.fn(),
+      createCar: vi.fn(),
+      updateCar: vi.fn(),
+      createCarAssignment: vi.fn(),
     },
   };
 });
@@ -313,5 +316,69 @@ describe('employee routes', () => {
     const res = await request(app).get('/api/cars');
     expect(res.status).toBe(200);
     expect(res.body).toEqual(mockCars);
+  });
+
+  it('GET /api/cars/import/template returns xlsx with headers', async () => {
+    const res = await request(app)
+      .get('/api/cars/import/template')
+      .buffer()
+      .parse((res, cb) => {
+        res.setEncoding('binary');
+        let data = '';
+        res.on('data', chunk => { data += chunk; });
+        res.on('end', () => { cb(null, Buffer.from(data, 'binary')); });
+      });
+
+    expect(res.status).toBe(200);
+    const wb = XLSX.read(res.body, { type: 'buffer' });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const headers = XLSX.utils.sheet_to_json(sheet, { header: 1 })[0];
+    expect(headers).toEqual([
+      'Serial',
+      'emp',
+      'Driver',
+      'Company',
+      'Registration Book in Name of',
+      'Car Model',
+      'Plate Number',
+      'Registration Expiry Date',
+      'Notes',
+    ]);
+  });
+
+  it('POST /api/cars/import returns headers when no mapping provided', async () => {
+    const wb = XLSX.utils.book_new();
+    const data = [{ Model: 'Corolla', Plate: 'ABC123' }];
+    const ws = XLSX.utils.json_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    const res = await request(app)
+      .post('/api/cars/import')
+      .attach('file', buffer, 'cars.xlsx');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ headers: ['Model', 'Plate'] });
+  });
+
+  it('POST /api/cars/import imports cars using mapping', async () => {
+    (storage.getCars as any).mockResolvedValue([]);
+    (storage.createCar as any).mockImplementation(async car => ({ id: '1', ...car }));
+    const wb = XLSX.utils.book_new();
+    const data = [{ Model: 'Corolla', Plate: 'ABC123' }];
+    const ws = XLSX.utils.json_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    const mapping = { Model: 'model', Plate: 'plateNumber' };
+
+    const res = await request(app)
+      .post('/api/cars/import')
+      .field('mapping', JSON.stringify(mapping))
+      .attach('file', buffer, 'cars.xlsx');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ success: 1, failed: 0 });
+    expect(storage.createCar).toHaveBeenCalled();
   });
 });
