@@ -15,6 +15,7 @@ import { apiRequest } from "@/lib/queryClient";
 import ImageUpload from "@/components/ui/image-upload";
 import { Calendar, AlertTriangle, FileImage } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import type { SickLeaveTracking } from "@shared/schema";
 
 const vacationFormSchema = z.object({
   days: z.number().min(1, "Days must be at least 1"),
@@ -50,7 +51,7 @@ export function VacationDayForm({
   const [uploadedImage, setUploadedImage] = useState<string>("");
 
   // Get employee's sick leave balance
-  const { data: sickLeaveBalance } = useQuery({
+  const { data: sickLeaveBalance } = useQuery<SickLeaveTracking>({
     queryKey: [`/api/employees/${employeeId}/sick-leave-balance`],
     enabled: isOpen,
   });
