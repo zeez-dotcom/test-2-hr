@@ -53,6 +53,24 @@ export default function EmployeeImport() {
     }
   };
 
+  const downloadTemplate = async () => {
+    try {
+      const res = await fetch("/api/employees/import/template");
+      if (!res.ok) throw new Error("Failed to download");
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "employee-import-template.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      toast({ title: "Error", description: "Failed to download template", variant: "destructive" });
+    }
+  };
+
   const handleSelectionChange = (header: string, value: string) => {
     setSelections(prev => ({ ...prev, [header]: value }));
     if (value !== "custom") {
@@ -109,6 +127,7 @@ export default function EmployeeImport() {
         <Button onClick={headers.length ? handleImport : detectHeaders} disabled={!file || isSubmitting}>
           {headers.length ? "Import" : "Next"}
         </Button>
+        <Button variant="outline" onClick={downloadTemplate}>Download Template</Button>
       </div>
 
       {headers.length > 0 && (

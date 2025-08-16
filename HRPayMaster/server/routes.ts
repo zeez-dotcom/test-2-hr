@@ -124,6 +124,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/employees/import/template", (_req, res) => {
+    const headers = [
+      "id/معرف",
+      "English Name/اسم الانجليزي",
+      "Image URL/رابط الصورة",
+      "Arabic Name/اسم المؤظف",
+      "Job Title/لقب",
+      "Work Location/مكان العمل",
+      "Nationality/الجنسية",
+      "Profession/المهنة",
+      "Employment Date/تاريخ التوظيف",
+      "Status/الحالة",
+      "Civil ID Number/رقم البطاقة المدنية",
+      "civil id issue date",
+      "Civil ID Expiry Date/تاريخ انتهاء البطاقة المدنية",
+      "Passport Number/رقم جواز السفر",
+      "Passport Issue Date/تاريخ اصدار جواز السفر",
+      "Passport Expiry Date/تاريخ انتهاء جواز السفر",
+      "Salaries/رواتب",
+      "loans",
+      "Transferable/تحويل",
+      "Payment Method/طريقة الدفع",
+      "Documents/مستندات or izenamal",
+      "Days Worked/أيام العمل",
+      "phonenumber",
+      "civil id pic",
+      "passport pic",
+      "driving license",
+      "driving license issue date",
+      "driving license expiry date",
+      "other docs",
+      "iban",
+      "SWIFTCODE",
+      "company",
+      "residency on company or not",
+      "profession department",
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet([headers]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Employees");
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="employee-import-template.xlsx"'
+    );
+    res.send(buffer);
+  });
+
   app.post("/api/employees/import", upload.single("file"), async (req, res, next) => {
     const file = (req as Request & { file?: Express.Multer.File }).file;
     if (!file) {

@@ -72,6 +72,59 @@ describe('employee routes', () => {
     expect(res.body).toEqual(mockEmployees);
   });
 
+  it('GET /api/employees/import/template returns xlsx with headers', async () => {
+    const res = await request(app)
+      .get('/api/employees/import/template')
+      .buffer()
+      .parse((res, callback) => {
+        res.setEncoding('binary');
+        let data = '';
+        res.on('data', chunk => { data += chunk; });
+        res.on('end', () => { callback(null, Buffer.from(data, 'binary')); });
+      });
+
+    expect(res.status).toBe(200);
+    const wb = XLSX.read(res.body, { type: 'buffer' });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const headers = XLSX.utils.sheet_to_json(sheet, { header: 1 })[0];
+    expect(headers).toEqual([
+      'id/معرف',
+      'English Name/اسم الانجليزي',
+      'Image URL/رابط الصورة',
+      'Arabic Name/اسم المؤظف',
+      'Job Title/لقب',
+      'Work Location/مكان العمل',
+      'Nationality/الجنسية',
+      'Profession/المهنة',
+      'Employment Date/تاريخ التوظيف',
+      'Status/الحالة',
+      'Civil ID Number/رقم البطاقة المدنية',
+      'civil id issue date',
+      'Civil ID Expiry Date/تاريخ انتهاء البطاقة المدنية',
+      'Passport Number/رقم جواز السفر',
+      'Passport Issue Date/تاريخ اصدار جواز السفر',
+      'Passport Expiry Date/تاريخ انتهاء جواز السفر',
+      'Salaries/رواتب',
+      'loans',
+      'Transferable/تحويل',
+      'Payment Method/طريقة الدفع',
+      'Documents/مستندات or izenamal',
+      'Days Worked/أيام العمل',
+      'phonenumber',
+      'civil id pic',
+      'passport pic',
+      'driving license',
+      'driving license issue date',
+      'driving license expiry date',
+      'other docs',
+      'iban',
+      'SWIFTCODE',
+      'company',
+      'residency on company or not',
+      'profession department',
+    ]);
+  });
+
   it('POST /api/employees validates input data', async () => {
     const res = await request(app).post('/api/employees').send({});
     expect(res.status).toBe(400);

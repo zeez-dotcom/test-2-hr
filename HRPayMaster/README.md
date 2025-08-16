@@ -40,26 +40,26 @@
 
 ### Preparing the Excel file
 
-- Save the file in **.xlsx** format.
-- The **first row must contain column headers**.
-- Each subsequent row represents one employee.
-- Include at least the required columns:
+- Use the **Download Template** button in the import screen or GET `/api/employees/import/template` to obtain a starter workbook.
+- The template includes headers in English and Arabic for common fields. Required columns are:
   - `employeeCode`
   - `firstName`
   - `lastName`
   - `position`
   - `salary`
   - `startDate`
-- Additional columns can be mapped to existing fields or custom fields.
+- Save the file in **.xlsx** format. The **first row must contain column headers**, and each subsequent row represents one employee.
+- Additional columns from the template can be mapped to existing or custom fields.
 
 ### Using the mapping UI
 
 1. Go to **Employees → Import**.
-2. Select your Excel file and click **Next** to detect headers.
-3. For each detected column, use the dropdown to choose a system field or **Custom field**.
-4. When choosing **Custom field**, enter a name to create a new field.
-5. Ensure all required fields are mapped, then click **Import**.
-6. The UI shows how many rows succeeded or failed.
+2. Click **Download Template** and fill it with employee data.
+3. Select your completed Excel file and click **Next** to detect headers.
+4. For each detected column, use the dropdown to choose a system field or **Custom field**.
+5. When choosing **Custom field**, enter a name to create a new field.
+6. Ensure all required fields are mapped, then click **Import**.
+7. The UI shows how many rows succeeded or failed.
 
 ### Expected server responses
 
