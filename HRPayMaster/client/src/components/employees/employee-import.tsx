@@ -1,96 +1,151 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 
-interface FailedRow {
-  rowNumber: number;
-  errors: string[];
+interface ImportResult {
+  success?: number;
+  failed?: number;
+  error?: { message: string };
 }
 
-interface ImportResponse {
-  failedRows?: FailedRow[];
-}
+const systemFields = [
+  { value: "employeeCode", label: "Employee Code" },
+  { value: "firstName", label: "First Name" },
+  { value: "lastName", label: "Last Name" },
+  { value: "position", label: "Position" },
+  { value: "salary", label: "Salary" },
+  { value: "startDate", label: "Start Date" },
+  { value: "email", label: "Email" },
+  { value: "phone", label: "Phone" },
+];
 
 export default function EmployeeImport() {
   const [file, setFile] = useState<File | null>(null);
-  const [progress, setProgress] = useState<number>(0);
-  const [isUploading, setIsUploading] = useState(false);
-  const [result, setResult] = useState<ImportResponse | null>(null);
+  const [headers, setHeaders] = useState<string[]>([]);
+  const [selections, setSelections] = useState<Record<string, string>>({});
+  const [customFields, setCustomFields] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [result, setResult] = useState<ImportResult | null>(null);
   const { toast } = useToast();
 
-  const handleUpload = () => {
+  const detectHeaders = async () => {
     if (!file) return;
-
     const formData = new FormData();
     formData.append("file", file);
-
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/employees/import");
-
-    setIsUploading(true);
-    setProgress(0);
-    setResult(null);
-
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) {
-        setProgress(Math.round((event.loaded / event.total) * 100));
+    setIsSubmitting(true);
+    try {
+      const res = await fetch("/api/employees/import", { method: "POST", body: formData });
+      const data = await res.json();
+      if (res.ok && Array.isArray(data.headers)) {
+        setHeaders(data.headers);
+        setSelections({});
+        setCustomFields({});
+      } else {
+        toast({ title: "Error", description: "Could not detect headers", variant: "destructive" });
       }
-    };
+    } catch {
+      toast({ title: "Error", description: "Upload failed", variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
-    xhr.onload = () => {
-      setIsUploading(false);
-      try {
-        const data: ImportResponse = JSON.parse(xhr.responseText);
-        setResult(data);
-        queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
-        if (!data.failedRows || data.failedRows.length === 0) {
-          toast({ title: "Import complete", description: "All employees imported successfully." });
-        } else {
-          toast({ title: "Import finished with errors", description: "Some rows failed validation.", variant: "destructive" });
+  const handleSelectionChange = (header: string, value: string) => {
+    setSelections(prev => ({ ...prev, [header]: value }));
+    if (value !== "custom") {
+      setCustomFields(prev => ({ ...prev, [header]: "" }));
+    }
+  };
+
+  const handleCustomChange = (header: string, value: string) => {
+    setCustomFields(prev => ({ ...prev, [header]: value }));
+  };
+
+  const handleImport = async () => {
+    if (!file) return;
+    const mapping: Record<string, string> = {};
+    for (const header of headers) {
+      const selection = selections[header];
+      if (selection === "custom") {
+        if (customFields[header]) {
+          mapping[header] = customFields[header];
         }
-      } catch {
-        toast({ title: "Error", description: "Invalid server response.", variant: "destructive" });
+      } else if (selection) {
+        mapping[header] = selection;
       }
-    };
-
-    xhr.onerror = () => {
-      setIsUploading(false);
-      toast({ title: "Error", description: "Upload failed.", variant: "destructive" });
-    };
-
-    xhr.send(formData);
+    }
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("mapping", JSON.stringify(mapping));
+    setIsSubmitting(true);
+    try {
+      const res = await fetch("/api/employees/import", { method: "POST", body: formData });
+      const data = await res.json();
+      setResult(data);
+      if (res.ok) {
+        queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+        toast({
+          title: "Import complete",
+          description: `${data.success || 0} imported, ${data.failed || 0} failed`,
+          variant: data.failed ? "destructive" : "default",
+        });
+      } else {
+        toast({ title: "Error", description: data.error?.message || "Import failed", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Import failed", variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div className="flex flex-col space-y-2 w-full sm:w-auto">
+    <div className="space-y-4">
       <div className="flex items-center space-x-2">
-        <Input
-          type="file"
-          accept=".xlsx"
-          onChange={(e) => setFile(e.target.files?.[0] || null)}
-        />
-        <Button onClick={handleUpload} disabled={!file || isUploading}>
-          Upload
+        <Input type="file" accept=".xlsx" onChange={e => setFile(e.target.files?.[0] || null)} />
+        <Button onClick={headers.length ? handleImport : detectHeaders} disabled={!file || isSubmitting}>
+          {headers.length ? "Import" : "Next"}
         </Button>
       </div>
-      {isUploading && <Progress value={progress} className="w-full" />}
-      {result && result.failedRows && result.failedRows.length > 0 && (
-        <div className="text-sm text-red-600">
-          <p>Failed Rows:</p>
-          <ul className="list-disc pl-4">
-            {result.failedRows.map((row, idx) => (
-              <li key={idx}>
-                Row {row.rowNumber}: {row.errors.join(", ")}
-              </li>
-            ))}
-          </ul>
+
+      {headers.length > 0 && (
+        <div className="space-y-2">
+          {headers.map(h => (
+            <div key={h} className="flex items-center space-x-2">
+              <span className="w-40 text-sm truncate" title={h}>{h}</span>
+              <Select onValueChange={v => handleSelectionChange(h, v)} value={selections[h] || ""}>
+                <SelectTrigger className="w-44">
+                  <SelectValue placeholder="Select field" />
+                </SelectTrigger>
+                <SelectContent>
+                  {systemFields.map(f => (
+                    <SelectItem key={f.value} value={f.value}>
+                      {f.label}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="custom">Custom field</SelectItem>
+                </SelectContent>
+              </Select>
+              {selections[h] === "custom" && (
+                <Input
+                  placeholder="Custom name"
+                  value={customFields[h] || ""}
+                  onChange={e => handleCustomChange(h, e.target.value)}
+                  className="w-44"
+                />
+              )}
+            </div>
+          ))}
         </div>
       )}
-      {result && (!result.failedRows || result.failedRows.length === 0) && (
-        <p className="text-sm text-green-600">Import successful</p>
+
+      {result && (
+        <p className="text-sm text-muted-foreground">
+          Imported {result.success || 0}, failed {result.failed || 0}
+        </p>
       )}
     </div>
   );
