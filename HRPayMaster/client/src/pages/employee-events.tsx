@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, Calendar as CalendarIcon, TrendingUp, TrendingDown, Award, AlertTriangle, Clock, Trash2 } from "lucide-react";
+import { Plus, Calendar as CalendarIcon, TrendingUp, TrendingDown, Award, AlertTriangle, Clock, Trash2, User, FileText, Car, Info } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
@@ -19,6 +19,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { EmployeeEvent, Employee, InsertEmployeeEvent } from "@shared/schema";
 import { insertEmployeeEventSchema } from "@shared/schema";
+
+const financialEventTypes = ["bonus", "deduction", "allowance", "overtime", "penalty"] as const;
 
 export default function EmployeeEvents() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -45,6 +47,14 @@ export default function EmployeeEvents() {
       eventDate: format(new Date(), 'yyyy-MM-dd'),
     },
   });
+
+  const selectedEventType = form.watch("eventType");
+
+  useEffect(() => {
+    if (!financialEventTypes.includes(selectedEventType as any)) {
+      form.setValue("amount", "0");
+    }
+  }, [selectedEventType, form]);
 
   const createEventMutation = useMutation({
     mutationFn: async (data: InsertEmployeeEvent) => {
@@ -101,8 +111,16 @@ export default function EmployeeEvents() {
         return <Clock className="h-4 w-4 text-purple-600" />;
       case 'penalty':
         return <AlertTriangle className="h-4 w-4 text-orange-600" />;
+      case 'employee_update':
+        return <User className="h-4 w-4 text-gray-600" />;
+      case 'document_update':
+        return <FileText className="h-4 w-4 text-gray-600" />;
+      case 'fleet_assignment':
+      case 'fleet_update':
+      case 'fleet_removal':
+        return <Car className="h-4 w-4 text-gray-600" />;
       default:
-        return <Award className="h-4 w-4 text-gray-600" />;
+        return <Info className="h-4 w-4 text-gray-600" />;
     }
   };
 
@@ -118,6 +136,12 @@ export default function EmployeeEvents() {
         return 'bg-purple-100 text-purple-800';
       case 'penalty':
         return 'bg-orange-100 text-orange-800';
+      case 'employee_update':
+      case 'document_update':
+      case 'fleet_assignment':
+      case 'fleet_update':
+      case 'fleet_removal':
+        return 'bg-gray-100 text-gray-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -221,6 +245,11 @@ export default function EmployeeEvents() {
                             <SelectItem value="allowance">Allowance</SelectItem>
                             <SelectItem value="overtime">Overtime</SelectItem>
                             <SelectItem value="penalty">Penalty</SelectItem>
+                            <SelectItem value="employee_update">Employee Update</SelectItem>
+                            <SelectItem value="document_update">Document Update</SelectItem>
+                            <SelectItem value="fleet_assignment">Fleet Assignment</SelectItem>
+                            <SelectItem value="fleet_update">Fleet Update</SelectItem>
+                            <SelectItem value="fleet_removal">Fleet Removal</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -261,30 +290,32 @@ export default function EmployeeEvents() {
                 />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="amount"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Amount (KWD) *</FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            step="0.01" 
-                            placeholder="0.00" 
-                            {...field} 
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  {financialEventTypes.includes(selectedEventType as any) && (
+                    <FormField
+                      control={form.control}
+                      name="amount"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Amount (KWD) *</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              placeholder="0.00"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
 
                   <FormField
                     control={form.control}
                     name="eventDate"
                     render={({ field }) => (
-                      <FormItem>
+                      <FormItem className={financialEventTypes.includes(selectedEventType as any) ? "" : "md:col-span-2"}>
                         <FormLabel>Event Date *</FormLabel>
                         <Popover>
                           <PopoverTrigger asChild>
@@ -457,16 +488,18 @@ export default function EmployeeEvents() {
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <div className="text-right">
-                        <div className={`text-lg font-semibold ${
-                          event.eventType === 'deduction' || event.eventType === 'penalty' 
-                            ? 'text-red-600' 
-                            : 'text-green-600'
-                        }`}>
-                          {event.eventType === 'deduction' || event.eventType === 'penalty' ? '-' : '+'}
-                          {formatCurrency(parseFloat(event.amount))}
+                      {financialEventTypes.includes(event.eventType as any) && (
+                        <div className="text-right">
+                          <div className={`text-lg font-semibold ${
+                            ['deduction', 'penalty'].includes(event.eventType)
+                              ? 'text-red-600'
+                              : 'text-green-600'
+                          }`}>
+                            {['deduction', 'penalty'].includes(event.eventType) ? '-' : '+'}
+                            {formatCurrency(parseFloat(event.amount))}
+                          </div>
                         </div>
-                      </div>
+                      )}
                       <Button
                         variant="ghost"
                         size="sm"

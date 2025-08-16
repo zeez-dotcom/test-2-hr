@@ -217,10 +217,10 @@ export const emailAlerts = pgTable("email_alerts", {
 export const employeeEvents = pgTable("employee_events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   employeeId: varchar("employee_id").references(() => employees.id).notNull(),
-  eventType: text("event_type").notNull(), // bonus, deduction, allowance, overtime, penalty
+  eventType: text("event_type").notNull(), // bonus, deduction, allowance, overtime, penalty, employee_update, document_update, fleet_assignment, fleet_update, fleet_removal
   title: text("title").notNull(),
   description: text("description").notNull(),
-  amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
+  amount: numeric("amount", { precision: 10, scale: 2 }).notNull().default("0"),
   eventDate: date("event_date").notNull(),
   affectsPayroll: boolean("affects_payroll").default(true),
   documentUrl: text("document_url"), // For uploaded supporting documents
@@ -288,9 +288,25 @@ export const insertEmailAlertSchema = createInsertSchema(emailAlerts).omit({
   createdAt: true,
 });
 
-export const insertEmployeeEventSchema = createInsertSchema(employeeEvents).omit({
+const baseInsertEmployeeEventSchema = createInsertSchema(employeeEvents).omit({
   id: true,
   createdAt: true,
+});
+
+export const insertEmployeeEventSchema = baseInsertEmployeeEventSchema.extend({
+  eventType: z.enum([
+    "bonus",
+    "deduction",
+    "allowance",
+    "overtime",
+    "penalty",
+    "employee_update",
+    "document_update",
+    "fleet_assignment",
+    "fleet_update",
+    "fleet_removal",
+  ]),
+  amount: baseInsertEmployeeEventSchema.shape.amount.optional().default("0"),
 });
 
 export const insertSickLeaveTrackingSchema = createInsertSchema(sickLeaveTracking).omit({

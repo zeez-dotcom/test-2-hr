@@ -16,7 +16,8 @@ import {
   insertAssetAssignmentSchema,
   type AssetWithAssignment,
   type AssetAssignmentWithDetails,
-  type InsertAssetAssignment
+  type InsertAssetAssignment,
+  type Employee
 } from "@shared/schema";
 
 export default function Assets() {
@@ -32,7 +33,7 @@ export default function Assets() {
     queryKey: ["/api/asset-assignments"],
   });
 
-  const { data: employees = [] } = useQuery({
+  const { data: employees = [] } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
   });
 
@@ -133,7 +134,7 @@ export default function Assets() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {employees.map((emp: any) => (
+                            {employees.map((emp) => (
                               <SelectItem key={emp.id} value={emp.id}>
                                 {emp.firstName} {emp.lastName}
                               </SelectItem>
