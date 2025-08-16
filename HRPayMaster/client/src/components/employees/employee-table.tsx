@@ -1,38 +1,108 @@
+import { useState } from "react";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Eye, Edit, Trash2, User } from "lucide-react";
-import type { EmployeeWithDepartment } from "@shared/schema";
+import {
+  Eye,
+  Edit,
+  Trash2,
+  User,
+  ArrowUpDown,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
+import type { EmployeeWithDepartment, Department } from "@shared/schema";
+
+interface EmployeesResponse {
+  data: EmployeeWithDepartment[];
+  total: number;
+}
 
 interface EmployeeTableProps {
-  employees: EmployeeWithDepartment[];
-  isLoading: boolean;
+  // retained for backwards compatibility but unused
+  employees?: EmployeeWithDepartment[];
+  isLoading?: boolean;
   onDeleteEmployee: (employeeId: string) => void;
   onEditEmployee: (employee: EmployeeWithDepartment) => void;
   isDeleting: boolean;
 }
 
-export default function EmployeeTable({ 
-  employees, 
-  isLoading, 
-  onDeleteEmployee, 
+export default function EmployeeTable({
+  onDeleteEmployee,
   onEditEmployee,
-  isDeleting 
+  isDeleting,
 }: EmployeeTableProps) {
+  const [nameFilter, setNameFilter] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
+
+  const { data: departments } = useQuery<Department[]>({
+    queryKey: ["/api/departments"],
+  });
+
+  const { data, isLoading } = useQuery<EmployeesResponse>({
+    queryKey: [
+      "/api/employees",
+      { page, nameFilter, departmentFilter, statusFilter, sortBy, sortOrder },
+    ],
+    placeholderData: keepPreviousData,
+    queryFn: async ({ queryKey }): Promise<EmployeesResponse> => {
+      const [_key, params] = queryKey as [
+        string,
+        {
+          page: number;
+          nameFilter: string;
+          departmentFilter: string;
+          statusFilter: string;
+          sortBy: string;
+          sortOrder: string;
+        },
+      ];
+      const searchParams = new URLSearchParams();
+      searchParams.set("page", params.page.toString());
+      searchParams.set("limit", pageSize.toString());
+      if (params.nameFilter) searchParams.set("name", params.nameFilter);
+      if (params.departmentFilter !== "all")
+        searchParams.set("department", params.departmentFilter);
+      if (params.statusFilter !== "all")
+        searchParams.set("status", params.statusFilter);
+      if (params.sortBy) searchParams.set("sort", params.sortBy);
+      searchParams.set("order", params.sortOrder);
+
+      const res = await fetch(`/api/employees?${searchParams.toString()}`, {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        throw new Error("Failed to fetch employees");
+      }
+      const total = Number(res.headers.get("X-Total-Count")) || 0;
+      const employees = await res.json();
+      return { data: employees, total };
+    },
+  });
+
+  const employees: EmployeeWithDepartment[] = data?.data ?? [];
+  const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / pageSize));
+
   const formatCurrency = (amount: string) => {
     const num = parseFloat(amount);
     return new Intl.NumberFormat('en-KW', {
       style: 'currency',
       currency: 'KWD',
     }).format(num);
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
   };
 
   const getStatusColor = (status: string) => {
@@ -59,6 +129,16 @@ export default function EmployeeTable({
       default:
         return status;
     }
+  };
+
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(field);
+      setSortOrder("asc");
+    }
+    setPage(1);
   };
 
   if (isLoading) {
@@ -120,23 +200,145 @@ export default function EmployeeTable({
 
   return (
     <div className="overflow-x-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-4 sm:space-y-0 mb-4">
+        <Input
+          placeholder="Search by name"
+          value={nameFilter}
+          onChange={(e) => {
+            setNameFilter(e.target.value);
+            setPage(1);
+          }}
+          className="w-full sm:w-64"
+        />
+        <Select
+          value={departmentFilter}
+          onValueChange={(v) => {
+            setDepartmentFilter(v);
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className="w-full sm:w-48">
+            <SelectValue placeholder="All Departments" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Departments</SelectItem>
+            {departments?.map((dept) => (
+              <SelectItem key={dept.id} value={dept.id}>
+                {dept.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={statusFilter}
+          onValueChange={(v) => {
+            setStatusFilter(v);
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className="w-full sm:w-48">
+            <SelectValue placeholder="All Statuses" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="on_leave">On Leave</SelectItem>
+            <SelectItem value="inactive">Inactive</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Employee
+              <button
+                type="button"
+                onClick={() => handleSort("name")}
+                className="flex items-center"
+              >
+                Employee
+                {sortBy === "name" ? (
+                  sortOrder === "asc" ? (
+                    <ChevronUp className="ml-1 h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="ml-1 h-4 w-4" />
+                  )
+                ) : (
+                  <ArrowUpDown className="ml-1 h-4 w-4" />
+                )}
+              </button>
             </th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Position
+              <button
+                type="button"
+                onClick={() => handleSort("position")}
+                className="flex items-center"
+              >
+                Position
+                {sortBy === "position" ? (
+                  sortOrder === "asc" ? (
+                    <ChevronUp className="ml-1 h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="ml-1 h-4 w-4" />
+                  )
+                ) : (
+                  <ArrowUpDown className="ml-1 h-4 w-4" />
+                )}
+              </button>
             </th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Department
+              <button
+                type="button"
+                onClick={() => handleSort("department")}
+                className="flex items-center"
+              >
+                Department
+                {sortBy === "department" ? (
+                  sortOrder === "asc" ? (
+                    <ChevronUp className="ml-1 h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="ml-1 h-4 w-4" />
+                  )
+                ) : (
+                  <ArrowUpDown className="ml-1 h-4 w-4" />
+                )}
+              </button>
             </th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Salary
+              <button
+                type="button"
+                onClick={() => handleSort("salary")}
+                className="flex items-center"
+              >
+                Salary
+                {sortBy === "salary" ? (
+                  sortOrder === "asc" ? (
+                    <ChevronUp className="ml-1 h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="ml-1 h-4 w-4" />
+                  )
+                ) : (
+                  <ArrowUpDown className="ml-1 h-4 w-4" />
+                )}
+              </button>
             </th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Status
+              <button
+                type="button"
+                onClick={() => handleSort("status")}
+                className="flex items-center"
+              >
+                Status
+                {sortBy === "status" ? (
+                  sortOrder === "asc" ? (
+                    <ChevronUp className="ml-1 h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="ml-1 h-4 w-4" />
+                  )
+                ) : (
+                  <ArrowUpDown className="ml-1 h-4 w-4" />
+                )}
+              </button>
             </th>
             <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
               Actions
@@ -213,6 +415,27 @@ export default function EmployeeTable({
           ))}
         </tbody>
       </table>
+      <div className="flex items-center justify-between py-4">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setPage((p) => Math.max(p - 1, 1))}
+          disabled={page === 1}
+        >
+          Previous
+        </Button>
+        <span className="text-sm text-gray-700">
+          Page {page} of {totalPages}
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setPage((p) => p + 1)}
+          disabled={page >= totalPages}
+        >
+          Next
+        </Button>
+      </div>
     </div>
   );
 }
