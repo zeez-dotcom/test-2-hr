@@ -464,42 +464,26 @@ export default function EmployeeTable({
               <span>{viewEmployee.paymentMethod || "-"}</span>
               <span className="font-medium">Transferable</span>
               <span>{viewEmployee.transferable ? "Yes" : "No"}</span>
-              <span className="font-medium">Group 1</span>
-              <span>{viewEmployee.group1 || "-"}</span>
-              <span className="font-medium">Group 2</span>
-              <span>{viewEmployee.group2 || "-"}</span>
-              <span className="font-medium">Additions</span>
-              <span>{viewEmployee.additions || "-"}</span>
-              <span className="font-medium">Command</span>
-              <span>{viewEmployee.command || "-"}</span>
               <span className="font-medium">Driving License Number</span>
               <span>{viewEmployee.drivingLicenseNumber || "-"}</span>
               <span className="font-medium">Driving License Issue Date</span>
               <span>{viewEmployee.drivingLicenseIssueDate ? formatDate(viewEmployee.drivingLicenseIssueDate) : "-"}</span>
               <span className="font-medium">Driving License Expiry Date</span>
               <span>{viewEmployee.drivingLicenseExpiryDate ? formatDate(viewEmployee.drivingLicenseExpiryDate) : "-"}</span>
-              <span className="font-medium">Salary Deductions</span>
-              <span>{viewEmployee.salaryDeductions || "-"}</span>
-              <span className="font-medium">Fines</span>
-              <span>{viewEmployee.fines || "-"}</span>
-              <span className="font-medium">Total Loans</span>
-              <span>{viewEmployee.totalLoans || "-"}</span>
-              <span className="font-medium">Bonuses</span>
-              <span>{viewEmployee.bonuses || "-"}</span>
               <span className="font-medium">IBAN</span>
               <span>{viewEmployee.iban || "-"}</span>
               <span className="font-medium">SWIFT Code</span>
               <span>{viewEmployee.swiftCode || "-"}</span>
-              <span className="font-medium">Company</span>
-              <span>{viewEmployee.company || "-"}</span>
-              <span className="font-medium">Vacation Return Date</span>
-              <span>{viewEmployee.vacationReturnDate ? formatDate(viewEmployee.vacationReturnDate) : "-"}</span>
               <span className="font-medium">Residency On Company</span>
               <span>{viewEmployee.residencyOnCompany ? "Yes" : "No"}</span>
+              {!viewEmployee.residencyOnCompany && (
+                <>
+                  <span className="font-medium">Residency Name</span>
+                  <span>{viewEmployee.residencyName || "-"}</span>
+                </>
+              )}
               <span className="font-medium">Profession Category</span>
               <span>{viewEmployee.professionCategory || "-"}</span>
-              <span className="font-medium">Rec Salary Vacation</span>
-              <span>{viewEmployee.recSalaryVacation || "-"}</span>
             </div>
           )}
           {viewEmployee?.drivingLicenseImage && (

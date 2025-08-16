@@ -122,21 +122,11 @@ describe('employee routes', () => {
       'other docs',
       'iban',
       'SWIFTCODE',
-      'company',
+      'residency name',
       'residency on company or not',
       'profession department',
       'profession code',
-      'group1',
-      'group2',
-      'additions',
-      'command',
-      'salary deductions',
-      'fines',
-      'bonuses',
-      'total loans',
-      'vacation return date',
       'profession category',
-      'rec salary vacation',
     ]);
   });
 
