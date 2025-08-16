@@ -130,6 +130,27 @@ export const carAssignments = pgTable("car_assignments", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const assets = pgTable("assets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  type: text("type").notNull(),
+  name: text("name").notNull(),
+  status: text("status").notNull().default("available"),
+  details: text("details"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const assetAssignments = pgTable("asset_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  assetId: varchar("asset_id").references(() => assets.id).notNull(),
+  employeeId: varchar("employee_id").references(() => employees.id).notNull(),
+  assignedDate: date("assigned_date").notNull(),
+  returnDate: date("return_date"),
+  status: text("status").notNull().default("active"),
+  assignedBy: varchar("assigned_by").references(() => employees.id),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const payrollRuns = pgTable("payroll_runs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   period: text("period").notNull(), // e.g., "Jan 2024"
@@ -247,6 +268,16 @@ export const insertCarAssignmentSchema = createInsertSchema(carAssignments).omit
   createdAt: true,
 });
 
+export const insertAssetSchema = createInsertSchema(assets).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertAssetAssignmentSchema = createInsertSchema(assetAssignments).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertNotificationSchema = createInsertSchema(notifications).omit({
   id: true,
   createdAt: true,
@@ -285,6 +316,12 @@ export type InsertVacationRequest = z.infer<typeof insertVacationRequestSchema>;
 
 export type Loan = typeof loans.$inferSelect;
 export type InsertLoan = z.infer<typeof insertLoanSchema>;
+
+export type Asset = typeof assets.$inferSelect;
+export type InsertAsset = z.infer<typeof insertAssetSchema>;
+
+export type AssetAssignment = typeof assetAssignments.$inferSelect;
+export type InsertAssetAssignment = z.infer<typeof insertAssetAssignmentSchema>;
 
 export type Car = typeof cars.$inferSelect;
 export type InsertCar = z.infer<typeof insertCarSchema>;
@@ -364,6 +401,18 @@ export type CarAssignmentWithDetails = CarAssignment & {
   assigner?: Employee;
 };
 
+export type AssetWithAssignment = Asset & {
+  currentAssignment?: AssetAssignment & {
+    employee?: Employee;
+  };
+};
+
+export type AssetAssignmentWithDetails = AssetAssignment & {
+  asset?: Asset;
+  employee?: Employee;
+  assigner?: Employee;
+};
+
 // Relations
 export const departmentsRelations = relations(departments, ({ many }) => ({
   employees: many(employees),
@@ -377,6 +426,7 @@ export const employeesRelations = relations(employees, ({ one, many }) => ({
   vacationRequests: many(vacationRequests),
   loans: many(loans),
   carAssignments: many(carAssignments),
+  assetAssignments: many(assetAssignments),
   notifications: many(notifications),
   emailAlerts: many(emailAlerts),
 }));
@@ -418,6 +468,25 @@ export const carAssignmentsRelations = relations(carAssignments, ({ one }) => ({
   }),
   assigner: one(employees, {
     fields: [carAssignments.assignedBy],
+    references: [employees.id],
+  }),
+}));
+
+export const assetsRelations = relations(assets, ({ many }) => ({
+  assignments: many(assetAssignments),
+}));
+
+export const assetAssignmentsRelations = relations(assetAssignments, ({ one }) => ({
+  asset: one(assets, {
+    fields: [assetAssignments.assetId],
+    references: [assets.id],
+  }),
+  employee: one(employees, {
+    fields: [assetAssignments.employeeId],
+    references: [employees.id],
+  }),
+  assigner: one(employees, {
+    fields: [assetAssignments.assignedBy],
     references: [employees.id],
   }),
 }));

@@ -15,6 +15,12 @@ import {
   type Loan,
   type InsertLoan,
   type LoanWithEmployee,
+  type Asset,
+  type InsertAsset,
+  type AssetWithAssignment,
+  type AssetAssignment,
+  type InsertAssetAssignment,
+  type AssetAssignmentWithDetails,
   type Car,
   type InsertCar,
   type CarWithAssignment,
@@ -35,6 +41,8 @@ import {
   payrollEntries,
   vacationRequests,
   loans,
+  assets,
+  assetAssignments,
   cars,
   carAssignments,
   notifications,
@@ -92,6 +100,20 @@ export interface IStorage {
   createLoan(loan: InsertLoan): Promise<Loan>;
   updateLoan(id: string, loan: Partial<InsertLoan>): Promise<Loan | undefined>;
   deleteLoan(id: string): Promise<boolean>;
+
+  // Asset methods
+  getAssets(): Promise<AssetWithAssignment[]>;
+  getAsset(id: string): Promise<AssetWithAssignment | undefined>;
+  createAsset(asset: InsertAsset): Promise<Asset>;
+  updateAsset(id: string, asset: Partial<InsertAsset>): Promise<Asset | undefined>;
+  deleteAsset(id: string): Promise<boolean>;
+
+  // Asset assignment methods
+  getAssetAssignments(): Promise<AssetAssignmentWithDetails[]>;
+  getAssetAssignment(id: string): Promise<AssetAssignmentWithDetails | undefined>;
+  createAssetAssignment(assignment: InsertAssetAssignment): Promise<AssetAssignment>;
+  updateAssetAssignment(id: string, assignment: Partial<InsertAssetAssignment>): Promise<AssetAssignment | undefined>;
+  deleteAssetAssignment(id: string): Promise<boolean>;
 
   // Car methods
   getCars(): Promise<CarWithAssignment[]>;
@@ -460,6 +482,131 @@ export class DatabaseStorage implements IStorage {
 
   async deleteLoan(id: string): Promise<boolean> {
     const result = await db.delete(loans).where(eq(loans.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  // Asset methods
+  async getAssets(): Promise<AssetWithAssignment[]> {
+    const allAssets = await db.select().from(assets);
+    const result: AssetWithAssignment[] = [];
+
+    for (const asset of allAssets) {
+      const [currentAssignment] = await db.query.assetAssignments.findMany({
+        where: and(eq(assetAssignments.assetId, asset.id), eq(assetAssignments.status, 'active')),
+        with: {
+          employee: true,
+        },
+      });
+
+      result.push({
+        ...asset,
+        currentAssignment: currentAssignment || undefined,
+      });
+    }
+
+    return result.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async getAsset(id: string): Promise<AssetWithAssignment | undefined> {
+    const [asset] = await db.select().from(assets).where(eq(assets.id, id));
+    if (!asset) return undefined;
+
+    const [currentAssignment] = await db.query.assetAssignments.findMany({
+      where: and(eq(assetAssignments.assetId, id), eq(assetAssignments.status, 'active')),
+      with: {
+        employee: true,
+      },
+    });
+
+    return {
+      ...asset,
+      currentAssignment: currentAssignment || undefined,
+    };
+  }
+
+  async createAsset(asset: InsertAsset): Promise<Asset> {
+    const [newAsset] = await db
+      .insert(assets)
+      .values({
+        ...asset,
+        status: asset.status || "available",
+      })
+      .returning();
+    return newAsset;
+  }
+
+  async updateAsset(id: string, asset: Partial<InsertAsset>): Promise<Asset | undefined> {
+    const [updated] = await db
+      .update(assets)
+      .set(asset)
+      .where(eq(assets.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteAsset(id: string): Promise<boolean> {
+    const result = await db.delete(assets).where(eq(assets.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  // Asset assignment methods
+  async getAssetAssignments(): Promise<AssetAssignmentWithDetails[]> {
+    const assignments = await db.query.assetAssignments.findMany({
+      with: {
+        asset: true,
+        employee: true,
+        assigner: true,
+      },
+      orderBy: desc(assetAssignments.createdAt),
+    });
+    return assignments.map(assignment => ({
+      ...assignment,
+      asset: assignment.asset || undefined,
+      employee: assignment.employee || undefined,
+      assigner: assignment.assigner || undefined,
+    }));
+  }
+
+  async getAssetAssignment(id: string): Promise<AssetAssignmentWithDetails | undefined> {
+    const assignment = await db.query.assetAssignments.findFirst({
+      where: eq(assetAssignments.id, id),
+      with: {
+        asset: true,
+        employee: true,
+        assigner: true,
+      },
+    });
+    if (!assignment) return undefined;
+    return {
+      ...assignment,
+      asset: assignment.asset || undefined,
+      employee: assignment.employee || undefined,
+      assigner: assignment.assigner || undefined,
+    };
+  }
+
+  async createAssetAssignment(assignment: InsertAssetAssignment): Promise<AssetAssignment> {
+    const [newAssignment] = await db
+      .insert(assetAssignments)
+      .values({
+        ...assignment,
+        status: assignment.status || "active",
+      })
+      .returning();
+    return newAssignment;
+  }
+
+  async updateAssetAssignment(id: string, assignment: Partial<InsertAssetAssignment>): Promise<AssetAssignment | undefined> {
+    const [updated] = await db
+      .update(assetAssignments)
+      .set(assignment)
+      .where(eq(assetAssignments.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteAssetAssignment(id: string): Promise<boolean> {
+    const result = await db.delete(assetAssignments).where(eq(assetAssignments.id, id));
     return (result.rowCount ?? 0) > 0;
   }
 
