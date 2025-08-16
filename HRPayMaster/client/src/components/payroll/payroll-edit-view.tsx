@@ -4,49 +4,31 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
-import { 
-  DollarSign, 
-  User, 
-  Calendar, 
-  FileText, 
-  Plus, 
+import {
+  DollarSign,
+  User,
+  Plus,
   Minus,
-  Save,
-  Edit3,
-  Gift,
-  AlertTriangle
+  Edit3
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import type { PayrollRunWithEntries, PayrollEntry, InsertEmployeeEvent } from "@shared/schema";
+import type { PayrollRunWithEntries, PayrollEntry } from "@shared/schema";
 import { VacationDayForm } from "@/components/vacation/vacation-day-form";
 import { DeductionForm } from "@/components/payroll/deduction-form";
+import { BonusForm } from "@/components/payroll/bonus-form";
 
 interface PayrollEditViewProps {
   payrollId: string;
 }
 
-interface EmployeeEventFormData {
-  employeeId: string;
-  type: 'bonus' | 'deduction' | 'allowance' | 'overtime' | 'penalty';
-  amount: number;
-  description: string;
-  eventDate: string;
-}
-
 export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
   const [editingCell, setEditingCell] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<{ [key: string]: string }>({});
-  const [isEventDialogOpen, setIsEventDialogOpen] = useState(false);
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
-  const [eventType, setEventType] = useState<'bonus' | 'deduction' | 'allowance' | 'overtime' | 'penalty'>('bonus');
-  
-  // New form states
-  const [isVacationFormOpen, setIsVacationFormOpen] = useState(false);
+  const [isBonusFormOpen, setIsBonusFormOpen] = useState(false);
   const [isDeductionFormOpen, setIsDeductionFormOpen] = useState(false);
+  const [isVacationFormOpen, setIsVacationFormOpen] = useState(false);
   const [selectedPayrollEntry, setSelectedPayrollEntry] = useState<PayrollEntry | null>(null);
   
   const { toast } = useToast();
@@ -57,20 +39,6 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
 
   const { data: employees } = useQuery({
     queryKey: ["/api/employees"],
-  });
-
-  const generatePayrollMutation = useMutation({
-    mutationFn: async (data: { period: string; startDate: string; endDate: string }) => {
-      await apiRequest("POST", "/api/payroll/generate", data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
-      toast({ title: "Success", description: "Payroll regenerated successfully" });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to regenerate payroll", variant: "destructive" });
-    },
   });
 
   const updatePayrollEntryMutation = useMutation({
@@ -93,29 +61,6 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
     },
   });
 
-  const createEmployeeEventMutation = useMutation({
-    mutationFn: async (event: InsertEmployeeEvent) => {
-      await apiRequest("POST", "/api/employee-events", event);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/employee-events"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
-      setIsEventDialogOpen(false);
-      toast({
-        title: "Success",
-        description: "Employee event created successfully",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to create employee event",
-        variant: "destructive",
-      });
-    },
-  });
-
-
   const handleCellEdit = (entryId: string, field: string, value: string) => {
     const cellKey = `${entryId}-${field}`;
     setEditingCell(cellKey);
@@ -137,42 +82,14 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
     setEditingCell(null);
   };
 
-  const handleAddEvent = (employeeId: string, type: 'bonus' | 'deduction' | 'allowance' | 'overtime' | 'penalty') => {
-    setSelectedEmployeeId(employeeId);
-    setEventType(type);
-    setIsEventDialogOpen(true);
+  const handleAddBonus = (entry: PayrollEntry) => {
+    setSelectedPayrollEntry(entry);
+    setIsBonusFormOpen(true);
   };
 
-  const handleEventSubmit = (formData: EmployeeEventFormData) => {
-    createEmployeeEventMutation.mutate({
-      employeeId: formData.employeeId,
-      eventType: formData.type,
-      title: `${formData.type} - ${formData.amount} KWD`,
-      description: formData.description,
-      amount: formData.amount.toString(),
-      eventDate: formData.eventDate,
-      status: 'active',
-      affectsPayroll: true,
-    }, {
-      onSuccess: () => {
-        // Close the dialog
-        setIsEventDialogOpen(false);
-        
-        // Regenerate the current payroll to reflect the new event
-        const currentPeriod = payrollRun?.period;
-        const currentStartDate = payrollRun?.startDate;
-        const currentEndDate = payrollRun?.endDate;
-        
-        if (currentPeriod && currentStartDate && currentEndDate) {
-          // Delete current payroll and regenerate with updated events
-          generatePayrollMutation.mutate({
-            period: currentPeriod,
-            startDate: currentStartDate,
-            endDate: currentEndDate
-          });
-        }
-      }
-    });
+  const handleAddDeduction = (entry: PayrollEntry) => {
+    setSelectedPayrollEntry(entry);
+    setIsDeductionFormOpen(true);
   };
 
   const getStatusColor = (status: string) => {
@@ -423,7 +340,7 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-green-600">
                         <div
                           className="cursor-pointer hover:bg-green-50 p-1 rounded text-green-600"
-                          onDoubleClick={() => handleAddEvent(entry.employeeId, 'bonus')}
+                          onDoubleClick={() => handleAddBonus(entry)}
                           title="Double-click to add bonus"
                         >
                           +{formatCurrency(parseFloat(entry.bonusAmount) || 0)}
@@ -448,7 +365,7 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleAddEvent(entry.employeeId, 'bonus')}
+                            onClick={() => handleAddBonus(entry)}
                             className="text-green-600 hover:text-green-700"
                             title="Add Bonus"
                           >
@@ -457,7 +374,7 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleAddEvent(entry.employeeId, 'deduction')}
+                            onClick={() => handleAddDeduction(entry)}
                             className="text-red-600 hover:text-red-700"
                             title="Add Deduction"
                           >
@@ -474,103 +391,33 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
         </CardContent>
       </Card>
 
-      {/* Employee Event Dialog */}
-      <Dialog open={isEventDialogOpen} onOpenChange={setIsEventDialogOpen}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              Add {eventType === 'bonus' ? 'Bonus' : 'Deduction'} Event
-            </DialogTitle>
-          </DialogHeader>
-          <EmployeeEventForm
-            employeeId={selectedEmployeeId}
-            eventType={eventType}
-            onSubmit={handleEventSubmit}
-            onCancel={() => setIsEventDialogOpen(false)}
-            isSubmitting={createEmployeeEventMutation.isPending}
-          />
-        </DialogContent>
-      </Dialog>
+      {selectedPayrollEntry && (
+        <BonusForm
+          employeeId={selectedPayrollEntry.employeeId}
+          payrollEntryId={selectedPayrollEntry.id}
+          currentBonus={parseFloat(selectedPayrollEntry.bonusAmount) || 0}
+          currentGrossPay={parseFloat(selectedPayrollEntry.grossPay) || 0}
+          currentNetPay={parseFloat(selectedPayrollEntry.netPay) || 0}
+          isOpen={isBonusFormOpen}
+          onClose={() => setIsBonusFormOpen(false)}
+          onSuccess={() =>
+            queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] })
+          }
+        />
+      )}
+
+      {selectedPayrollEntry && (
+        <DeductionForm
+          employeeId={selectedPayrollEntry.employeeId}
+          payrollEntryId={selectedPayrollEntry.id}
+          currentDeductions={parseFloat(selectedPayrollEntry.otherDeductions) || 0}
+          isOpen={isDeductionFormOpen}
+          onClose={() => setIsDeductionFormOpen(false)}
+          onSuccess={() =>
+            queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] })
+          }
+        />
+      )}
     </div>
-  );
-}
-
-interface EmployeeEventFormProps {
-  employeeId: string;
-  eventType: 'bonus' | 'deduction' | 'allowance' | 'overtime' | 'penalty';
-  onSubmit: (data: EmployeeEventFormData) => void;
-  onCancel: () => void;
-  isSubmitting: boolean;
-}
-
-function EmployeeEventForm({ 
-  employeeId, 
-  eventType, 
-  onSubmit, 
-  onCancel, 
-  isSubmitting 
-}: EmployeeEventFormProps) {
-  const [formData, setFormData] = useState<EmployeeEventFormData>({
-    employeeId,
-    type: eventType,
-    amount: 0,
-    description: '',
-    eventDate: new Date().toISOString().split('T')[0],
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSubmit(formData);
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Amount (KWD)
-        </label>
-        <Input
-          type="number"
-          step="0.001"
-          value={formData.amount}
-          onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) || 0 })}
-          required
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Description
-        </label>
-        <Input
-          type="text"
-          value={formData.description}
-          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-          placeholder={`Enter ${eventType} reason`}
-          required
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Event Date
-        </label>
-        <Input
-          type="date"
-          value={formData.eventDate}
-          onChange={(e) => setFormData({ ...formData, eventDate: e.target.value })}
-          required
-        />
-      </div>
-
-      <div className="flex justify-end space-x-2 pt-4">
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? 'Creating...' : `Add ${eventType}`}
-        </Button>
-      </div>
-    </form>
   );
 }
