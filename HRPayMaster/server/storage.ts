@@ -72,7 +72,10 @@ export interface IStorage {
   getEmployees(): Promise<EmployeeWithDepartment[]>;
   getEmployee(id: string): Promise<EmployeeWithDepartment | undefined>;
   createEmployee(employee: InsertEmployee): Promise<Employee>;
-  updateEmployee(id: string, employee: Partial<InsertEmployee>): Promise<Employee | undefined>;
+  updateEmployee(
+    id: string,
+    employee: Partial<Omit<InsertEmployee, "employeeCode">>
+  ): Promise<Employee | undefined>;
   deleteEmployee(id: string): Promise<boolean>;
 
   // Payroll methods
@@ -234,10 +237,14 @@ export class DatabaseStorage implements IStorage {
     return newEmployee;
   }
 
-  async updateEmployee(id: string, employee: Partial<InsertEmployee>): Promise<Employee | undefined> {
+  async updateEmployee(
+    id: string,
+    employee: Partial<Omit<InsertEmployee, "employeeCode">>
+  ): Promise<Employee | undefined> {
+    const { employeeCode, ...rest } = employee as any;
     const [updated] = await db
       .update(employees)
-      .set(employee)
+      .set(rest)
       .where(eq(employees.id, id))
       .returning();
     return updated || undefined;

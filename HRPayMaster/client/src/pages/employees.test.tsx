@@ -56,8 +56,26 @@ describe('Employees page', () => {
   it('filters employees based on search input', async () => {
     const user = userEvent.setup();
     const employees = [
-      { id: '1', firstName: 'Alice', lastName: 'Smith', position: 'Dev', salary: '0', workLocation: 'Office', startDate: '2024-01-01' },
-      { id: '2', firstName: 'Bob', lastName: 'Jones', position: 'Dev', salary: '0', workLocation: 'Office', startDate: '2024-01-01' },
+      {
+        id: '1',
+        employeeCode: 'E1',
+        firstName: 'Alice',
+        lastName: 'Smith',
+        position: 'Dev',
+        salary: '0',
+        workLocation: 'Office',
+        startDate: '2024-01-01',
+      },
+      {
+        id: '2',
+        employeeCode: 'E2',
+        firstName: 'Bob',
+        lastName: 'Jones',
+        position: 'Dev',
+        salary: '0',
+        workLocation: 'Office',
+        startDate: '2024-01-01',
+      },
     ];
     queryClient.setQueryData(['/api/employees'], employees);
     queryClient.setQueryData(['/api/departments'], []);

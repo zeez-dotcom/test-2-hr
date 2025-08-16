@@ -16,6 +16,7 @@ const formSchema = insertEmployeeSchema.extend({
   visaAlertDays: z.coerce.number().min(1).max(365).optional(),
   civilIdAlertDays: z.coerce.number().min(1).max(365).optional(),
   passportAlertDays: z.coerce.number().min(1).max(365).optional(),
+  employeeCode: z.string().min(1, "Employee code is required"),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -38,6 +39,7 @@ export default function EmployeeForm({
     defaultValues: {
       firstName: initialData?.firstName || "",
       lastName: initialData?.lastName || "",
+      employeeCode: initialData?.employeeCode || "",
       email: initialData?.email || "",
       phone: initialData?.phone || "",
       position: initialData?.position || "",
@@ -67,6 +69,20 @@ export default function EmployeeForm({
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <FormField
+            control={form.control}
+            name="employeeCode"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Employee Code</FormLabel>
+                <FormControl>
+                  <Input placeholder="EMP001" disabled={!!initialData?.employeeCode} {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
           <FormField
             control={form.control}
             name="firstName"
