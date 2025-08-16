@@ -94,11 +94,7 @@ export function SmartVacationForm({
 
     // Create event first, then update payroll
     try {
-      await fetch("/api/employee-events", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(eventData),
-      });
+      await apiRequest("POST", "/api/employee-events", eventData);
     } catch (error) {
       console.error("Failed to create employee event:", error);
     }
