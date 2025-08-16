@@ -103,7 +103,6 @@ export default function EmployeeImport() {
     try {
       const res = await fetch("/api/employees/import", { method: "POST", body: formData });
       const data = await res.json();
-      setResult(data);
       if (res.ok) {
         queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
         toast({
@@ -111,7 +110,14 @@ export default function EmployeeImport() {
           description: `${data.success || 0} imported, ${data.failed || 0} failed`,
           variant: data.failed ? "destructive" : "default",
         });
+        setFile(null);
+        setHeaders([]);
+        setSelections({});
+        setCustomFields({});
+        setResult(null);
+        window.scrollTo({ top: 0, behavior: "smooth" });
       } else {
+        setResult(data);
         toast({ title: "Error", description: data.error?.message || "Import failed", variant: "destructive" });
       }
     } catch {
