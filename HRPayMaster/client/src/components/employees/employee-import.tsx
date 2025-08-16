@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
+import { insertEmployeeSchema } from "@shared/schema";
 
 interface ImportResult {
   success?: number;
@@ -11,16 +12,16 @@ interface ImportResult {
   error?: { message: string };
 }
 
-const systemFields = [
-  { value: "employeeCode", label: "Employee Code" },
-  { value: "firstName", label: "First Name" },
-  { value: "lastName", label: "Last Name" },
-  { value: "position", label: "Position" },
-  { value: "salary", label: "Salary" },
-  { value: "startDate", label: "Start Date" },
-  { value: "email", label: "Email" },
-  { value: "phone", label: "Phone" },
-];
+function toLabel(key: string) {
+  return key
+    .replace(/([A-Z])/g, " $1")
+    .replace(/^./, str => str.toUpperCase());
+}
+
+const systemFields = Object.keys(insertEmployeeSchema.shape).map(k => ({
+  value: k,
+  label: toLabel(k),
+}));
 
 export default function EmployeeImport() {
   const [file, setFile] = useState<File | null>(null);
