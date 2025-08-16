@@ -13,6 +13,10 @@
      SESSION_SECRET="<random session secret>"
      ```
 
+   > [!IMPORTANT]
+   > `SESSION_SECRET` must be set in production. The server will refuse to
+   > start without it to ensure session data remains secure.
+
 3. **Install dependencies**
 
    ```bash
