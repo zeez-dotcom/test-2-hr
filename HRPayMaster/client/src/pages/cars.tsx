@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
-import { Car, Users, Plus, Trash2, Edit, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
+import { Car, Users, Plus, Trash2, Edit, CheckCircle, XCircle, AlertTriangle, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +16,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 
+import CarImport from "@/components/cars/car-import";
+
 import { insertCarSchema, insertCarAssignmentSchema, type CarWithAssignment, type CarAssignmentWithDetails, type InsertCarAssignment } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
@@ -23,6 +25,7 @@ import { queryClient } from "@/lib/queryClient";
 export default function Cars() {
   const [isCreateCarDialogOpen, setIsCreateCarDialogOpen] = useState(false);
   const [isAssignCarDialogOpen, setIsAssignCarDialogOpen] = useState(false);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const { toast } = useToast();
 
   const { data: cars = [], isLoading: carsLoading } = useQuery<CarWithAssignment[]>({
@@ -355,6 +358,24 @@ export default function Cars() {
                   </DialogFooter>
                 </form>
               </Form>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Upload className="w-4 h-4 mr-2" />
+                Import
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>Import Vehicles</DialogTitle>
+                <DialogDescription>
+                  Upload a spreadsheet to add or update vehicles.
+                </DialogDescription>
+              </DialogHeader>
+              <CarImport />
             </DialogContent>
           </Dialog>
         </div>
