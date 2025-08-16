@@ -11,6 +11,7 @@ export const departments = pgTable("departments", {
 
 export const employees = pgTable("employees", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeCode: varchar("employee_code").notNull().unique(),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
   nickname: text("nickname"),

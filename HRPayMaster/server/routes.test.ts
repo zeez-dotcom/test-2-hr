@@ -46,7 +46,16 @@ describe('employee routes', () => {
 
   it('GET /api/employees returns employees list', async () => {
     const mockEmployees = [
-      { id: '1', firstName: 'John', lastName: 'Doe', position: 'Dev', salary: '0', workLocation: 'Office', startDate: '2024-01-01' },
+      {
+        id: '1',
+        employeeCode: 'E001',
+        firstName: 'John',
+        lastName: 'Doe',
+        position: 'Dev',
+        salary: '0',
+        workLocation: 'Office',
+        startDate: '2024-01-01',
+      },
     ];
     (storage.getEmployees as any).mockResolvedValue(mockEmployees);
 

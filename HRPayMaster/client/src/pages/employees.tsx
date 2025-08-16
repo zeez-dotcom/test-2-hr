@@ -123,9 +123,10 @@ export default function Employees() {
 
   const handleUpdateEmployee = (employee: InsertEmployee) => {
     if (editingEmployee) {
+      const { employeeCode, ...updates } = employee;
       updateEmployeeMutation.mutate({
         id: editingEmployee.id,
-        employee,
+        employee: updates,
       });
     }
   };

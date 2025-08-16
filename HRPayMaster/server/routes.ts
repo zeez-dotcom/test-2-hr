@@ -149,7 +149,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/employees/:id", async (req, res, next) => {
     try {
-      const updates = insertEmployeeSchema.partial().parse(req.body);
+      const updates = insertEmployeeSchema
+        .omit({ employeeCode: true })
+        .partial()
+        .parse(req.body);
       const updatedEmployee = await storage.updateEmployee(req.params.id, updates);
       if (!updatedEmployee) {
         return next(new HttpError(404, "Employee not found"));
