@@ -12,7 +12,8 @@ import {
   insertAssetAssignmentSchema,
   insertNotificationSchema,
   insertEmailAlertSchema,
-  insertEmployeeEventSchema
+  insertEmployeeEventSchema,
+  type InsertEmployeeEvent
 } from "@shared/schema";
 import { 
   sendEmail, 
@@ -153,6 +154,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!updatedEmployee) {
         return next(new HttpError(404, "Employee not found"));
       }
+      const changedFields = Object.keys(updates);
+      if (changedFields.length > 0) {
+        const documentFields = new Set([
+          "visaNumber",
+          "visaType",
+          "visaIssueDate",
+          "visaExpiryDate",
+          "visaAlertDays",
+          "civilId",
+          "civilIdIssueDate",
+          "civilIdExpiryDate",
+          "civilIdAlertDays",
+          "passportNumber",
+          "passportIssueDate",
+          "passportExpiryDate",
+          "passportAlertDays",
+          "visaImage",
+          "civilIdImage",
+          "passportImage",
+        ]);
+        const isDocumentUpdate = changedFields.some(field => documentFields.has(field));
+        const event: InsertEmployeeEvent = {
+          employeeId: updatedEmployee.id,
+          eventType: isDocumentUpdate ? "document_update" : "employee_update",
+          title: isDocumentUpdate
+            ? `Document update for ${updatedEmployee.firstName} ${updatedEmployee.lastName}`
+            : `Employee update for ${updatedEmployee.firstName} ${updatedEmployee.lastName}`,
+          description: `Modified fields: ${changedFields.join(", ")}`,
+          amount: "0",
+          eventDate: new Date().toISOString().split("T")[0],
+          affectsPayroll: false,
+          addedBy: (req.user as any)?.id,
+        };
+        await storage.createEmployeeEvent(event);
+      }
+
       res.json(updatedEmployee);
     } catch (error) {
       if (error instanceof z.ZodError) {
