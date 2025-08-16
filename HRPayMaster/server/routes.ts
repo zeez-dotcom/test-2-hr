@@ -174,10 +174,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      const employeeFieldKeys = new Set(Object.keys(insertEmployeeSchema.shape));
+      const customFieldNames = new Set(
+        Object.values(mapping).filter(k => !employeeFieldKeys.has(k))
+      );
+
+      const fieldMap = new Map<string, any>();
+      if (customFieldNames.size > 0) {
+        const existingFields = await storage.getEmployeeCustomFields();
+        for (const f of existingFields) fieldMap.set(f.name, f);
+        for (const name of Array.from(customFieldNames)) {
+          if (!fieldMap.has(name)) {
+            const created = await storage.createEmployeeCustomField({ name });
+            fieldMap.set(name, created);
+          }
+        }
+      }
+
       const rows: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet);
       const existing = await storage.getEmployees();
       const existingCodes = new Set(existing.map(e => e.employeeCode));
       const valid: InsertEmployee[] = [];
+      const customValues: Record<string, any>[] = [];
       let failed = 0;
       const seen = new Set<string>();
 
@@ -187,21 +205,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
           translated[target] = row[source];
         }
 
-        const code = translated.employeeCode as string | undefined;
+        const base: Record<string, any> = {};
+        const custom: Record<string, any> = {};
+        for (const [key, value] of Object.entries(translated)) {
+          if (employeeFieldKeys.has(key)) base[key] = value;
+          else custom[key] = value;
+        }
+
+        const code = base.employeeCode as string | undefined;
         if (!code || seen.has(code) || existingCodes.has(code)) {
           failed++;
           continue;
         }
         seen.add(code);
         try {
-          const emp = insertEmployeeSchema.parse(translated);
+          const emp = insertEmployeeSchema.parse(base);
           valid.push(emp);
+          customValues.push(custom);
         } catch {
           failed++;
         }
       }
 
-      const { success, failed: insertFailed } = await storage.createEmployeesBulk(valid);
+      const {
+        success,
+        failed: insertFailed,
+        employees: insertedEmployees,
+      } = await storage.createEmployeesBulk(valid);
+
+      if (insertedEmployees && fieldMap.size > 0) {
+        for (let i = 0; i < insertedEmployees.length; i++) {
+          const emp = insertedEmployees[i];
+          const custom = customValues[i] || {};
+          for (const [key, value] of Object.entries(custom)) {
+            const field = fieldMap.get(key);
+            if (field && value !== undefined && value !== null && value !== "") {
+              await storage.createEmployeeCustomValue({
+                employeeId: emp.id,
+                fieldId: field.id,
+                value: String(value),
+              });
+            }
+          }
+        }
+      }
+
       res.json({ success, failed: failed + insertFailed });
     } catch {
       next(new HttpError(500, "Failed to import employees"));

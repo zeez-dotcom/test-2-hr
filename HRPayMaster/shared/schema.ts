@@ -60,6 +60,18 @@ export const employees = pgTable("employees", {
   standardWorkingDays: integer("standard_working_days").notNull().default(26), // Standard working days per month for this employee
 });
 
+export const employeeCustomFields = pgTable("employee_custom_fields", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+});
+
+export const employeeCustomValues = pgTable("employee_custom_values", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").references(() => employees.id).notNull(),
+  fieldId: varchar("field_id").references(() => employeeCustomFields.id).notNull(),
+  value: text("value"),
+});
+
 export const vacationRequests = pgTable("vacation_requests", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   employeeId: varchar("employee_id").references(() => employees.id).notNull(),
@@ -239,6 +251,14 @@ export const insertEmployeeSchema = createInsertSchema(employees).omit({
   id: true,
 });
 
+export const insertEmployeeCustomFieldSchema = createInsertSchema(employeeCustomFields).omit({
+  id: true,
+});
+
+export const insertEmployeeCustomValueSchema = createInsertSchema(employeeCustomValues).omit({
+  id: true,
+});
+
 export const insertPayrollRunSchema = createInsertSchema(payrollRuns).omit({
   id: true,
   createdAt: true,
@@ -322,6 +342,12 @@ export type InsertDepartment = z.infer<typeof insertDepartmentSchema>;
 
 export type Employee = typeof employees.$inferSelect;
 export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
+
+export type EmployeeCustomField = typeof employeeCustomFields.$inferSelect;
+export type InsertEmployeeCustomField = z.infer<typeof insertEmployeeCustomFieldSchema>;
+
+export type EmployeeCustomValue = typeof employeeCustomValues.$inferSelect;
+export type InsertEmployeeCustomValue = z.infer<typeof insertEmployeeCustomValueSchema>;
 
 export type PayrollRun = typeof payrollRuns.$inferSelect;
 export type InsertPayrollRun = z.infer<typeof insertPayrollRunSchema>;
@@ -447,6 +473,22 @@ export const employeesRelations = relations(employees, ({ one, many }) => ({
   assetAssignments: many(assetAssignments),
   notifications: many(notifications),
   emailAlerts: many(emailAlerts),
+  customValues: many(employeeCustomValues),
+}));
+
+export const employeeCustomFieldsRelations = relations(employeeCustomFields, ({ many }) => ({
+  values: many(employeeCustomValues),
+}));
+
+export const employeeCustomValuesRelations = relations(employeeCustomValues, ({ one }) => ({
+  employee: one(employees, {
+    fields: [employeeCustomValues.employeeId],
+    references: [employees.id],
+  }),
+  field: one(employeeCustomFields, {
+    fields: [employeeCustomValues.fieldId],
+    references: [employeeCustomFields.id],
+  }),
 }));
 
 export const vacationRequestsRelations = relations(vacationRequests, ({ one }) => ({
