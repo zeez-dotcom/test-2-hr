@@ -2,12 +2,14 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import { errorHandler } from './errorHandler';
+import * as XLSX from 'xlsx';
 
 vi.mock('./storage', () => {
   return {
     storage: {
       getEmployees: vi.fn(),
       createEmployee: vi.fn(),
+      createEmployeesBulk: vi.fn(),
       getPayrollRuns: vi.fn(),
       getLoans: vi.fn(),
       getCars: vi.fn(),
@@ -70,6 +72,32 @@ describe('employee routes', () => {
     const res = await request(app).post('/api/employees').send({});
     expect(res.status).toBe(400);
     expect(res.body.error.message).toBe('Invalid employee data');
+  });
+
+  it('POST /api/employees/import imports employees from excel', async () => {
+    (storage.getEmployees as any).mockResolvedValue([]);
+    (storage.createEmployeesBulk as any).mockResolvedValue({ success: 1, failed: 0 });
+    const wb = XLSX.utils.book_new();
+    const data = [{
+      employeeCode: 'E001',
+      firstName: 'John',
+      lastName: 'Doe',
+      position: 'Dev',
+      salary: '0',
+      workLocation: 'Office',
+      startDate: '2024-01-01',
+    }];
+    const ws = XLSX.utils.json_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    const res = await request(app)
+      .post('/api/employees/import')
+      .attach('file', buffer, 'employees.xlsx');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ success: 1, failed: 0 });
+    expect(storage.createEmployeesBulk).toHaveBeenCalled();
   });
 
   it('GET /api/payroll returns payroll runs', async () => {
