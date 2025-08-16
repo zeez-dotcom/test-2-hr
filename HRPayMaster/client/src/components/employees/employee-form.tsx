@@ -60,39 +60,25 @@ export default function EmployeeForm({
       profession: initialData?.profession || "",
       paymentMethod: initialData?.paymentMethod || "",
       transferable: initialData?.transferable ?? false,
-      group1: initialData?.group1 || "",
-      group2: initialData?.group2 || "",
-      additions: initialData?.additions || "",
-      command: initialData?.command || "",
       drivingLicenseNumber: initialData?.drivingLicenseNumber || "",
       drivingLicenseIssueDate: initialData?.drivingLicenseIssueDate || "",
       drivingLicenseExpiryDate: initialData?.drivingLicenseExpiryDate || "",
       drivingLicenseImage: initialData?.drivingLicenseImage || undefined,
       otherDocs: initialData?.otherDocs || undefined,
-      salaryDeductions: initialData?.salaryDeductions || "",
-      fines: initialData?.fines || "",
-      totalLoans: initialData?.totalLoans || "",
-      bonuses: initialData?.bonuses || "",
       iban: initialData?.iban || "",
       swiftCode: initialData?.swiftCode || "",
-      company: initialData?.company || "",
-      vacationReturnDate: initialData?.vacationReturnDate || "",
+      residencyName: initialData?.residencyName || "",
       residencyOnCompany: initialData?.residencyOnCompany ?? false,
       professionCategory: initialData?.professionCategory || "",
-      recSalaryVacation: initialData?.recSalaryVacation || "",
     },
   });
+
+  const residencyOnCompany = form.watch("residencyOnCompany");
 
   const handleSubmit = (data: FormData) => {
     onSubmit({
       ...data,
       salary: data.salary.toString(),
-      additions: data.additions || undefined,
-      salaryDeductions: data.salaryDeductions || undefined,
-      fines: data.fines || undefined,
-      totalLoans: data.totalLoans || undefined,
-      bonuses: data.bonuses || undefined,
-      recSalaryVacation: data.recSalaryVacation || undefined,
       transferable: data.transferable,
       residencyOnCompany: data.residencyOnCompany,
     });
@@ -389,117 +375,6 @@ export default function EmployeeForm({
             )}
           />
 
-          <FormField
-            control={form.control}
-            name="group1"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Group 1</FormLabel>
-                <FormControl>
-                  <Input placeholder="Group 1" {...field} value={field.value || ""} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="group2"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Group 2</FormLabel>
-                <FormControl>
-                  <Input placeholder="Group 2" {...field} value={field.value || ""} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="additions"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Additions</FormLabel>
-                <FormControl>
-                  <Input type="number" placeholder="0" {...field} value={field.value || ""} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="command"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Command</FormLabel>
-                <FormControl>
-                  <Input placeholder="Command" {...field} value={field.value || ""} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="salaryDeductions"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Salary Deductions</FormLabel>
-                <FormControl>
-                  <Input type="number" placeholder="0" {...field} value={field.value || ""} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="fines"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Fines</FormLabel>
-                <FormControl>
-                  <Input type="number" placeholder="0" {...field} value={field.value || ""} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="totalLoans"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Total Loans</FormLabel>
-                <FormControl>
-                  <Input type="number" placeholder="0" {...field} value={field.value || ""} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="bonuses"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Bonuses</FormLabel>
-                <FormControl>
-                  <Input type="number" placeholder="0" {...field} value={field.value || ""} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
 
           <FormField
             control={form.control}
@@ -522,34 +397,6 @@ export default function EmployeeForm({
                 <FormLabel>SWIFT Code</FormLabel>
                 <FormControl>
                   <Input placeholder="SWIFT" {...field} value={field.value || ""} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="company"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Company</FormLabel>
-                <FormControl>
-                  <Input placeholder="Company" {...field} value={field.value || ""} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="vacationReturnDate"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Vacation Return Date</FormLabel>
-                <FormControl>
-                  <Input type="date" {...field} value={field.value || ""} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -581,6 +428,22 @@ export default function EmployeeForm({
             )}
           />
 
+          {!residencyOnCompany && (
+            <FormField
+              control={form.control}
+              name="residencyName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Residency Name</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Residency Name" {...field} value={field.value || ""} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+
           <FormField
             control={form.control}
             name="professionCategory"
@@ -589,20 +452,6 @@ export default function EmployeeForm({
                 <FormLabel>Profession Category</FormLabel>
                 <FormControl>
                   <Input placeholder="Category" {...field} value={field.value || ""} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="recSalaryVacation"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Rec Salary Vacation</FormLabel>
-                <FormControl>
-                  <Input type="number" placeholder="0" {...field} value={field.value || ""} />
                 </FormControl>
                 <FormMessage />
               </FormItem>

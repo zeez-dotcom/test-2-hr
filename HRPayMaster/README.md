@@ -129,25 +129,15 @@ Employees → Import screen or the `/api/employees/import/template` endpoint.
 | profession | Profession name |
 | paymentMethod | Payment method |
 | transferable | Whether the employee is transferable |
-| group1 | Group 1 |
-| group2 | Group 2 |
-| additions | Additional compensation |
-| command | Command notes |
 | drivingLicenseNumber | Driving license number |
 | drivingLicenseIssueDate | Driving license issue date |
 | drivingLicenseExpiryDate | Driving license expiry date |
 | drivingLicenseImage | Driving license document image |
 | otherDocs | Other documents |
-| salaryDeductions | Salary deductions |
-| fines | Fines |
-| totalLoans | Total loans |
-| bonuses | Bonuses |
 | iban | IBAN |
 | swiftCode | Bank SWIFT code |
-| company | Company name |
-| vacationReturnDate | Vacation return date |
+| residencyName | Residency name |
 | residencyOnCompany | Residency on company |
 | professionCategory | Profession category |
-| recSalaryVacation | Recorded salary during vacation |
 
 
