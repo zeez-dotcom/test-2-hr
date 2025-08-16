@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,8 @@ import {
 } from "lucide-react";
 import type { EmployeeWithDepartment, Department } from "@shared/schema";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface EmployeesResponse {
   data: EmployeeWithDepartment[];
@@ -49,12 +51,13 @@ export default function EmployeeTable({
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
   const pageSize = 10;
+  const { toast } = useToast();
 
   const { data: departments } = useQuery<Department[]>({
     queryKey: ["/api/departments"],
   });
 
-  const { data, isLoading } = useQuery<EmployeesResponse>({
+  const { data, isLoading, error } = useQuery<EmployeesResponse>({
     queryKey: [
       "/api/employees",
       { page, nameFilter, departmentFilter, statusFilter, sortBy, sortOrder },
@@ -83,17 +86,25 @@ export default function EmployeeTable({
       if (params.sortBy) searchParams.set("sort", params.sortBy);
       searchParams.set("order", params.sortOrder);
 
-      const res = await fetch(`/api/employees?${searchParams.toString()}`, {
-        credentials: "include",
-      });
-      if (!res.ok) {
-        throw new Error("Failed to fetch employees");
-      }
+      const res = await apiRequest(
+        "GET",
+        `/api/employees?${searchParams.toString()}`,
+      );
       const total = Number(res.headers.get("X-Total-Count")) || 0;
       const employees = await res.json();
       return { data: employees, total };
     },
   });
+
+  useEffect(() => {
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch employees",
+        variant: "destructive",
+      });
+    }
+  }, [error, toast]);
 
   const employees: EmployeeWithDepartment[] = data?.data ?? [];
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / pageSize));
