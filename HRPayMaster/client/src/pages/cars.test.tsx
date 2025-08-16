@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
 import Cars from './cars';
+import CarImport from '@/components/cars/car-import';
 import '@testing-library/jest-dom';
+import React from 'react';
 
 const toast = vi.fn();
 const mutationMocks: any[] = [];
@@ -70,9 +72,25 @@ vi.mock('@/components/ui/input', () => ({
 }));
 
 vi.mock('@/components/ui/select', () => ({
-  Select: ({ children }: any) => <div>{children}</div>,
-  SelectContent: ({ children }: any) => <div>{children}</div>,
-  SelectItem: ({ children, value }: any) => <div data-value={value}>{children}</div>,
+  Select: ({ children, onValueChange }: any) => (
+    <div>
+      {React.Children.map(children, child =>
+        React.cloneElement(child, { onValueChange })
+      )}
+    </div>
+  ),
+  SelectContent: ({ children, onValueChange }: any) => (
+    <div>
+      {React.Children.map(children, child =>
+        React.cloneElement(child, { onValueChange })
+      )}
+    </div>
+  ),
+  SelectItem: ({ children, value, onValueChange }: any) => (
+    <div data-value={value} onClick={() => onValueChange(value)}>
+      {children}
+    </div>
+  ),
   SelectTrigger: ({ children }: any) => <div>{children}</div>,
   SelectValue: ({ placeholder }: any) => <span>{placeholder}</span>,
 }));
@@ -92,10 +110,19 @@ vi.mock('@/components/ui/tabs', () => ({
   TabsTrigger: ({ children }: any) => <div>{children}</div>,
 }));
 
+const originalFetch = global.fetch;
+
 beforeEach(() => {
   queryClient.clear();
   toast.mockReset();
   mutationMocks.length = 0;
+  // @ts-ignore
+  global.fetch = vi.fn();
+});
+
+afterEach(() => {
+  // @ts-ignore
+  global.fetch = originalFetch;
 });
 
 describe('Cars page', () => {
@@ -165,6 +192,91 @@ describe('Cars page', () => {
     mutationMocks[3].shouldError = true;
     mutationMocks[3].mutate('1');
     expect(toast).toHaveBeenCalledWith({ title: 'Failed to delete car', variant: 'destructive' });
+  });
+});
+
+describe('Car import', () => {
+  it('detects headers and imports cars', async () => {
+    const file = new File(['test'], 'cars.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+
+    (fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ headers: ['Model', 'Plate'] }),
+    });
+    (fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: 1, failed: 0 }),
+    });
+
+    const { container } = render(
+      <QueryClientProvider client={queryClient}>
+        <CarImport />
+      </QueryClientProvider>
+    );
+
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+
+    fireEvent.click(screen.getByText('Next'));
+
+    await screen.findByText('Plate');
+
+    fireEvent.click(screen.getAllByText('Model', { selector: 'div[data-value="model"]' })[0]);
+    fireEvent.click(screen.getAllByText('Plate Number', { selector: 'div[data-value="plateNumber"]' })[1]);
+
+    fireEvent.click(screen.getByText('Import'));
+
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith({
+        title: 'Import complete',
+        description: '1 imported, 0 failed',
+        variant: 'default',
+      })
+    );
+    expect(screen.getByText('Imported 1, failed 0')).toBeInTheDocument();
+  });
+
+  it('shows error when import fails', async () => {
+    const file = new File(['test'], 'cars.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+
+    (fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ headers: ['Model', 'Plate'] }),
+    });
+    (fetch as any).mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({ error: { message: 'Import failed' } }),
+    });
+
+    const { container } = render(
+      <QueryClientProvider client={queryClient}>
+        <CarImport />
+      </QueryClientProvider>
+    );
+
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+
+    fireEvent.click(screen.getByText('Next'));
+
+    await screen.findByText('Plate');
+
+    fireEvent.click(screen.getAllByText('Model', { selector: 'div[data-value="model"]' })[0]);
+    fireEvent.click(screen.getAllByText('Plate Number', { selector: 'div[data-value="plateNumber"]' })[1]);
+
+    fireEvent.click(screen.getByText('Import'));
+
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith({
+        title: 'Error',
+        description: 'Import failed',
+        variant: 'destructive',
+      })
+    );
   });
 });
 
