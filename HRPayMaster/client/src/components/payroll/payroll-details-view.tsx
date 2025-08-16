@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { DollarSign, User, Calendar, FileText } from "lucide-react";
 import type { PayrollRunWithEntries } from "@shared/schema";
+import { formatCurrency, formatDate } from "@/lib/utils";
 
 interface PayrollDetailsViewProps {
   payrollId: string;
@@ -14,23 +15,6 @@ export default function PayrollDetailsView({ payrollId }: PayrollDetailsViewProp
     queryKey: ["/api/payroll", payrollId],
   });
 
-  const formatCurrency = (amount: number | string) => {
-    const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-    return new Intl.NumberFormat('en-KW', {
-      style: 'currency',
-      currency: 'KWD',
-      minimumFractionDigits: 3,
-      maximumFractionDigits: 3,
-    }).format(num);
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric'
-    });
-  };
 
   const getStatusColor = (status: string) => {
     switch (status) {

@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Calculator, DollarSign, FileText, Trash2, Eye, Edit } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { formatCurrency, formatDate } from "@/lib/utils";
 import type { PayrollRun } from "@shared/schema";
 
 interface PayrollGenerateRequest {
@@ -73,21 +74,6 @@ export default function Payroll() {
     },
   });
 
-  const formatCurrency = (amount: number | string) => {
-    const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-    return new Intl.NumberFormat('en-KW', {
-      style: 'currency',
-      currency: 'KWD',
-    }).format(num);
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-  };
 
   const handleGeneratePayroll = (data: PayrollGenerateRequest) => {
     generatePayrollMutation.mutate(data);

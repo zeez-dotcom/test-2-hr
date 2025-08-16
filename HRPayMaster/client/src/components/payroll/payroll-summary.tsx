@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Users, Calculator, TrendingDown, TrendingUp, AlertCircle } from "lucide-react";
+import { formatCurrency, formatDate } from "@/lib/utils";
 
 interface PayrollEntry {
   id: string;
@@ -37,13 +38,6 @@ export default function PayrollSummary({
   totalNet, 
   totalDeductions 
 }: PayrollSummaryProps) {
-  const formatCurrency = (amount: number | string) => {
-    const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-    return new Intl.NumberFormat('en-KW', {
-      style: 'currency',
-      currency: 'KWD',
-    }).format(num);
-  };
 
   const employeesWithAdjustments = entries.filter(entry => 
     entry.adjustmentReason || entry.vacationDays > 0 || parseFloat(entry.loanDeduction) > 0

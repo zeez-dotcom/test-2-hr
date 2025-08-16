@@ -2,11 +2,11 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Users, 
-  DollarSign, 
-  Building, 
-  Clock, 
+import {
+  Users,
+  DollarSign,
+  Building,
+  Clock,
   Plus,
   ArrowRight,
   User,
@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import type { EmployeeWithDepartment, PayrollRun } from "@shared/schema";
+import { formatCurrency, formatDate } from "@/lib/utils";
 
 interface DashboardStats {
   totalEmployees: number;
@@ -39,21 +40,6 @@ export default function Dashboard() {
   const recentPayrolls = payrollRuns?.slice(0, 3) || [];
   const latestPayroll = payrollRuns?.[0];
 
-  const formatCurrency = (amount: number | string) => {
-    const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-    return new Intl.NumberFormat('en-KW', {
-      style: 'currency',
-      currency: 'KWD',
-    }).format(num);
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-  };
 
   if (statsLoading || employeesLoading || payrollLoading) {
     return (
