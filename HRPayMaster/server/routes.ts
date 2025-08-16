@@ -10,11 +10,15 @@ import {
   insertVacationRequestSchema,
   insertAssetSchema,
   insertAssetAssignmentSchema,
+  insertCarSchema,
+  insertCarAssignmentSchema,
   insertNotificationSchema,
   insertEmailAlertSchema,
   insertEmployeeEventSchema,
   type InsertEmployeeEvent,
-  type InsertEmployee
+  type InsertEmployee,
+  type InsertCar,
+  type InsertCarAssignment
 } from "@shared/schema";
 import {
   sendEmail,
@@ -682,6 +686,171 @@ export async function registerRoutes(app: Express): Promise<Server> {
       next(new HttpError(500, "Failed to delete asset assignment"));
     }
   });
+
+  app.get("/api/cars/import/template", (_req, res) => {
+    const headers = [
+      "Serial",
+      "emp",
+      "Driver",
+      "Company",
+      "Registration Book in Name of",
+      "Car Model",
+      "Plate Number",
+      "Registration Expiry Date",
+      "Notes",
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet([headers]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Cars");
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="car-import-template.xlsx"'
+    );
+    res.send(buffer);
+  });
+
+  app.post(
+    "/api/cars/import",
+    upload.single("file"),
+    async (req, res, next) => {
+      const file = (req as Request & { file?: Express.Multer.File }).file;
+      if (!file) {
+        return next(new HttpError(400, "No file uploaded"));
+      }
+      try {
+        const workbook = XLSX.read(file.buffer, { type: "buffer" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const headerRow = (XLSX.utils.sheet_to_json(sheet, { header: 1 })[0] || []) as string[];
+
+        const mappingRaw = (req.body as any)?.mapping;
+        if (!mappingRaw) {
+          return res.json({ headers: headerRow });
+        }
+
+        let mapping: Record<string, string>;
+        try {
+          mapping = JSON.parse(mappingRaw);
+        } catch {
+          return next(new HttpError(400, "Invalid mapping JSON"));
+        }
+
+        const carFieldKeys = new Set(Object.keys(insertCarSchema.shape));
+        const assignmentFieldKeys = new Set(Object.keys(insertCarAssignmentSchema.shape));
+        assignmentFieldKeys.add("employeeCode");
+
+        for (const target of Object.values(mapping)) {
+          if (!carFieldKeys.has(target) && !assignmentFieldKeys.has(target)) {
+            return next(new HttpError(400, `Unknown field '${target}' in mapping`));
+          }
+        }
+
+        const requiredFields = ["plateNumber", "model"];
+        const mappedFields = new Set(Object.values(mapping));
+        const missingMappings = requiredFields.filter(f => !mappedFields.has(f));
+        if (missingMappings.length > 0) {
+          return next(
+            new HttpError(
+              400,
+              `Missing mapping for required fields: ${missingMappings.join(", ")}`
+            )
+          );
+        }
+
+        for (const source of Object.keys(mapping)) {
+          if (!headerRow.includes(source)) {
+            return next(
+              new HttpError(400, `Column '${source}' not found in uploaded file`)
+            );
+          }
+        }
+
+        const rows: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet);
+        const existingCars = await storage.getCars();
+        const carMap = new Map<string, InsertCar & { id: string; currentAssignment?: any }>();
+        for (const car of existingCars) {
+          carMap.set(car.plateNumber, car as any);
+        }
+
+        const needEmployees = mappedFields.has("employeeId") || mappedFields.has("employeeCode");
+        let employeeMap = new Map<string, string>();
+        if (needEmployees) {
+          const employees = await storage.getEmployees();
+          for (const emp of employees) {
+            employeeMap.set(emp.employeeCode, emp.id);
+          }
+        }
+
+        let success = 0;
+        let failed = 0;
+        for (const row of rows) {
+          const translated: Record<string, any> = {};
+          for (const [source, target] of Object.entries(mapping)) {
+            translated[target] = row[source];
+          }
+
+          const carData: Record<string, any> = {};
+          const assignData: Record<string, any> = {};
+          for (const [key, value] of Object.entries(translated)) {
+            if (carFieldKeys.has(key)) carData[key] = value;
+            else if (assignmentFieldKeys.has(key)) assignData[key] = value;
+          }
+
+          carData.make = carData.make || "Unknown";
+          carData.year = carData.year ? Number(carData.year) : new Date().getFullYear();
+          const plate = carData.plateNumber as string | undefined;
+          if (!plate) {
+            failed++;
+            continue;
+          }
+
+          try {
+            const parsedCar = insertCarSchema.parse(carData);
+            let car = carMap.get(plate);
+            if (car) {
+              await storage.updateCar(car.id, parsedCar);
+            } else {
+              const created = await storage.createCar(parsedCar);
+              car = { ...created } as any;
+              carMap.set(plate, car!);
+            }
+
+            if (assignData.employeeId || assignData.employeeCode) {
+              let employeeId = assignData.employeeId as string | undefined;
+              if (!employeeId && assignData.employeeCode) {
+                employeeId = employeeMap.get(String(assignData.employeeCode));
+              }
+              if (employeeId) {
+                const current = (car as any).currentAssignment;
+                if (!current || current.employeeId !== employeeId) {
+                  await storage.createCarAssignment({
+                    carId: car!.id,
+                    employeeId,
+                    assignedDate: new Date().toISOString().split("T")[0],
+                    status: "active",
+                    notes: assignData.notes ? String(assignData.notes) : undefined,
+                  });
+                }
+              }
+            }
+
+            success++;
+          } catch {
+            failed++;
+          }
+        }
+
+        res.json({ success, failed });
+      } catch {
+        next(new HttpError(500, "Failed to import cars"));
+      }
+    }
+  );
 
   // Car assignment routes (using asset service)
   app.get("/api/car-assignments", async (req, res, next) => {
