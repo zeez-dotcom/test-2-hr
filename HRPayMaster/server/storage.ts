@@ -271,19 +271,27 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    const [newEmployee] = await db
-      .insert(employees)
-      .values({
-        ...employee,
-        employeeCode: code,
-        role: employee.role || "employee",
-        status: employee.status || "active",
-        visaAlertDays: employee.visaAlertDays || 30,
-        civilIdAlertDays: employee.civilIdAlertDays || 60,
-        passportAlertDays: employee.passportAlertDays || 90,
-      })
-      .returning();
-    return newEmployee;
+    try {
+      const [newEmployee] = await db
+        .insert(employees)
+        .values({
+          ...employee,
+          employeeCode: code,
+          role: employee.role || "employee",
+          status: employee.status || "active",
+          visaAlertDays: employee.visaAlertDays || 30,
+          civilIdAlertDays: employee.civilIdAlertDays || 60,
+          passportAlertDays: employee.passportAlertDays || 90,
+        })
+        .returning();
+      return newEmployee;
+    } catch (error: any) {
+      // Handle potential race condition where the employee code becomes duplicate
+      if (error?.code === "23505") {
+        throw new DuplicateEmployeeCodeError(code);
+      }
+      throw error;
+    }
   }
 
   private async generateEmployeeCode(): Promise<string> {
