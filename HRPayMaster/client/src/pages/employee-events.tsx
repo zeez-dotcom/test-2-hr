@@ -19,11 +19,14 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { EmployeeEvent, Employee, InsertEmployeeEvent } from "@shared/schema";
 import { insertEmployeeEventSchema } from "@shared/schema";
+import ConfirmDialog from "@/components/ui/confirm-dialog";
 
 const financialEventTypes = ["bonus", "deduction", "allowance", "overtime", "penalty"] as const;
 
 export default function EmployeeEvents() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [eventToDelete, setEventToDelete] = useState<string | null>(null);
   const { toast } = useToast();
 
   const {
@@ -159,8 +162,22 @@ export default function EmployeeEvents() {
   };
 
   const handleDeleteEvent = (eventId: string) => {
-    if (window.confirm("Are you sure you want to delete this event?")) {
-      deleteEventMutation.mutate(eventId);
+    setEventToDelete(eventId);
+    setIsConfirmOpen(true);
+  };
+
+  const confirmDeleteEvent = () => {
+    if (eventToDelete) {
+      deleteEventMutation.mutate(eventToDelete);
+    }
+    setIsConfirmOpen(false);
+    setEventToDelete(null);
+  };
+
+  const handleConfirmOpenChange = (open: boolean) => {
+    setIsConfirmOpen(open);
+    if (!open) {
+      setEventToDelete(null);
     }
   };
 
@@ -523,6 +540,14 @@ export default function EmployeeEvents() {
           )}
         </CardContent>
       </Card>
+      <ConfirmDialog
+        open={isConfirmOpen}
+        onOpenChange={handleConfirmOpenChange}
+        title="Delete Event"
+        description="Are you sure you want to delete this event?"
+        confirmText="Delete"
+        onConfirm={confirmDeleteEvent}
+      />
     </div>
   );
 }
