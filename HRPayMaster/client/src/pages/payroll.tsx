@@ -13,6 +13,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { PayrollRun } from "@shared/schema";
+import ConfirmDialog from "@/components/ui/confirm-dialog";
 
 interface PayrollGenerateRequest {
   period: string;
@@ -25,6 +26,8 @@ export default function Payroll() {
   const [selectedPayrollId, setSelectedPayrollId] = useState<string | null>(null);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [payrollToDelete, setPayrollToDelete] = useState<string | null>(null);
   const { toast } = useToast();
 
   const {
@@ -87,8 +90,22 @@ export default function Payroll() {
   };
 
   const handleDeletePayroll = (payrollId: string) => {
-    if (window.confirm("Are you sure you want to delete this payroll run?")) {
-      deletePayrollMutation.mutate(payrollId);
+    setPayrollToDelete(payrollId);
+    setIsConfirmOpen(true);
+  };
+
+  const confirmDeletePayroll = () => {
+    if (payrollToDelete) {
+      deletePayrollMutation.mutate(payrollToDelete);
+    }
+    setIsConfirmOpen(false);
+    setPayrollToDelete(null);
+  };
+
+  const handleConfirmOpenChange = (open: boolean) => {
+    setIsConfirmOpen(open);
+    if (!open) {
+      setPayrollToDelete(null);
     }
   };
 
@@ -357,6 +374,14 @@ export default function Payroll() {
                 )}
               </DialogContent>
             </Dialog>
+            <ConfirmDialog
+              open={isConfirmOpen}
+              onOpenChange={handleConfirmOpenChange}
+              title="Delete Payroll Run"
+              description="Are you sure you want to delete this payroll run?"
+              confirmText="Delete"
+              onConfirm={confirmDeletePayroll}
+            />
     </div>
   );
 }

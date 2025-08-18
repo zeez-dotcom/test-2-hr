@@ -16,12 +16,15 @@ import { insertDepartmentSchema } from "@shared/schema";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import type { Department, InsertDepartment, EmployeeWithDepartment } from "@shared/schema";
 import { z } from "zod";
+import ConfirmDialog from "@/components/ui/confirm-dialog";
 
 type DepartmentFormData = z.infer<typeof insertDepartmentSchema>;
 
 export default function Departments() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [departmentToDelete, setDepartmentToDelete] = useState<string | null>(null);
   const { toast } = useToast();
 
   const {
@@ -137,7 +140,7 @@ export default function Departments() {
 
   const handleDeleteDepartment = (departmentId: string) => {
     const employeesInDept = employees?.filter(emp => emp.departmentId === departmentId).length || 0;
-    
+
     if (employeesInDept > 0) {
       toast({
         title: "Cannot Delete Department",
@@ -147,8 +150,22 @@ export default function Departments() {
       return;
     }
 
-    if (window.confirm("Are you sure you want to delete this department?")) {
-      deleteDepartmentMutation.mutate(departmentId);
+    setDepartmentToDelete(departmentId);
+    setIsConfirmOpen(true);
+  };
+
+  const confirmDeleteDepartment = () => {
+    if (departmentToDelete) {
+      deleteDepartmentMutation.mutate(departmentToDelete);
+    }
+    setIsConfirmOpen(false);
+    setDepartmentToDelete(null);
+  };
+
+  const handleConfirmOpenChange = (open: boolean) => {
+    setIsConfirmOpen(open);
+    if (!open) {
+      setDepartmentToDelete(null);
     }
   };
 
@@ -391,8 +408,14 @@ export default function Departments() {
           </Form>
         </DialogContent>
       </Dialog>
-
-
+      <ConfirmDialog
+        open={isConfirmOpen}
+        onOpenChange={handleConfirmOpenChange}
+        title="Delete Department"
+        description="Are you sure you want to delete this department?"
+        confirmText="Delete"
+        onConfirm={confirmDeleteDepartment}
+      />
     </div>
   );
 }

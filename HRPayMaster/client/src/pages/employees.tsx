@@ -12,6 +12,7 @@ import { Plus, Search } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { EmployeeWithDepartment, Department, InsertEmployee } from "@shared/schema";
+import ConfirmDialog from "@/components/ui/confirm-dialog";
 
 export default function Employees() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -19,6 +20,8 @@ export default function Employees() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<EmployeeWithDepartment | null>(null);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [employeeToDelete, setEmployeeToDelete] = useState<string | null>(null);
   const { toast } = useToast();
 
   const {
@@ -116,8 +119,22 @@ export default function Employees() {
   }) || [];
 
   const handleDeleteEmployee = (employeeId: string) => {
-    if (window.confirm("Are you sure you want to delete this employee?")) {
-      deleteEmployeeMutation.mutate(employeeId);
+    setEmployeeToDelete(employeeId);
+    setIsConfirmOpen(true);
+  };
+
+  const confirmDeleteEmployee = () => {
+    if (employeeToDelete) {
+      deleteEmployeeMutation.mutate(employeeToDelete);
+    }
+    setIsConfirmOpen(false);
+    setEmployeeToDelete(null);
+  };
+
+  const handleConfirmOpenChange = (open: boolean) => {
+    setIsConfirmOpen(open);
+    if (!open) {
+      setEmployeeToDelete(null);
     }
   };
 
@@ -226,6 +243,14 @@ export default function Employees() {
             )}
           </DialogContent>
         </Dialog>
+        <ConfirmDialog
+          open={isConfirmOpen}
+          onOpenChange={handleConfirmOpenChange}
+          title="Delete Employee"
+          description="Are you sure you want to delete this employee?"
+          confirmText="Delete"
+          onConfirm={confirmDeleteEmployee}
+        />
       </div>
     </div>
   );
