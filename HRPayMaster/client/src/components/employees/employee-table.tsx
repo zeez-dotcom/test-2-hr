@@ -138,6 +138,28 @@ export default function EmployeeTable({
     }
   };
 
+  const renderDocument = (value: string, alt: string) => {
+    const isPDF = value.startsWith("data:application/pdf");
+    return isPDF ? (
+      <object
+        data={value}
+        type="application/pdf"
+        className="mt-4 max-w-xs w-full h-64"
+      >
+        <a
+          href={value}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 underline"
+        >
+          View PDF
+        </a>
+      </object>
+    ) : (
+      <img src={value} alt={alt} className="mt-4 max-w-xs" />
+    );
+  };
+
   const handleSort = (field: string) => {
     if (sortBy === field) {
       setSortOrder(sortOrder === "asc" ? "desc" : "asc");
@@ -486,20 +508,12 @@ export default function EmployeeTable({
               <span>{viewEmployee.professionCategory || "-"}</span>
             </div>
           )}
-          {viewEmployee?.drivingLicenseImage && (
-            <img
-              src={viewEmployee.drivingLicenseImage}
-              alt="Driving License"
-              className="mt-4 max-w-xs"
-            />
-          )}
-          {viewEmployee?.otherDocs && (
-            <img
-              src={viewEmployee.otherDocs}
-              alt="Other Documents"
-              className="mt-4 max-w-xs"
-            />
-          )}
+          {viewEmployee?.drivingLicenseImage &&
+            renderDocument(viewEmployee.drivingLicenseImage, "Driving License")}
+          {viewEmployee?.additionalDocs &&
+            renderDocument(viewEmployee.additionalDocs, "Additional Documents")}
+          {viewEmployee?.otherDocs &&
+            renderDocument(viewEmployee.otherDocs, "Other Documents")}
         </DialogContent>
       </Dialog>
     </div>
