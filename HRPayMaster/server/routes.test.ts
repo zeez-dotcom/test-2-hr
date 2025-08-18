@@ -20,6 +20,7 @@ vi.mock('./storage', () => {
       createCar: vi.fn(),
       updateCar: vi.fn(),
       createCarAssignment: vi.fn(),
+      createEmployeeEvent: vi.fn(),
     },
   };
 });
@@ -136,7 +137,7 @@ describe('employee routes', () => {
     expect(res.body.error.message).toBe('Invalid employee data');
   });
 
-  it('POST /api/employees creates employee with missing optional numeric fields', async () => {
+  it('POST /api/employees accepts numeric fields', async () => {
     const created = {
       id: '1',
       employeeCode: 'EMP1',
@@ -144,6 +145,8 @@ describe('employee routes', () => {
       lastName: 'Doe',
       position: 'Dev',
       salary: '1000',
+      additions: '50',
+      visaAlertDays: 15,
       workLocation: 'Office',
       startDate: '2024-01-01',
       role: 'employee'
@@ -154,9 +157,10 @@ describe('employee routes', () => {
       firstName: 'Jane',
       lastName: 'Doe',
       position: 'Dev',
-      salary: '1000',
-      startDate: '2024-01-01',
-      additions: ''
+      salary: 1000,
+      additions: 50,
+      visaAlertDays: 15,
+      startDate: '2024-01-01'
     });
 
     expect(res.status).toBe(201);
@@ -164,9 +168,8 @@ describe('employee routes', () => {
 
     const arg = (storage.createEmployee as any).mock.calls[0][0];
     expect(arg.salary).toBe(1000);
-    expect(arg).not.toHaveProperty('additions');
-    expect(arg).not.toHaveProperty('visaAlertDays');
-    expect(arg).not.toHaveProperty('standardWorkingDays');
+    expect(arg.additions).toBe(50);
+    expect(arg.visaAlertDays).toBe(15);
   });
 
   it('PUT /api/employees/:id rejects employeeCode updates', async () => {
@@ -175,6 +178,33 @@ describe('employee routes', () => {
       .send({ employeeCode: 'NEW' });
     expect(res.status).toBe(400);
     expect(res.body.error.message).toBe('Employee code cannot be updated');
+  });
+
+  it('PUT /api/employees/:id accepts numeric fields', async () => {
+    const updated = {
+      id: '1',
+      employeeCode: 'EMP1',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      position: 'Dev',
+      salary: '2000',
+      visaAlertDays: 20,
+      workLocation: 'Office',
+      startDate: '2024-01-01',
+      role: 'employee'
+    };
+    (storage.updateEmployee as any).mockResolvedValue(updated);
+
+    const res = await request(app)
+      .put('/api/employees/1')
+      .send({ salary: 2000, visaAlertDays: 20 });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(updated);
+
+    const arg = (storage.updateEmployee as any).mock.calls[0][1];
+    expect(arg.salary).toBe(2000);
+    expect(arg.visaAlertDays).toBe(20);
   });
 
   it('POST /api/employees/import returns headers when no mapping provided', async () => {

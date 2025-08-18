@@ -391,10 +391,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  const employeeNumberSchema = insertEmployeeSchema.extend({
+    salary: z.coerce.number(),
+    additions: z.coerce.number().optional(),
+    visaAlertDays: z.coerce.number().optional(),
+    civilIdAlertDays: z.coerce.number().optional(),
+    passportAlertDays: z.coerce.number().optional(),
+    standardWorkingDays: z.coerce.number().optional(),
+  });
+
   app.post("/api/employees", async (req, res, next) => {
     try {
-      const employee = insertEmployeeSchema
-        .extend({ employeeCode: insertEmployeeSchema.shape.employeeCode.optional() })
+      const employee = employeeNumberSchema
+        .extend({ employeeCode: employeeNumberSchema.shape.employeeCode.optional() })
         .parse(req.body);
       if (!employee.employeeCode?.trim()) {
         delete (employee as any).employeeCode;
@@ -402,23 +411,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         employee.employeeCode = employee.employeeCode.trim();
       }
 
-      // Convert numeric fields and remove empty values
-      const numericFields: (keyof InsertEmployee)[] = [
-        "salary",
-        "additions",
-        "visaAlertDays",
-        "civilIdAlertDays",
-        "passportAlertDays",
-        "standardWorkingDays",
-      ];
-      for (const field of numericFields) {
-        const value = (employee as any)[field];
-        if (value === "" || value === undefined) {
-          delete (employee as any)[field];
-        } else {
-          (employee as any)[field] = Number(value);
-        }
-      }
       const newEmployee = await storage.createEmployee({
         ...employee,
         role: employee.role || "employee",
@@ -448,7 +440,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if ("employeeCode" in req.body) {
         return next(new HttpError(400, "Employee code cannot be updated"));
       }
-      const updates = insertEmployeeSchema
+      const updates = employeeNumberSchema
         .omit({ employeeCode: true })
         .partial()
         .parse(req.body);
