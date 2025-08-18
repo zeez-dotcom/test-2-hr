@@ -58,6 +58,13 @@ import {
 import { db } from "./db";
 import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
 
+export class DuplicateEmployeeCodeError extends Error {
+  constructor(code: string) {
+    super(`Employee code ${code} already exists`);
+    this.name = "DuplicateEmployeeCodeError";
+  }
+}
+
 export interface EmployeeReportPeriod {
   period: string;
   payrollEntries: PayrollEntry[];
@@ -250,10 +257,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createEmployee(employee: InsertEmployee): Promise<Employee> {
+    let code = employee.employeeCode?.trim();
+    if (!code) {
+      code = await this.generateEmployeeCode();
+    } else {
+      const existing = await db
+        .select()
+        .from(employees)
+        .where(eq(employees.employeeCode, code))
+        .limit(1);
+      if (existing.length > 0) {
+        throw new DuplicateEmployeeCodeError(code);
+      }
+    }
+
     const [newEmployee] = await db
       .insert(employees)
       .values({
         ...employee,
+        employeeCode: code,
         role: employee.role || "employee",
         status: employee.status || "active",
         visaAlertDays: employee.visaAlertDays || 30,
@@ -262,6 +284,22 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return newEmployee;
+  }
+
+  private async generateEmployeeCode(): Promise<string> {
+    let code = "";
+    while (true) {
+      const random = Math.floor(1000 + Math.random() * 9000);
+      code = `EMP${random}`;
+      const existing = await db
+        .select()
+        .from(employees)
+        .where(eq(employees.employeeCode, code))
+        .limit(1);
+      if (existing.length === 0) {
+        return code;
+      }
+    }
   }
 
   async createEmployeesBulk(

@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { HttpError } from "./errorHandler";
 import passport from "passport";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import { storage, DuplicateEmployeeCodeError } from "./storage";
 import { assetService } from "./assetService";
 import {
   insertDepartmentSchema,
@@ -329,15 +329,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/employees", async (req, res, next) => {
     try {
-      const employee = insertEmployeeSchema.parse(req.body);
+      const employee = insertEmployeeSchema
+        .extend({ employeeCode: insertEmployeeSchema.shape.employeeCode.optional() })
+        .parse(req.body);
+      if (!employee.employeeCode?.trim()) {
+        delete (employee as any).employeeCode;
+      } else {
+        employee.employeeCode = employee.employeeCode.trim();
+      }
       const newEmployee = await storage.createEmployee({
         ...employee,
         role: employee.role || "employee",
-      });
+      } as any);
       res.status(201).json(newEmployee);
     } catch (error) {
       if (error instanceof z.ZodError) {
         return next(new HttpError(400, "Invalid employee data", error.errors));
+      }
+      if (error instanceof DuplicateEmployeeCodeError) {
+        return next(new HttpError(409, "Employee code already exists"));
       }
       next(new HttpError(500, "Failed to create employee"));
     }
