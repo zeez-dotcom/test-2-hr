@@ -1,4 +1,6 @@
 import { useForm } from "react-hook-form";
+import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertEmployeeSchema } from "@shared/schema";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -7,6 +9,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import ImageUpload from "@/components/ui/image-upload";
+import { CommandDialog, CommandInput, CommandList, CommandItem, CommandEmpty } from "@/components/ui/command";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { Company, Department, InsertEmployee } from "@shared/schema";
 import { z } from "zod";
 
@@ -46,6 +52,11 @@ export default function EmployeeForm({
   isSubmitting,
   initialData
 }: EmployeeFormProps) {
+  const { toast } = useToast();
+  const [companyOpen, setCompanyOpen] = useState(false);
+  const [newCompanyOpen, setNewCompanyOpen] = useState(false);
+  const [newCompanyName, setNewCompanyName] = useState("");
+  const [search, setSearch] = useState("");
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     mode: "onChange",
@@ -97,6 +108,23 @@ export default function EmployeeForm({
       residencyName: initialData?.residencyName || "",
       residencyOnCompany: initialData?.residencyOnCompany ?? false,
       professionCategory: initialData?.professionCategory || "",
+    },
+  });
+
+  const addCompanyMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await apiRequest("POST", "/api/companies", { name });
+      return res.json();
+    },
+    onSuccess: (data: Company) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
+      form.setValue("companyId", data.id);
+      setNewCompanyOpen(false);
+      setNewCompanyName("");
+      toast({ title: "Company added" });
+    },
+    onError: () => {
+      toast({ title: "Failed to add company", variant: "destructive" });
     },
   });
 
@@ -253,26 +281,78 @@ export default function EmployeeForm({
           <FormField
             control={form.control}
             name="companyId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Company</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value || undefined}>
+            render={({ field }) => {
+              const selected = companies.find(c => c.id === field.value);
+              return (
+                <FormItem>
+                  <FormLabel>Company</FormLabel>
                   <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Company" />
-                    </SelectTrigger>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full justify-between"
+                      onClick={() => setCompanyOpen(true)}
+                    >
+                      {selected ? selected.name : "Select Company"}
+                    </Button>
                   </FormControl>
-                  <SelectContent>
-                    {companies.filter(co => co.id && co.id.trim() !== "").map((co) => (
-                      <SelectItem key={co.id} value={co.id}>
-                        {co.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
+                  <FormMessage />
+                  <CommandDialog open={companyOpen} onOpenChange={setCompanyOpen}>
+                    <CommandInput
+                      placeholder="Search company..."
+                      value={search}
+                      onValueChange={setSearch}
+                    />
+                    <CommandList>
+                      <CommandEmpty>
+                        <Button
+                          onClick={() => {
+                            setCompanyOpen(false);
+                            setNewCompanyOpen(true);
+                            setNewCompanyName(search);
+                          }}
+                          variant="ghost"
+                        >
+                          Create "{search}"
+                        </Button>
+                      </CommandEmpty>
+                      {companies.map(co => (
+                        <CommandItem
+                          key={co.id}
+                          value={co.name}
+                          onSelect={() => {
+                            field.onChange(co.id);
+                            setCompanyOpen(false);
+                          }}
+                        >
+                          {co.name}
+                        </CommandItem>
+                      ))}
+                    </CommandList>
+                  </CommandDialog>
+                  <Dialog open={newCompanyOpen} onOpenChange={setNewCompanyOpen}>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Add Company</DialogTitle>
+                      </DialogHeader>
+                      <div className="flex items-center space-x-2">
+                        <Input
+                          value={newCompanyName}
+                          onChange={e => setNewCompanyName(e.target.value)}
+                          placeholder="Company name"
+                        />
+                        <Button
+                          onClick={() => addCompanyMutation.mutate(newCompanyName)}
+                          disabled={addCompanyMutation.isPending || !newCompanyName.trim()}
+                        >
+                          {addCompanyMutation.isPending ? "Saving..." : "Save"}
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </FormItem>
+              );
+            }}
           />
 
           <FormField
