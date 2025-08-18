@@ -137,7 +137,48 @@ describe('employee routes', () => {
     expect(res.body.error.message).toBe('Invalid employee data');
   });
 
-  it('POST /api/employees accepts numeric fields', async () => {
+  // From "main": verify numeric coercion from string inputs
+  it('POST /api/employees creates employee with numeric fields', async () => {
+    const created = {
+      id: '2',
+      firstName: 'Sam',
+      lastName: 'Smith',
+      position: 'Dev',
+      salary: 1000,
+      startDate: '2024-01-01',
+      visaAlertDays: 30,
+      role: 'employee'
+    };
+    (storage.createEmployee as any).mockResolvedValue(created);
+
+    const payload = {
+      firstName: 'Sam',
+      lastName: 'Smith',
+      position: 'Dev',
+      salary: '1000',
+      startDate: '2024-01-01',
+      visaAlertDays: 30
+    };
+
+    const res = await request(app).post('/api/employees').send(payload);
+
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual(created);
+    expect(storage.createEmployee).toHaveBeenCalledWith(
+      expect.objectContaining({
+        firstName: 'Sam',
+        lastName: 'Smith',
+        position: 'Dev',
+        salary: 1000,
+        startDate: '2024-01-01',
+        visaAlertDays: 30,
+        role: 'employee'
+      })
+    );
+  });
+
+  // From "codex": ensure numeric fields are accepted and passed as numbers to storage
+  it('POST /api/employees accepts numeric fields and passes numbers to storage', async () => {
     const created = {
       id: '1',
       employeeCode: 'EMP1',
@@ -170,6 +211,39 @@ describe('employee routes', () => {
     expect(arg.salary).toBe(1000);
     expect(arg.additions).toBe(50);
     expect(arg.visaAlertDays).toBe(15);
+  });
+
+  // Keep the "missing optional numeric fields" scenario
+  it('POST /api/employees creates employee when optional numeric fields are missing', async () => {
+    const created = {
+      id: '3',
+      firstName: 'Ana',
+      lastName: 'Lee',
+      position: 'Dev',
+      salary: 1200,
+      startDate: '2024-01-01',
+      role: 'employee'
+    };
+    (storage.createEmployee as any).mockResolvedValue(created);
+
+    const payload = {
+      firstName: 'Ana',
+      lastName: 'Lee',
+      position: 'Dev',
+      salary: '1200', // string input should be coerced
+      startDate: '2024-01-01'
+      // intentionally omitting optional numeric fields like additions, visaAlertDays
+    };
+
+    const res = await request(app).post('/api/employees').send(payload);
+
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual(created);
+
+    const arg = (storage.createEmployee as any).mock.calls[0][0];
+    expect(arg.salary).toBe(1200);
+    expect(arg).not.toHaveProperty('additions');
+    expect(arg).not.toHaveProperty('visaAlertDays');
   });
 
   it('PUT /api/employees/:id rejects employeeCode updates', async () => {
