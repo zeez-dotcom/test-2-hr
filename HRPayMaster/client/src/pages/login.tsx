@@ -11,15 +11,24 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [, navigate] = useLocation();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setError("");
+    if (!username || !password) {
+      setError("Username and password are required");
+      return;
+    }
     try {
+      setIsSubmitting(true);
       await apiRequest("POST", "/login", { username, password });
       await queryClient.invalidateQueries({ queryKey: ["/api/me"] });
       navigate("/");
     } catch (err: any) {
       setError(err.message);
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -35,6 +44,7 @@ export default function Login() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 autoComplete="username"
+                required
               />
             </div>
             <div className="space-y-2">
@@ -45,11 +55,12 @@ export default function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
+                required
               />
             </div>
             {error && <p className="text-sm text-red-500">{error}</p>}
-            <Button type="submit" className="w-full">
-              Login
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? "Logging in…" : "Login"}
             </Button>
           </form>
         </CardContent>
