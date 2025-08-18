@@ -42,8 +42,13 @@ passport.deserializeUser((id: string, done) => {
 const MemoryStore = createMemoryStore(session);
 
 const app = express();
+app.set("etag", false);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+app.use("/api", (_req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  next();
+});
 
 const sessionSecret = process.env.SESSION_SECRET;
 if (!sessionSecret) {
