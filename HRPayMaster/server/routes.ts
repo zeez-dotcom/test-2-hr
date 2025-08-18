@@ -346,10 +346,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error instanceof z.ZodError) {
         return next(new HttpError(400, "Invalid employee data", error.errors));
       }
-      if (error instanceof DuplicateEmployeeCodeError) {
+      // Handle duplicate employee code from either domain error or raw DB unique violation
+      if (
+        error instanceof DuplicateEmployeeCodeError ||
+        (error as any)?.code === "23505"
+      ) {
         return next(new HttpError(409, "Employee code already exists"));
       }
-      next(new HttpError(500, "Failed to create employee"));
+      return next(new HttpError(500, "Failed to create employee"));
     }
   });
 
