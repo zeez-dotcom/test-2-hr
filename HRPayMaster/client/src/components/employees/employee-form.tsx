@@ -131,13 +131,27 @@ export default function EmployeeForm({
   const residencyOnCompany = form.watch("residencyOnCompany");
 
   const handleSubmit = (data: FormData) => {
-    const { employeeCode, workLocation, ...rest } = data;
+    const {
+      employeeCode,
+      workLocation,
+      salary,
+      additions,
+      visaAlertDays,
+      civilIdAlertDays,
+      passportAlertDays,
+      transferable,
+      residencyOnCompany,
+      ...rest
+    } = data;
     const payload: any = {
       ...rest,
-      salary: data.salary?.toString() || "",
-      additions: data.additions?.toString() || "",
-      transferable: data.transferable ?? false,
-      residencyOnCompany: data.residencyOnCompany ?? false,
+      ...(salary ? { salary: Number(salary) } : {}),
+      ...(additions ? { additions: Number(additions) } : {}),
+      ...(visaAlertDays ? { visaAlertDays: Number(visaAlertDays) } : {}),
+      ...(civilIdAlertDays ? { civilIdAlertDays: Number(civilIdAlertDays) } : {}),
+      ...(passportAlertDays ? { passportAlertDays: Number(passportAlertDays) } : {}),
+      transferable: transferable ?? false,
+      residencyOnCompany: residencyOnCompany ?? false,
     };
     if (employeeCode && employeeCode.trim() !== "") {
       payload.employeeCode = employeeCode.trim();
