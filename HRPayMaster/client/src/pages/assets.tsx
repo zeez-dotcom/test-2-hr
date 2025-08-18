@@ -25,15 +25,21 @@ export default function Assets() {
   const [isAssignOpen, setIsAssignOpen] = useState(false);
   const { toast } = useToast();
 
-  const { data: assets = [] } = useQuery<AssetWithAssignment[]>({
+  const {
+    data: assets = [],
+    error: assetsError,
+  } = useQuery<AssetWithAssignment[]>({
     queryKey: ["/api/assets"],
   });
 
-  const { data: assignments = [] } = useQuery<AssetAssignmentWithDetails[]>({
+  const {
+    data: assignments = [],
+    error: assignmentsError,
+  } = useQuery<AssetAssignmentWithDetails[]>({
     queryKey: ["/api/asset-assignments"],
   });
 
-  const { data: employees = [] } = useQuery<Employee[]>({
+  const { data: employees = [], error: employeesError } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
   });
 
@@ -78,6 +84,10 @@ export default function Assets() {
       notes: "",
     },
   });
+
+  if (assetsError || assignmentsError || employeesError) {
+    return <div>Error loading assets</div>;
+  }
 
   const onSubmitAsset = (data: any) => createAsset.mutate(data);
   const onSubmitAssignment = (data: any) => assignAsset.mutate(data);

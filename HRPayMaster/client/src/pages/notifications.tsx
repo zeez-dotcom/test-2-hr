@@ -12,11 +12,18 @@ import type { NotificationWithEmployee } from "@shared/schema";
 export default function NotificationsPage() {
   const { toast } = useToast();
 
-  const { data: notifications = [], isLoading } = useQuery<NotificationWithEmployee[]>({
+  const {
+    data: notifications = [],
+    isLoading,
+    error: notificationsError,
+  } = useQuery<NotificationWithEmployee[]>({
     queryKey: ["/api/notifications"],
   });
 
-  const { data: unreadNotifications = [] } = useQuery<NotificationWithEmployee[]>({
+  const {
+    data: unreadNotifications = [],
+    error: unreadError,
+  } = useQuery<NotificationWithEmployee[]>({
     queryKey: ["/api/notifications/unread"],
   });
 
@@ -57,6 +64,10 @@ export default function NotificationsPage() {
       });
     },
   });
+
+  if (notificationsError || unreadError) {
+    return <div>Error loading notifications</div>;
+  }
 
   const getPriorityBadge = (priority: string) => {
     const variants = {

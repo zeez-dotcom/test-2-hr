@@ -27,7 +27,11 @@ export default function Payroll() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const { toast } = useToast();
 
-  const { data: payrollRuns, isLoading } = useQuery<PayrollRun[]>({
+  const {
+    data: payrollRuns,
+    isLoading,
+    error,
+  } = useQuery<PayrollRun[]>({
     queryKey: ["/api/payroll"],
   });
 
@@ -74,6 +78,9 @@ export default function Payroll() {
     },
   });
 
+  if (error) {
+    return <div>Error loading payroll data</div>;
+  }
 
   const handleGeneratePayroll = (data: PayrollGenerateRequest) => {
     generatePayrollMutation.mutate(data);

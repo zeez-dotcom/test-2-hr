@@ -28,15 +28,23 @@ export default function Cars() {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const { toast } = useToast();
 
-  const { data: cars = [], isLoading: carsLoading } = useQuery<CarWithAssignment[]>({
+  const {
+    data: cars = [],
+    isLoading: carsLoading,
+    error: carsError,
+  } = useQuery<CarWithAssignment[]>({
     queryKey: ["/api/cars"]
   });
 
-  const { data: carAssignments = [], isLoading: assignmentsLoading } = useQuery<CarAssignmentWithDetails[]>({
+  const {
+    data: carAssignments = [],
+    isLoading: assignmentsLoading,
+    error: assignmentsError,
+  } = useQuery<CarAssignmentWithDetails[]>({
     queryKey: ["/api/car-assignments"]
   });
 
-  const { data: employees = [] } = useQuery({
+  const { data: employees = [], error: employeesError } = useQuery({
     queryKey: ["/api/employees"]
   });
 
@@ -111,6 +119,10 @@ export default function Cars() {
       notes: "",
     },
   });
+
+  if (carsError || assignmentsError || employeesError) {
+    return <div>Error loading cars</div>;
+  }
 
   const onSubmitCar = (data: any) => {
     createCarMutation.mutate(data);

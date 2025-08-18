@@ -23,11 +23,15 @@ export default function Loans() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const { toast } = useToast();
 
-  const { data: loans = [], isLoading } = useQuery<LoanWithEmployee[]>({
+  const {
+    data: loans = [],
+    isLoading,
+    error: loansError,
+  } = useQuery<LoanWithEmployee[]>({
     queryKey: ["/api/loans"]
   });
 
-  const { data: employees = [] } = useQuery({
+  const { data: employees = [], error: employeesError } = useQuery({
     queryKey: ["/api/employees"]
   });
 
@@ -78,6 +82,10 @@ export default function Loans() {
       reason: ""
     }
   });
+
+  if (loansError || employeesError) {
+    return <div>Error loading loans</div>;
+  }
 
   const onSubmit = (data: any) => {
     createMutation.mutate(data);

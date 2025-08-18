@@ -24,11 +24,15 @@ export default function Departments() {
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
   const { toast } = useToast();
 
-  const { data: departments, isLoading } = useQuery<Department[]>({
+  const {
+    data: departments,
+    isLoading,
+    error: departmentsError,
+  } = useQuery<Department[]>({
     queryKey: ["/api/departments"],
   });
 
-  const { data: employees } = useQuery<EmployeeWithDepartment[]>({
+  const { data: employees, error: employeesError } = useQuery<EmployeeWithDepartment[]>({
     queryKey: ["/api/employees"],
   });
 
@@ -113,6 +117,10 @@ export default function Departments() {
       });
     },
   });
+
+  if (departmentsError || employeesError) {
+    return <div>Error loading departments</div>;
+  }
 
   const handleAddDepartment = (data: DepartmentFormData) => {
     addDepartmentMutation.mutate(data);

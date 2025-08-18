@@ -21,11 +21,15 @@ export default function Employees() {
   const [editingEmployee, setEditingEmployee] = useState<EmployeeWithDepartment | null>(null);
   const { toast } = useToast();
 
-  const { data: employees, isLoading: employeesLoading } = useQuery<EmployeeWithDepartment[]>({
+  const {
+    data: employees,
+    isLoading: employeesLoading,
+    error: employeesError,
+  } = useQuery<EmployeeWithDepartment[]>({
     queryKey: ["/api/employees"],
   });
 
-  const { data: departments } = useQuery<Department[]>({
+  const { data: departments, error: departmentsError } = useQuery<Department[]>({
     queryKey: ["/api/departments"],
   });
 
@@ -94,6 +98,10 @@ export default function Employees() {
       });
     },
   });
+
+  if (employeesError || departmentsError) {
+    return <div>Error loading employees</div>;
+  }
 
   // Filter employees based on search query and department
   const filteredEmployees = employees?.filter((employee) => {
