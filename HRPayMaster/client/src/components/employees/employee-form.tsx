@@ -39,16 +39,23 @@ export default function EmployeeForm({
     defaultValues: {
       firstName: initialData?.firstName || "",
       lastName: initialData?.lastName || "",
+      nickname: initialData?.nickname || "",
       employeeCode: initialData?.employeeCode || "",
       email: initialData?.email || "",
       phone: initialData?.phone || "",
       position: initialData?.position || "",
+      workLocation: initialData?.workLocation || "",
       role: initialData?.role || "employee",
       departmentId: initialData?.departmentId || undefined,
       salary: initialData?.salary || "",
       standardWorkingDays: initialData?.standardWorkingDays || 26,
       startDate: initialData?.startDate || new Date().toISOString().split('T')[0],
       status: initialData?.status || "active",
+      emergencyContact: initialData?.emergencyContact || "",
+      emergencyPhone: initialData?.emergencyPhone || "",
+      nationalId: initialData?.nationalId || "",
+      address: initialData?.address || "",
+      dateOfBirth: initialData?.dateOfBirth || "",
       visaAlertDays: initialData?.visaAlertDays || 90,
       civilIdAlertDays: initialData?.civilIdAlertDays || 60,
       passportAlertDays: initialData?.passportAlertDays || 90,
@@ -56,6 +63,8 @@ export default function EmployeeForm({
       visaImage: initialData?.visaImage || undefined,
       civilIdImage: initialData?.civilIdImage || undefined,
       passportImage: initialData?.passportImage || undefined,
+      bankIban: initialData?.bankIban || "",
+      bankName: initialData?.bankName || "",
       nationality: initialData?.nationality || "",
       professionCode: initialData?.professionCode || "",
       profession: initialData?.profession || "",
@@ -130,7 +139,21 @@ export default function EmployeeForm({
               </FormItem>
             )}
           />
-          
+
+          <FormField
+            control={form.control}
+            name="nickname"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Nickname</FormLabel>
+                <FormControl>
+                  <Input placeholder="Johnny" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
           <FormField
             control={form.control}
             name="email"
@@ -172,7 +195,21 @@ export default function EmployeeForm({
               </FormItem>
             )}
           />
-          
+
+          <FormField
+            control={form.control}
+            name="workLocation"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Work Location</FormLabel>
+                <FormControl>
+                  <Input placeholder="Office" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
           <FormField
             control={form.control}
             name="departmentId"
@@ -287,6 +324,104 @@ export default function EmployeeForm({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <FormField
+            control={form.control}
+            name="dateOfBirth"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Date of Birth</FormLabel>
+                <FormControl>
+                  <Input type="date" {...field} value={field.value || ""} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="nationalId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>National ID</FormLabel>
+                <FormControl>
+                  <Input placeholder="National ID" {...field} value={field.value || ""} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="address"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Address</FormLabel>
+                <FormControl>
+                  <Input placeholder="Address" {...field} value={field.value || ""} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="emergencyContact"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Emergency Contact</FormLabel>
+                <FormControl>
+                  <Input placeholder="Contact Name" {...field} value={field.value || ""} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="emergencyPhone"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Emergency Phone</FormLabel>
+                <FormControl>
+                  <Input type="tel" placeholder="(555) 987-6543" {...field} value={field.value || ""} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="bankIban"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Bank IBAN</FormLabel>
+                <FormControl>
+                  <Input placeholder="Bank IBAN" {...field} value={field.value || ""} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="bankName"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Bank Name</FormLabel>
+                <FormControl>
+                  <Input placeholder="Bank Name" {...field} value={field.value || ""} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
           <FormField
             control={form.control}
             name="nationality"
