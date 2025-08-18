@@ -248,6 +248,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const employeeNumberSchema = insertEmployeeSchema.extend({
+    employeeCode: z.coerce.string().optional(),
+    phone: z.coerce.string().optional(),
+    emergencyPhone: z.coerce.string().optional(),
+    nationalId: z.coerce.string().optional(),
     salary: z.coerce.number(),
     additions: z.coerce.number().optional(),
     visaAlertDays: z.coerce.number().optional(),
@@ -402,9 +406,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/employees", async (req, res, next) => {
     try {
-      const employee = employeeNumberSchema
-        .extend({ employeeCode: employeeNumberSchema.shape.employeeCode.optional() })
-        .parse(req.body);
+      const employee = employeeNumberSchema.parse(req.body);
       if (!employee.employeeCode?.trim()) {
         delete (employee as any).employeeCode;
       } else {
