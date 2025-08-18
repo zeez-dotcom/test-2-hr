@@ -14,6 +14,7 @@ export const employees = pgTable("employees", {
   employeeCode: varchar("employee_code").notNull().unique(),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
+  arabicName: text("arabic_name"),
   nickname: text("nickname"),
   email: text("email"),
   phone: text("phone"),
@@ -269,6 +270,7 @@ export const insertDepartmentSchema = createInsertSchema(departments).omit({
 export const insertEmployeeSchema = createInsertSchema(employees)
   .omit({ id: true })
   .partial({
+    arabicName: true,
     nickname: true,
     email: true,
     phone: true,
