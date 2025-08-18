@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Menu, X, Users, BarChart3, Building, DollarSign, Calendar, CreditCard, Car, FileText, Bell, Award, TrendingUp } from "lucide-react";
+import { Menu, X, Users, BarChart3, Building, DollarSign, Calendar, CreditCard, Car, FileText, Bell, Award, TrendingUp, Package } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import Sidebar from "./sidebar";
@@ -95,6 +95,7 @@ function MobileSidebarContent({ setSidebarOpen }: { setSidebarOpen: (open: boole
     { name: "Reports", href: "/reports", icon: TrendingUp },
     { name: "Vacations", href: "/vacations", icon: Calendar },
     { name: "Loans", href: "/loans", icon: CreditCard },
+    { name: "Assets", href: "/assets", icon: Package },
     { name: "Fleet", href: "/cars", icon: Car },
     { name: "Documents", href: "/documents", icon: FileText },
     { name: "Notifications", href: "/notifications", icon: Bell },
