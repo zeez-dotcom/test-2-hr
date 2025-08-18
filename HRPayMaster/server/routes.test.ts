@@ -136,6 +136,39 @@ describe('employee routes', () => {
     expect(res.body.error.message).toBe('Invalid employee data');
   });
 
+  it('POST /api/employees creates employee with missing optional numeric fields', async () => {
+    const created = {
+      id: '1',
+      employeeCode: 'EMP1',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      position: 'Dev',
+      salary: '1000',
+      workLocation: 'Office',
+      startDate: '2024-01-01',
+      role: 'employee'
+    };
+    (storage.createEmployee as any).mockResolvedValue(created);
+
+    const res = await request(app).post('/api/employees').send({
+      firstName: 'Jane',
+      lastName: 'Doe',
+      position: 'Dev',
+      salary: '1000',
+      startDate: '2024-01-01',
+      additions: ''
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual(created);
+
+    const arg = (storage.createEmployee as any).mock.calls[0][0];
+    expect(arg.salary).toBe(1000);
+    expect(arg).not.toHaveProperty('additions');
+    expect(arg).not.toHaveProperty('visaAlertDays');
+    expect(arg).not.toHaveProperty('standardWorkingDays');
+  });
+
   it('PUT /api/employees/:id rejects employeeCode updates', async () => {
     const res = await request(app)
       .put('/api/employees/1')
