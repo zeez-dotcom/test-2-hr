@@ -28,9 +28,8 @@ const formSchema = insertEmployeeSchema.extend({
   civilIdAlertDays: z.coerce.number().max(365).optional(),
   passportAlertDays: z.coerce.number().max(365).optional(),
   employeeCode: z
-    .string()
-    .trim()
-    .min(1, "Employee code cannot be empty")
+    .coerce.string()
+    .regex(/^\d{1,3}$/)
     .optional()
     .or(z.literal("")),
 });
@@ -173,7 +172,14 @@ export default function EmployeeForm({
               <FormItem>
                 <FormLabel>Employee Code</FormLabel>
                 <FormControl>
-                  <Input placeholder="EMP001" disabled={!!initialData?.employeeCode} {...field} />
+                  <Input
+                    type="number"
+                    inputMode="numeric"
+                    pattern="\\d{1,3}"
+                    placeholder="123"
+                    disabled={!!initialData?.employeeCode}
+                    {...field}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>

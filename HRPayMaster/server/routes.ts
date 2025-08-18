@@ -248,7 +248,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const employeeNumberSchema = insertEmployeeSchema.extend({
-    employeeCode: z.coerce.string().optional(),
+    employeeCode: z.coerce.string().regex(/^\d{1,3}$/).optional(),
     phone: z.coerce.string().optional(),
     emergencyPhone: z.coerce.string().optional(),
     nationalId: z.coerce.string().optional(),
@@ -348,19 +348,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           else custom[key] = value;
         }
 
-        const code = base.employeeCode as string | undefined;
+        let emp: InsertEmployee;
+        try {
+          emp = employeeNumberSchema.parse(base) as any;
+        } catch {
+          failed++;
+          continue;
+        }
+
+        const code = emp.employeeCode;
         if (!code || seen.has(code) || existingCodes.has(code)) {
           failed++;
           continue;
         }
         seen.add(code);
-        try {
-          const emp = employeeNumberSchema.parse(base);
-          valid.push(emp as any);
-          customValues.push(custom);
-        } catch {
-          failed++;
-        }
+        valid.push(emp as any);
+        customValues.push(custom);
       }
 
       const {

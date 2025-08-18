@@ -60,7 +60,7 @@ describe('employee routes', () => {
     const mockEmployees = [
       {
         id: '1',
-        employeeCode: 'E001',
+        employeeCode: '1',
         firstName: 'John',
         lastName: 'Doe',
         position: 'Dev',
@@ -249,6 +249,33 @@ describe('employee routes', () => {
     expect(arg.nationalId).toBe('555555');
   });
 
+  it('POST /api/employees accepts numeric employeeCode values', async () => {
+    const created = {
+      id: '4',
+      employeeCode: '5',
+      firstName: 'Num',
+      lastName: 'Code',
+      position: 'Dev',
+      salary: 100,
+      startDate: '2024-01-01',
+      role: 'employee'
+    };
+    (storage.createEmployee as any).mockResolvedValue(created);
+
+    const res = await request(app).post('/api/employees').send({
+      firstName: 'Num',
+      lastName: 'Code',
+      position: 'Dev',
+      salary: 100,
+      startDate: '2024-01-01',
+      employeeCode: 5
+    });
+
+    expect(res.status).toBe(201);
+    const arg = (storage.createEmployee as any).mock.calls[0][0];
+    expect(arg.employeeCode).toBe('5');
+  });
+
   // Keep the "missing optional numeric fields" scenario
   it('POST /api/employees creates employee when optional numeric fields are missing', async () => {
     const created = {
@@ -347,7 +374,7 @@ describe('employee routes', () => {
 
   it('POST /api/employees/import returns headers when no mapping provided', async () => {
     const wb = XLSX.utils.book_new();
-    const data = [{ Code: 'E001', First: 'John' }];
+    const data = [{ Code: 1, First: 'John' }];
     const ws = XLSX.utils.json_to_sheet(data);
     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
@@ -365,7 +392,7 @@ describe('employee routes', () => {
     (storage.createEmployeesBulk as any).mockResolvedValue({ success: 1, failed: 0 });
     const wb = XLSX.utils.book_new();
     const data = [{
-      Code: 'E001',
+      Code: 1,
       First: 'John',
       Last: 'Doe',
       Position: 'Dev',
@@ -400,7 +427,7 @@ describe('employee routes', () => {
     (storage.createEmployeesBulk as any).mockResolvedValue({ success: 1, failed: 0 });
     const wb = XLSX.utils.book_new();
     const data = [{
-      Code: 'E001',
+      Code: 1,
       First: 'John',
       Last: 'Doe',
       Position: 'Dev',
@@ -443,7 +470,7 @@ describe('employee routes', () => {
       employees: [
         {
           id: '1',
-          employeeCode: 'E001',
+          employeeCode: '1',
           firstName: 'John',
           lastName: 'Doe',
           position: 'Dev',
@@ -460,7 +487,7 @@ describe('employee routes', () => {
     const wb = XLSX.utils.book_new();
     const data = [
       {
-        Code: 'E001',
+        Code: 1,
         First: 'John',
         Last: 'Doe',
         Position: 'Dev',
@@ -497,9 +524,40 @@ describe('employee routes', () => {
     });
   });
 
+  it('POST /api/employees/import accepts numeric employee codes', async () => {
+    (storage.getEmployees as any).mockResolvedValue([]);
+    (storage.getEmployeeCustomFields as any).mockResolvedValue([]);
+    (storage.createEmployeesBulk as any).mockResolvedValue({ success: 1, failed: 0 });
+    const wb = XLSX.utils.book_new();
+    const data = [
+      { Code: 14, First: 'Jane', Last: 'Doe', Position: 'Dev', Salary: 100, Start: '2024-01-01' },
+    ];
+    const ws = XLSX.utils.json_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    const mapping = {
+      Code: 'employeeCode',
+      First: 'firstName',
+      Last: 'lastName',
+      Position: 'position',
+      Salary: 'salary',
+      Start: 'startDate',
+    };
+
+    const res = await request(app)
+      .post('/api/employees/import')
+      .field('mapping', JSON.stringify(mapping))
+      .attach('file', buffer, 'employees.xlsx');
+
+    expect(res.status).toBe(200);
+    const arg = (storage.createEmployeesBulk as any).mock.calls[0][0][0];
+    expect(arg.employeeCode).toBe('14');
+  });
+
   it('POST /api/employees/import errors when required mapping missing', async () => {
     const wb = XLSX.utils.book_new();
-    const data = [{ Code: 'E001', First: 'John' }];
+    const data = [{ Code: 1, First: 'John' }];
     const ws = XLSX.utils.json_to_sheet(data);
     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
