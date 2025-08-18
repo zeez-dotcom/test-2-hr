@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import ImageUpload from "@/components/ui/image-upload";
-import type { Department, InsertEmployee } from "@shared/schema";
+import type { Company, Department, InsertEmployee } from "@shared/schema";
 import { z } from "zod";
 
 const formSchema = insertEmployeeSchema.extend({
@@ -24,16 +24,18 @@ type FormData = z.infer<typeof formSchema>;
 
 interface EmployeeFormProps {
   departments: Department[];
+  companies?: Company[];
   onSubmit: (employee: InsertEmployee) => void;
   isSubmitting: boolean;
   initialData?: Partial<InsertEmployee>;
 }
 
-export default function EmployeeForm({ 
-  departments, 
-  onSubmit, 
-  isSubmitting, 
-  initialData 
+export default function EmployeeForm({
+  departments,
+  companies = [],
+  onSubmit,
+  isSubmitting,
+  initialData
 }: EmployeeFormProps) {
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -49,6 +51,7 @@ export default function EmployeeForm({
       workLocation: initialData?.workLocation || "",
       role: initialData?.role || "employee",
       departmentId: initialData?.departmentId || undefined,
+      companyId: initialData?.companyId || undefined,
       salary: initialData?.salary || "",
       additions: initialData?.additions || "",
       standardWorkingDays: initialData?.standardWorkingDays || 26,
@@ -224,6 +227,31 @@ export default function EmployeeForm({
                 <FormControl>
                   <Input placeholder="Office" {...field} />
                 </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="companyId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Company</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value || undefined}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Company" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {companies.filter(co => co.id && co.id.trim() !== "").map((co) => (
+                      <SelectItem key={co.id} value={co.id}>
+                        {co.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <FormMessage />
               </FormItem>
             )}
