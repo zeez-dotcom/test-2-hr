@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,6 @@ import {
 import type { EmployeeWithDepartment, Department } from "@shared/schema";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
 
 interface EmployeesResponse {
   data: EmployeeWithDepartment[];
@@ -52,14 +51,13 @@ export default function EmployeeTable({
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
   const pageSize = 10;
-  const { toast } = useToast();
   const [viewEmployee, setViewEmployee] = useState<EmployeeWithDepartment | null>(null);
 
   const { data: departments } = useQuery<Department[]>({
     queryKey: ["/api/departments"],
   });
 
-  const { data, isLoading, error } = useQuery<EmployeesResponse>({
+  const { data, isLoading, error, refetch } = useQuery<EmployeesResponse>({
     queryKey: [
       "/api/employees",
       { page, nameFilter, departmentFilter, statusFilter, sortBy, sortOrder },
@@ -98,15 +96,14 @@ export default function EmployeeTable({
     },
   });
 
-  useEffect(() => {
-    if (error) {
-      toast({
-        title: "Error",
-        description: "Failed to fetch employees",
-        variant: "destructive",
-      });
-    }
-  }, [error, toast]);
+  if (error) {
+    return (
+      <div className="p-4">
+        <p className="mb-2">Failed to load employees.</p>
+        <Button onClick={() => refetch()}>Retry</Button>
+      </div>
+    );
+  }
 
   const employees: EmployeeWithDepartment[] = data?.data ?? [];
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / pageSize));

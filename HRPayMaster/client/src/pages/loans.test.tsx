@@ -5,7 +5,7 @@ import { queryClient } from '@/lib/queryClient';
 import Loans from './loans';
 import '@testing-library/jest-dom';
 
-const toast = vi.fn();
+const { toast } = vi.hoisted(() => ({ toast: vi.fn() }));
 const mutationMocks: any[] = [];
 
 vi.mock('@tanstack/react-query', async () => {
@@ -32,6 +32,7 @@ vi.mock('@tanstack/react-query', async () => {
 
 vi.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast }),
+  toast,
 }));
 
 vi.mock('@/components/ui/button', () => ({

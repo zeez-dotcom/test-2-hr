@@ -28,11 +28,16 @@ export default function Employees() {
     data: employees,
     isLoading: employeesLoading,
     error: employeesError,
+    refetch: refetchEmployees,
   } = useQuery<EmployeeWithDepartment[]>({
     queryKey: ["/api/employees"],
   });
 
-  const { data: departments, error: departmentsError } = useQuery<Department[]>({
+  const {
+    data: departments,
+    error: departmentsError,
+    refetch: refetchDepartments,
+  } = useQuery<Department[]>({
     queryKey: ["/api/departments"],
   });
 
@@ -103,7 +108,19 @@ export default function Employees() {
   });
 
   if (employeesError || departmentsError) {
-    return <div>Error loading employees</div>;
+    return (
+      <div>
+        <p>Error loading employees</p>
+        <Button
+          onClick={() => {
+            refetchEmployees();
+            refetchDepartments();
+          }}
+        >
+          Retry
+        </Button>
+      </div>
+    );
   }
 
   // Filter employees based on search query and department

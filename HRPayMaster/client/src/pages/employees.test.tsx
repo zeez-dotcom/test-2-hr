@@ -6,8 +6,10 @@ import { queryClient } from '@/lib/queryClient';
 import Employees from './employees';
 import '@testing-library/jest-dom';
 
+const { toast } = vi.hoisted(() => ({ toast: vi.fn() }));
 vi.mock('@/hooks/use-toast', () => ({
-  useToast: () => ({ toast: vi.fn() }),
+  useToast: () => ({ toast }),
+  toast,
 }));
 
 vi.mock('@/components/employees/employee-table', () => ({
