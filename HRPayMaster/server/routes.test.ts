@@ -434,6 +434,50 @@ describe('employee routes', () => {
     expect(employee.visaAlertDays).toBe(5);
   });
 
+  it('POST /api/employees/import preserves numeric text fields', async () => {
+    (storage.getEmployees as any).mockResolvedValue([]);
+    (storage.createEmployeesBulk as any).mockResolvedValue({ success: 1, failed: 0 });
+    const wb = XLSX.utils.book_new();
+    const data = [{
+      Code: 'E002',
+      First: 'Jane',
+      Last: 'Smith',
+      Position: 'QA',
+      Salary: 1500,
+      Start: '2024-01-01',
+      Phone: 12345678,
+      National: 9876543210,
+      Emergency: 11223344,
+    }];
+    const ws = XLSX.utils.json_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    const mapping = {
+      Code: 'employeeCode',
+      First: 'firstName',
+      Last: 'lastName',
+      Position: 'position',
+      Salary: 'salary',
+      Start: 'startDate',
+      Phone: 'phone',
+      National: 'nationalId',
+      Emergency: 'emergencyPhone',
+    };
+
+    const res = await request(app)
+      .post('/api/employees/import')
+      .field('mapping', JSON.stringify(mapping))
+      .attach('file', buffer, 'employees.xlsx');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ success: 1, failed: 0 });
+    const employee = (storage.createEmployeesBulk as any).mock.calls[0][0][0];
+    expect(employee.phone).toBe('12345678');
+    expect(employee.nationalId).toBe('9876543210');
+    expect(employee.emergencyPhone).toBe('11223344');
+  });
+
   it('POST /api/employees/import creates custom fields and values', async () => {
     (storage.getEmployees as any).mockResolvedValue([]);
     (storage.getEmployeeCustomFields as any).mockResolvedValue([]);

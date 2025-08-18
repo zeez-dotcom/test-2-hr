@@ -252,6 +252,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     phone: z.coerce.string().optional(),
     emergencyPhone: z.coerce.string().optional(),
     nationalId: z.coerce.string().optional(),
+    civilId: z.coerce.string().optional(),
+    passportNumber: z.coerce.string().optional(),
+    visaNumber: z.coerce.string().optional(),
+    drivingLicenseNumber: z.coerce.string().optional(),
+    bankIban: z.coerce.string().optional(),
+    iban: z.coerce.string().optional(),
+    swiftCode: z.coerce.string().optional(),
     salary: z.coerce.number(),
     additions: z.coerce.number().optional(),
     visaAlertDays: z.coerce.number().optional(),
@@ -346,6 +353,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         for (const [key, value] of Object.entries(translated)) {
           if (employeeFieldKeys.has(key)) base[key] = value;
           else custom[key] = value;
+        }
+
+        // Convert numeric-looking text fields to strings to preserve leading zeros
+        const stringFields = [
+          "employeeCode",
+          "phone",
+          "emergencyPhone",
+          "nationalId",
+          "civilId",
+          "passportNumber",
+          "visaNumber",
+          "drivingLicenseNumber",
+          "bankIban",
+          "iban",
+          "swiftCode",
+        ];
+        for (const field of stringFields) {
+          if (typeof base[field] === "number") base[field] = String(base[field]);
         }
 
         const code = base.employeeCode as string | undefined;
