@@ -7,7 +7,7 @@ import CarImport from '@/components/cars/car-import';
 import '@testing-library/jest-dom';
 import React from 'react';
 
-const toast = vi.fn();
+const { toast } = vi.hoisted(() => ({ toast: vi.fn() }));
 const mutationMocks: any[] = [];
 
 vi.mock('@tanstack/react-query', async () => {
@@ -34,6 +34,7 @@ vi.mock('@tanstack/react-query', async () => {
 
 vi.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast }),
+  toast,
 }));
 
 vi.mock('@/components/ui/button', () => ({

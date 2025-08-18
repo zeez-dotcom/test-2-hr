@@ -34,6 +34,7 @@ export default function Payroll() {
     data: payrollRuns,
     isLoading,
     error,
+    refetch,
   } = useQuery<PayrollRun[]>({
     queryKey: ["/api/payroll"],
   });
@@ -82,7 +83,12 @@ export default function Payroll() {
   });
 
   if (error) {
-    return <div>Error loading payroll data</div>;
+    return (
+      <div>
+        <p>Error loading payroll data</p>
+        <Button onClick={() => refetch()}>Retry</Button>
+      </div>
+    );
   }
 
   const handleGeneratePayroll = (data: PayrollGenerateRequest) => {
