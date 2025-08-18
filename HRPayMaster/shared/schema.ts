@@ -9,6 +9,11 @@ export const departments = pgTable("departments", {
   description: text("description"),
 });
 
+export const companies = pgTable("companies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+});
+
 export const employees = pgTable("employees", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   employeeCode: varchar("employee_code").notNull().unique(),
@@ -21,6 +26,7 @@ export const employees = pgTable("employees", {
   position: text("position").notNull(),
   role: text("role").notNull().default("employee"),
   departmentId: varchar("department_id").references(() => departments.id),
+  companyId: varchar("company_id").references(() => companies.id),
   salary: numeric("salary", { precision: 10, scale: 2 }).notNull(),
   additions: numeric("additions", { precision: 10, scale: 2 }),
   workLocation: varchar("work_location", { length: 100 }).default("Office").notNull(),
@@ -268,6 +274,10 @@ export const insertDepartmentSchema = createInsertSchema(departments).omit({
   id: true,
 });
 
+export const insertCompanySchema = createInsertSchema(companies).omit({
+  id: true,
+});
+
 export const insertEmployeeSchema = createInsertSchema(employees)
   .omit({ id: true })
   .partial({
@@ -277,6 +287,7 @@ export const insertEmployeeSchema = createInsertSchema(employees)
     phone: true,
     role: true,
     departmentId: true,
+    companyId: true,
     workLocation: true,
     status: true,
     bankIban: true,
@@ -411,6 +422,9 @@ export const insertSickLeaveTrackingSchema = createInsertSchema(sickLeaveTrackin
 export type Department = typeof departments.$inferSelect;
 export type InsertDepartment = z.infer<typeof insertDepartmentSchema>;
 
+export type Company = typeof companies.$inferSelect;
+export type InsertCompany = z.infer<typeof insertCompanySchema>;
+
 export type Employee = typeof employees.$inferSelect;
 export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
 
@@ -488,6 +502,7 @@ export type DocumentExpiryCheck = {
 // Extended types for API responses
 export type EmployeeWithDepartment = Employee & {
   department?: Department;
+  company?: Company;
 };
 
 export type PayrollRunWithEntries = PayrollRun & {
@@ -529,11 +544,19 @@ export type AssetAssignmentWithDetails = AssetAssignment & {
 };
 
 // Relations
+export const companiesRelations = relations(companies, ({ many }) => ({
+  employees: many(employees),
+}));
+
 export const departmentsRelations = relations(departments, ({ many }) => ({
   employees: many(employees),
 }));
 
 export const employeesRelations = relations(employees, ({ one, many }) => ({
+  company: one(companies, {
+    fields: [employees.companyId],
+    references: [companies.id],
+  }),
   department: one(departments, {
     fields: [employees.departmentId],
     references: [departments.id],
