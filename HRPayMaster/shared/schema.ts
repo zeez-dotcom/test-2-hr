@@ -266,9 +266,9 @@ export const insertDepartmentSchema = createInsertSchema(departments).omit({
   id: true,
 });
 
-export const insertEmployeeSchema = createInsertSchema(employees).omit({
-  id: true,
-});
+export const insertEmployeeSchema = createInsertSchema(employees)
+  .omit({ id: true })
+  .partial();
 
 export const insertEmployeeCustomFieldSchema = createInsertSchema(employeeCustomFields).omit({
   id: true,
