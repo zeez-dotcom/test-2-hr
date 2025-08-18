@@ -3,8 +3,19 @@ import { toast } from "@/hooks/use-toast";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    const error = new Error(`${res.status}: ${text}`) as Error & { status?: number };
+    const contentType = res.headers.get("content-type") ?? "";
+    let message: string;
+
+    if (!contentType.includes("application/json")) {
+      await res.text();
+      message = "Unexpected non-JSON response";
+    } else {
+      message = (await res.text()) || res.statusText;
+    }
+
+    const error = new Error(`${res.status}: ${message}`) as Error & {
+      status?: number;
+    };
     error.status = res.status;
     throw error;
   }
