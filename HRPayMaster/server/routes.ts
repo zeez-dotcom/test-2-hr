@@ -6,6 +6,7 @@ import { storage, DuplicateEmployeeCodeError } from "./storage";
 import { assetService } from "./assetService";
 import {
   insertDepartmentSchema,
+  insertCompanySchema,
   insertEmployeeSchema,
   insertVacationRequestSchema,
   insertAssetSchema,
@@ -115,6 +116,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(204).send();
     } catch (error) {
       next(new HttpError(500, "Failed to delete department"));
+    }
+  });
+
+  // Company routes
+  app.get("/api/companies", async (_req, res, next) => {
+    try {
+      const companies = await storage.getCompanies();
+      res.json(companies);
+    } catch (error) {
+      next(new HttpError(500, "Failed to fetch companies"));
+    }
+  });
+
+  app.get("/api/companies/:id", async (req, res, next) => {
+    try {
+      const company = await storage.getCompany(req.params.id);
+      if (!company) {
+        return next(new HttpError(404, "Company not found"));
+      }
+      res.json(company);
+    } catch (error) {
+      next(new HttpError(500, "Failed to fetch company"));
+    }
+  });
+
+  app.post("/api/companies", async (req, res, next) => {
+    try {
+      const company = insertCompanySchema.parse(req.body);
+      const newCompany = await storage.createCompany(company);
+      res.status(201).json(newCompany);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return next(new HttpError(400, "Invalid company data", error.errors));
+      }
+      next(new HttpError(500, "Failed to create company"));
+    }
+  });
+
+  app.put("/api/companies/:id", async (req, res, next) => {
+    try {
+      const updates = insertCompanySchema.partial().parse(req.body);
+      const updatedCompany = await storage.updateCompany(req.params.id, updates);
+      if (!updatedCompany) {
+        return next(new HttpError(404, "Company not found"));
+      }
+      res.json(updatedCompany);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return next(new HttpError(400, "Invalid company data", error.errors));
+      }
+      next(new HttpError(500, "Failed to update company"));
+    }
+  });
+
+  app.delete("/api/companies/:id", async (req, res, next) => {
+    try {
+      const deleted = await storage.deleteCompany(req.params.id);
+      if (!deleted) {
+        return next(new HttpError(404, "Company not found"));
+      }
+      res.status(204).send();
+    } catch (error) {
+      next(new HttpError(500, "Failed to delete company"));
     }
   });
 

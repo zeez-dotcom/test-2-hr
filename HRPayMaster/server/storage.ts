@@ -39,7 +39,10 @@ import {
   type InsertEmployeeCustomField,
   type EmployeeCustomValue,
   type InsertEmployeeCustomValue,
+  type Company,
+  type InsertCompany,
   departments,
+  companies,
   employees,
   employeeCustomFields,
   employeeCustomValues,
@@ -80,6 +83,13 @@ export interface IStorage {
   createDepartment(department: InsertDepartment): Promise<Department>;
   updateDepartment(id: string, department: Partial<InsertDepartment>): Promise<Department | undefined>;
   deleteDepartment(id: string): Promise<boolean>;
+
+  // Company methods
+  getCompanies(): Promise<Company[]>;
+  getCompany(id: string): Promise<Company | undefined>;
+  createCompany(company: InsertCompany): Promise<Company>;
+  updateCompany(id: string, company: Partial<InsertCompany>): Promise<Company | undefined>;
+  deleteCompany(id: string): Promise<boolean>;
 
   // Employee methods
   getEmployees(): Promise<EmployeeWithDepartment[]>;
@@ -226,6 +236,35 @@ export class DatabaseStorage implements IStorage {
 
   async deleteDepartment(id: string): Promise<boolean> {
     const result = await db.delete(departments).where(eq(departments.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  // Company methods
+  async getCompanies(): Promise<Company[]> {
+    return await db.select().from(companies);
+  }
+
+  async getCompany(id: string): Promise<Company | undefined> {
+    const [company] = await db.select().from(companies).where(eq(companies.id, id));
+    return company || undefined;
+  }
+
+  async createCompany(company: InsertCompany): Promise<Company> {
+    const [newCompany] = await db.insert(companies).values(company).returning();
+    return newCompany;
+  }
+
+  async updateCompany(id: string, company: Partial<InsertCompany>): Promise<Company | undefined> {
+    const [updated] = await db
+      .update(companies)
+      .set(company)
+      .where(eq(companies.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteCompany(id: string): Promise<boolean> {
+    const result = await db.delete(companies).where(eq(companies.id, id));
     return (result.rowCount ?? 0) > 0;
   }
 

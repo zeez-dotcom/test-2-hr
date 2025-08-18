@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Plus, Search } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { EmployeeWithDepartment, Department, InsertEmployee } from "@shared/schema";
+import type { EmployeeWithDepartment, Department, InsertEmployee, Company } from "@shared/schema";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
 
 export default function Employees() {
@@ -39,6 +39,14 @@ export default function Employees() {
     refetch: refetchDepartments,
   } = useQuery<Department[]>({
     queryKey: ["/api/departments"],
+  });
+
+  const {
+    data: companies,
+    error: companiesError,
+    refetch: refetchCompanies,
+  } = useQuery<Company[]>({
+    queryKey: ["/api/companies"],
   });
 
   const deleteEmployeeMutation = useMutation({
@@ -107,7 +115,7 @@ export default function Employees() {
     },
   });
 
-  if (employeesError || departmentsError) {
+  if (employeesError || departmentsError || companiesError) {
     return (
       <div>
         <p>Error loading employees</p>
@@ -115,6 +123,7 @@ export default function Employees() {
           onClick={() => {
             refetchEmployees();
             refetchDepartments();
+            refetchCompanies();
           }}
         >
           Retry
@@ -225,6 +234,7 @@ export default function Employees() {
                   </DialogHeader>
                   <EmployeeForm
                     departments={departments || []}
+                    companies={companies || []}
                     onSubmit={handleAddEmployee}
                     isSubmitting={addEmployeeMutation.isPending}
                   />
@@ -249,10 +259,11 @@ export default function Employees() {
             <DialogHeader>
               <DialogTitle>Edit Employee</DialogTitle>
             </DialogHeader>
-            {editingEmployee && (
+              {editingEmployee && (
               <EmployeeForm
                 key={editingEmployee.id}
                 departments={departments || []}
+                companies={companies || []}
                 onSubmit={handleUpdateEmployee}
                 isSubmitting={updateEmployeeMutation.isPending}
                 initialData={editingEmployee}
