@@ -12,6 +12,7 @@ import { z } from "zod";
 
 const formSchema = insertEmployeeSchema.extend({
   salary: z.string().optional(),
+  additions: z.string().optional(),
   email: z.string().email("Please enter a valid email").optional().or(z.literal("")),
   visaAlertDays: z.coerce.number().max(365).optional(),
   civilIdAlertDays: z.coerce.number().max(365).optional(),
@@ -49,6 +50,7 @@ export default function EmployeeForm({
       role: initialData?.role || "employee",
       departmentId: initialData?.departmentId || undefined,
       salary: initialData?.salary || "",
+      additions: initialData?.additions || "",
       standardWorkingDays: initialData?.standardWorkingDays || 26,
       startDate: initialData?.startDate || new Date().toISOString().split('T')[0],
       status: initialData?.status || "active",
@@ -91,6 +93,7 @@ export default function EmployeeForm({
       ...data,
       employeeCode: data.employeeCode || "",
       salary: data.salary?.toString() || "",
+      additions: data.additions?.toString() || "",
       transferable: data.transferable ?? false,
       residencyOnCompany: data.residencyOnCompany ?? false,
     });
@@ -259,6 +262,20 @@ export default function EmployeeForm({
                 <FormLabel>Salary</FormLabel>
                 <FormControl>
                   <Input type="number" placeholder="75000" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="additions"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Additions</FormLabel>
+                <FormControl>
+                  <Input type="number" placeholder="0" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
