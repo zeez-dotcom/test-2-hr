@@ -52,6 +52,10 @@ vi.mock('@/components/ui/dialog', () => ({
 
 beforeEach(() => {
   queryClient.clear();
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+    ok: true,
+    json: async () => [],
+  } as any);
 });
 
 describe('Employees page', () => {
