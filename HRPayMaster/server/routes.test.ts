@@ -20,6 +20,7 @@ vi.mock('./storage', () => {
       createCar: vi.fn(),
       updateCar: vi.fn(),
       createCarAssignment: vi.fn(),
+      createEmployeeEvent: vi.fn(),
     },
   };
 });
@@ -136,6 +137,7 @@ describe('employee routes', () => {
     expect(res.body.error.message).toBe('Invalid employee data');
   });
 
+  // From "main": verify numeric coercion from string inputs
   it('POST /api/employees creates employee with numeric fields', async () => {
     const created = {
       id: '2',
@@ -175,7 +177,8 @@ describe('employee routes', () => {
     );
   });
 
-  it('POST /api/employees creates employee with missing optional numeric fields', async () => {
+  // From "codex": ensure numeric fields are accepted and passed as numbers to storage
+  it('POST /api/employees accepts numeric fields and passes numbers to storage', async () => {
     const created = {
       id: '1',
       employeeCode: 'EMP1',
@@ -183,6 +186,8 @@ describe('employee routes', () => {
       lastName: 'Doe',
       position: 'Dev',
       salary: '1000',
+      additions: '50',
+      visaAlertDays: 15,
       workLocation: 'Office',
       startDate: '2024-01-01',
       role: 'employee'
@@ -193,9 +198,10 @@ describe('employee routes', () => {
       firstName: 'Jane',
       lastName: 'Doe',
       position: 'Dev',
-      salary: '1000',
-      startDate: '2024-01-01',
-      additions: ''
+      salary: 1000,
+      additions: 50,
+      visaAlertDays: 15,
+      startDate: '2024-01-01'
     });
 
     expect(res.status).toBe(201);
@@ -203,9 +209,41 @@ describe('employee routes', () => {
 
     const arg = (storage.createEmployee as any).mock.calls[0][0];
     expect(arg.salary).toBe(1000);
+    expect(arg.additions).toBe(50);
+    expect(arg.visaAlertDays).toBe(15);
+  });
+
+  // Keep the "missing optional numeric fields" scenario
+  it('POST /api/employees creates employee when optional numeric fields are missing', async () => {
+    const created = {
+      id: '3',
+      firstName: 'Ana',
+      lastName: 'Lee',
+      position: 'Dev',
+      salary: 1200,
+      startDate: '2024-01-01',
+      role: 'employee'
+    };
+    (storage.createEmployee as any).mockResolvedValue(created);
+
+    const payload = {
+      firstName: 'Ana',
+      lastName: 'Lee',
+      position: 'Dev',
+      salary: '1200', // string input should be coerced
+      startDate: '2024-01-01'
+      // intentionally omitting optional numeric fields like additions, visaAlertDays
+    };
+
+    const res = await request(app).post('/api/employees').send(payload);
+
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual(created);
+
+    const arg = (storage.createEmployee as any).mock.calls[0][0];
+    expect(arg.salary).toBe(1200);
     expect(arg).not.toHaveProperty('additions');
     expect(arg).not.toHaveProperty('visaAlertDays');
-    expect(arg).not.toHaveProperty('standardWorkingDays');
   });
 
   it('PUT /api/employees/:id rejects employeeCode updates', async () => {
@@ -214,6 +252,33 @@ describe('employee routes', () => {
       .send({ employeeCode: 'NEW' });
     expect(res.status).toBe(400);
     expect(res.body.error.message).toBe('Employee code cannot be updated');
+  });
+
+  it('PUT /api/employees/:id accepts numeric fields', async () => {
+    const updated = {
+      id: '1',
+      employeeCode: 'EMP1',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      position: 'Dev',
+      salary: '2000',
+      visaAlertDays: 20,
+      workLocation: 'Office',
+      startDate: '2024-01-01',
+      role: 'employee'
+    };
+    (storage.updateEmployee as any).mockResolvedValue(updated);
+
+    const res = await request(app)
+      .put('/api/employees/1')
+      .send({ salary: 2000, visaAlertDays: 20 });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(updated);
+
+    const arg = (storage.updateEmployee as any).mock.calls[0][1];
+    expect(arg.salary).toBe(2000);
+    expect(arg.visaAlertDays).toBe(20);
   });
 
   it('POST /api/employees/import returns headers when no mapping provided', async () => {
