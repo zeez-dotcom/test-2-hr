@@ -22,6 +22,7 @@ export const employees = pgTable("employees", {
   role: text("role").notNull().default("employee"),
   departmentId: varchar("department_id").references(() => departments.id),
   salary: numeric("salary", { precision: 10, scale: 2 }).notNull(),
+  additions: numeric("additions", { precision: 10, scale: 2 }),
   workLocation: varchar("work_location", { length: 100 }).default("Office").notNull(),
   startDate: date("start_date").notNull(),
   status: text("status").notNull().default("active"), // active, inactive, on_leave, vacation
@@ -317,6 +318,7 @@ export const insertEmployeeSchema = createInsertSchema(employees)
     visaImage: true,
     civilIdImage: true,
     passportImage: true,
+    additions: true,
     standardWorkingDays: true,
   });
 
