@@ -11,7 +11,8 @@ import {
   Bell,
   FileText,
   TrendingUp,
-  Award
+  Award,
+  Package
 } from "lucide-react";
 
 const navigation = [
@@ -23,6 +24,7 @@ const navigation = [
   { name: "Reports", href: "/reports", icon: TrendingUp },
   { name: "Vacations", href: "/vacations", icon: Calendar },
   { name: "Loans", href: "/loans", icon: CreditCard },
+  { name: "Assets", href: "/assets", icon: Package },
   { name: "Fleet", href: "/cars", icon: Car },
   { name: "Documents", href: "/documents", icon: FileText },
   { name: "Notifications", href: "/notifications", icon: Bell },

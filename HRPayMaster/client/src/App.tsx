@@ -15,6 +15,7 @@ import Loans from "@/pages/loans";
 import Cars from "@/pages/cars";
 import Notifications from "@/pages/notifications";
 import Documents from "@/pages/documents";
+import Assets from "@/pages/assets";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 
@@ -47,6 +48,7 @@ function Router() {
         <Route path="/departments" component={Departments} />
         <Route path="/vacations" component={Vacations} />
         <Route path="/loans" component={Loans} />
+        <Route path="/assets" component={Assets} />
         <Route path="/cars" component={Cars} />
         <Route path="/notifications" component={Notifications} />
         <Route path="/documents" component={Documents} />
