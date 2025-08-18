@@ -380,6 +380,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "drivingLicenseExpiryDate",
           "drivingLicenseImage",
           "otherDocs",
+          "additionalDocs",
         ]);
         const isDocumentUpdate = changedFields.some(field => documentFields.has(field));
         const event: InsertEmployeeEvent = {
