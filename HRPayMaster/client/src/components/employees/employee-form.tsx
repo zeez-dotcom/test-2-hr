@@ -11,7 +11,11 @@ import type { Company, Department, InsertEmployee } from "@shared/schema";
 import { z } from "zod";
 
 const formSchema = insertEmployeeSchema.extend({
-  salary: z.string().optional(),
+  firstName: z.string().trim().min(1, "First name is required"),
+  lastName: z.string().trim().min(1, "Last name is required"),
+  position: z.string().trim().min(1, "Position is required"),
+  salary: z.string().trim().min(1, "Salary is required"),
+  startDate: z.string().trim().min(1, "Start date is required"),
   additions: z.string().optional(),
   email: z.string().email("Please enter a valid email").optional().or(z.literal("")),
   visaAlertDays: z.coerce.number().max(365).optional(),
@@ -44,6 +48,7 @@ export default function EmployeeForm({
 }: EmployeeFormProps) {
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
+    mode: "onChange",
     defaultValues: {
       firstName: initialData?.firstName || "",
       lastName: initialData?.lastName || "",
