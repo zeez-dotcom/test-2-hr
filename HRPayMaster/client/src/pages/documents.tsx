@@ -11,7 +11,11 @@ import type { DocumentExpiryCheck } from "@shared/schema";
 export default function DocumentsPage() {
   const { toast } = useToast();
 
-  const { data: expiryChecks = [], isLoading } = useQuery<DocumentExpiryCheck[]>({
+  const {
+    data: expiryChecks = [],
+    isLoading,
+    error,
+  } = useQuery<DocumentExpiryCheck[]>({
     queryKey: ["/api/documents/expiry-check"],
   });
 
@@ -33,6 +37,10 @@ export default function DocumentsPage() {
       });
     },
   });
+
+  if (error) {
+    return <div>Error loading documents</div>;
+  }
 
   const getDocumentIcon = (type: string) => {
     switch (type) {

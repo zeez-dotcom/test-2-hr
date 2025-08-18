@@ -26,11 +26,15 @@ export default function EmployeeEvents() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const { toast } = useToast();
 
-  const { data: events, isLoading } = useQuery<(EmployeeEvent & { employee: Employee })[]>({
+  const {
+    data: events,
+    isLoading,
+    error: eventsError,
+  } = useQuery<(EmployeeEvent & { employee: Employee })[]>({
     queryKey: ["/api/employee-events"],
   });
 
-  const { data: employees } = useQuery<Employee[]>({
+  const { data: employees, error: employeesError } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
   });
 
@@ -97,7 +101,10 @@ export default function EmployeeEvents() {
       });
     },
   });
-
+  
+  if (eventsError || employeesError) {
+    return <div>Error loading employee events</div>;
+  }
 
   const getEventTypeIcon = (eventType: string) => {
     switch (eventType) {

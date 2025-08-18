@@ -40,17 +40,21 @@ export default function Reports() {
   
   const { toast } = useToast();
 
-  const { data: employees } = useQuery<Employee[]>({
+  const { data: employees, error: employeesError } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
   });
 
-  const { data: employeeEvents } = useQuery<EmployeeEvent[]>({
+  const { data: employeeEvents, error: employeeEventsError } = useQuery<EmployeeEvent[]>({
     queryKey: ["/api/employee-events"],
   });
 
-  const { data: payrollRuns } = useQuery<PayrollRun[]>({
+  const { data: payrollRuns, error: payrollRunsError } = useQuery<PayrollRun[]>({
     queryKey: ["/api/payroll"],
   });
+
+  if (employeesError || employeeEventsError || payrollRunsError) {
+    return <div>Error loading reports data</div>;
+  }
 
   // Generate year options (last 5 years)
   const currentYear = new Date().getFullYear();

@@ -24,15 +24,27 @@ interface DashboardStats {
 }
 
 export default function Dashboard() {
-  const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
+  const {
+    data: stats,
+    isLoading: statsLoading,
+    error: statsError,
+  } = useQuery<DashboardStats>({
     queryKey: ["/api/dashboard/stats"],
   });
 
-  const { data: employees, isLoading: employeesLoading } = useQuery<EmployeeWithDepartment[]>({
+  const {
+    data: employees,
+    isLoading: employeesLoading,
+    error: employeesError,
+  } = useQuery<EmployeeWithDepartment[]>({
     queryKey: ["/api/employees"],
   });
 
-  const { data: payrollRuns, isLoading: payrollLoading } = useQuery<PayrollRun[]>({
+  const {
+    data: payrollRuns,
+    isLoading: payrollLoading,
+    error: payrollError,
+  } = useQuery<PayrollRun[]>({
     queryKey: ["/api/payroll"],
   });
 
@@ -60,6 +72,10 @@ export default function Dashboard() {
         </div>
       </div>
     );
+  }
+
+  if (statsError || employeesError || payrollError) {
+    return <div>Error loading dashboard data</div>;
   }
 
   return (

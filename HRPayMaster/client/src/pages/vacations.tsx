@@ -23,11 +23,15 @@ export default function Vacations() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const { toast } = useToast();
 
-  const { data: vacationRequests = [], isLoading } = useQuery<VacationRequestWithEmployee[]>({
+  const {
+    data: vacationRequests = [],
+    isLoading,
+    error: vacationError,
+  } = useQuery<VacationRequestWithEmployee[]>({
     queryKey: ["/api/vacations"]
   });
 
-  const { data: employees = [] } = useQuery({
+  const { data: employees = [], error: employeesError } = useQuery({
     queryKey: ["/api/employees"]
   });
 
@@ -77,6 +81,10 @@ export default function Vacations() {
       status: "pending"
     }
   });
+
+  if (vacationError || employeesError) {
+    return <div>Error loading vacations</div>;
+  }
 
   const onSubmit = (data: any) => {
     createMutation.mutate(data);
