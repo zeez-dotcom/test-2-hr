@@ -81,6 +81,7 @@ export default function EmployeeForm({
       drivingLicenseExpiryDate: initialData?.drivingLicenseExpiryDate || "",
       drivingLicenseImage: initialData?.drivingLicenseImage || undefined,
       otherDocs: initialData?.otherDocs || undefined,
+      additionalDocs: initialData?.additionalDocs || undefined,
       iban: initialData?.iban || "",
       swiftCode: initialData?.swiftCode || "",
       residencyName: initialData?.residencyName || "",
@@ -1003,6 +1004,23 @@ export default function EmployeeForm({
               )}
             />
           </div>
+
+          {/* Additional Documents */}
+          <FormField
+            control={form.control}
+            name="additionalDocs"
+            render={({ field }) => (
+              <FormItem>
+                <ImageUpload
+                  label="Additional Documents"
+                  value={field.value || ""}
+                  onChange={field.onChange}
+                  variant="document"
+                />
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
           {/* Other Documents */}
           <FormField
