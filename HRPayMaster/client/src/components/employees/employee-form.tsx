@@ -58,7 +58,7 @@ export default function EmployeeForm({
       email: initialData?.email || "",
       phone: initialData?.phone || "",
       position: initialData?.position || "",
-      workLocation: initialData?.workLocation || "",
+      workLocation: initialData?.workLocation || undefined,
       role: initialData?.role || "employee",
       departmentId: initialData?.departmentId || undefined,
       companyId: initialData?.companyId || undefined,
@@ -103,7 +103,7 @@ export default function EmployeeForm({
   const residencyOnCompany = form.watch("residencyOnCompany");
 
   const handleSubmit = (data: FormData) => {
-    const { employeeCode, ...rest } = data;
+    const { employeeCode, workLocation, ...rest } = data;
     const payload: any = {
       ...rest,
       salary: data.salary?.toString() || "",
@@ -113,6 +113,9 @@ export default function EmployeeForm({
     };
     if (employeeCode && employeeCode.trim() !== "") {
       payload.employeeCode = employeeCode.trim();
+    }
+    if (workLocation && workLocation.trim() !== "") {
+      payload.workLocation = workLocation.trim();
     }
     onSubmit(payload);
   };
@@ -240,7 +243,7 @@ export default function EmployeeForm({
               <FormItem>
                 <FormLabel>Work Location</FormLabel>
                 <FormControl>
-                  <Input placeholder="Office" {...field} />
+                  <Input placeholder="Office" {...field} value={field.value || ""} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
