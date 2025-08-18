@@ -401,6 +401,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         employee.employeeCode = employee.employeeCode.trim();
       }
+
+      // Convert numeric fields and remove empty values
+      const numericFields: (keyof InsertEmployee)[] = [
+        "salary",
+        "additions",
+        "visaAlertDays",
+        "civilIdAlertDays",
+        "passportAlertDays",
+        "standardWorkingDays",
+      ];
+      for (const field of numericFields) {
+        const value = (employee as any)[field];
+        if (value === "" || value === undefined) {
+          delete (employee as any)[field];
+        } else {
+          (employee as any)[field] = Number(value);
+        }
+      }
       const newEmployee = await storage.createEmployee({
         ...employee,
         role: employee.role || "employee",
@@ -414,7 +432,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error instanceof DuplicateEmployeeCodeError) {
         return next(new HttpError(409, "Employee code already exists"));
       }
-      return next(new HttpError(500, "Failed to create employee"));
+      console.error("Failed to create employee:", error);
+      return next(
+        new HttpError(
+          500,
+          "Failed to create employee",
+          error instanceof Error ? error.message : error,
+        ),
+      );
     }
   });
 
