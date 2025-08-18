@@ -17,7 +17,12 @@ const formSchema = insertEmployeeSchema.extend({
   visaAlertDays: z.coerce.number().max(365).optional(),
   civilIdAlertDays: z.coerce.number().max(365).optional(),
   passportAlertDays: z.coerce.number().max(365).optional(),
-  employeeCode: z.string().optional(),
+  employeeCode: z
+    .string()
+    .trim()
+    .min(1, "Employee code cannot be empty")
+    .optional()
+    .or(z.literal("")),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -93,14 +98,18 @@ export default function EmployeeForm({
   const residencyOnCompany = form.watch("residencyOnCompany");
 
   const handleSubmit = (data: FormData) => {
-    onSubmit({
-      ...data,
-      employeeCode: data.employeeCode || "",
+    const { employeeCode, ...rest } = data;
+    const payload: any = {
+      ...rest,
       salary: data.salary?.toString() || "",
       additions: data.additions?.toString() || "",
       transferable: data.transferable ?? false,
       residencyOnCompany: data.residencyOnCompany ?? false,
-    });
+    };
+    if (employeeCode && employeeCode.trim() !== "") {
+      payload.employeeCode = employeeCode.trim();
+    }
+    onSubmit(payload);
   };
 
   return (
