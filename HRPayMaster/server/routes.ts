@@ -247,6 +247,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.send(buffer);
   });
 
+  const employeeNumberSchema = insertEmployeeSchema.extend({
+    salary: z.coerce.number(),
+    additions: z.coerce.number().optional(),
+    visaAlertDays: z.coerce.number().optional(),
+    civilIdAlertDays: z.coerce.number().optional(),
+    passportAlertDays: z.coerce.number().optional(),
+    standardWorkingDays: z.coerce.number().optional(),
+  });
+
   app.post("/api/employees/import", upload.single("file"), async (req, res, next) => {
     const file = (req as Request & { file?: Express.Multer.File }).file;
     if (!file) {
@@ -342,8 +351,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         seen.add(code);
         try {
-          const emp = insertEmployeeSchema.parse(base);
-          valid.push(emp);
+          const emp = employeeNumberSchema.parse(base);
+          valid.push(emp as any);
           customValues.push(custom);
         } catch {
           failed++;
@@ -391,15 +400,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  const employeeNumberSchema = insertEmployeeSchema.extend({
-    salary: z.coerce.number(),
-    additions: z.coerce.number().optional(),
-    visaAlertDays: z.coerce.number().optional(),
-    civilIdAlertDays: z.coerce.number().optional(),
-    passportAlertDays: z.coerce.number().optional(),
-    standardWorkingDays: z.coerce.number().optional(),
-  });
-
   app.post("/api/employees", async (req, res, next) => {
     try {
       const employee = employeeNumberSchema
@@ -443,8 +443,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updates = employeeNumberSchema
         .omit({ employeeCode: true })
         .partial()
-        .parse(req.body);
-      const updatedEmployee = await storage.updateEmployee(req.params.id, updates);
+        .parse(req.body) as any;
+      const updatedEmployee = await storage.updateEmployee(
+        req.params.id,
+        updates,
+      );
       if (!updatedEmployee) {
         return next(new HttpError(404, "Employee not found"));
       }
