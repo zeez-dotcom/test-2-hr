@@ -23,5 +23,10 @@ export function errorHandler(err: any, _req: Request, res: Response, _next: Next
     body.error.details = details;
   }
 
+  if (details) {
+    console.error("Error details:", details);
+  }
+  console.error(err);
+
   res.status(status).json(body);
 }
