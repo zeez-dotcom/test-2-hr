@@ -213,6 +213,42 @@ describe('employee routes', () => {
     expect(arg.visaAlertDays).toBe(15);
   });
 
+  it('POST /api/employees coerces numeric string-like fields to strings', async () => {
+    const created = {
+      id: '10',
+      employeeCode: '123',
+      firstName: 'Num',
+      lastName: 'Str',
+      position: 'Dev',
+      salary: 1000,
+      startDate: '2024-01-01',
+      role: 'employee',
+      phone: '123456789',
+      emergencyPhone: '987654321',
+      nationalId: '555555',
+    };
+    (storage.createEmployee as any).mockResolvedValue(created);
+
+    const res = await request(app).post('/api/employees').send({
+      firstName: 'Num',
+      lastName: 'Str',
+      position: 'Dev',
+      salary: 1000,
+      startDate: '2024-01-01',
+      employeeCode: 123,
+      phone: 123456789,
+      emergencyPhone: 987654321,
+      nationalId: 555555,
+    });
+
+    expect(res.status).toBe(201);
+    const arg = (storage.createEmployee as any).mock.calls[0][0];
+    expect(arg.employeeCode).toBe('123');
+    expect(arg.phone).toBe('123456789');
+    expect(arg.emergencyPhone).toBe('987654321');
+    expect(arg.nationalId).toBe('555555');
+  });
+
   // Keep the "missing optional numeric fields" scenario
   it('POST /api/employees creates employee when optional numeric fields are missing', async () => {
     const created = {
@@ -279,6 +315,34 @@ describe('employee routes', () => {
     const arg = (storage.updateEmployee as any).mock.calls[0][1];
     expect(arg.salary).toBe(2000);
     expect(arg.visaAlertDays).toBe(20);
+  });
+
+  it('PUT /api/employees/:id coerces numeric string-like fields to strings', async () => {
+    const updated = {
+      id: '1',
+      employeeCode: 'EMP1',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      position: 'Dev',
+      salary: '2000',
+      workLocation: 'Office',
+      startDate: '2024-01-01',
+      role: 'employee',
+      phone: '111',
+      emergencyPhone: '222',
+      nationalId: '333',
+    };
+    (storage.updateEmployee as any).mockResolvedValue(updated);
+
+    const res = await request(app)
+      .put('/api/employees/1')
+      .send({ phone: 111, emergencyPhone: 222, nationalId: 333 });
+
+    expect(res.status).toBe(200);
+    const arg = (storage.updateEmployee as any).mock.calls[0][1];
+    expect(arg.phone).toBe('111');
+    expect(arg.emergencyPhone).toBe('222');
+    expect(arg.nationalId).toBe('333');
   });
 
   it('POST /api/employees/import returns headers when no mapping provided', async () => {
