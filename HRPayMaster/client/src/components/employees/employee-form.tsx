@@ -11,12 +11,12 @@ import type { Department, InsertEmployee } from "@shared/schema";
 import { z } from "zod";
 
 const formSchema = insertEmployeeSchema.extend({
-  salary: z.string().min(1, "Salary is required").transform(val => val.toString()),
+  salary: z.string().optional(),
   email: z.string().email("Please enter a valid email").optional().or(z.literal("")),
-  visaAlertDays: z.coerce.number().min(1).max(365).optional(),
-  civilIdAlertDays: z.coerce.number().min(1).max(365).optional(),
-  passportAlertDays: z.coerce.number().min(1).max(365).optional(),
-  employeeCode: z.string().min(1, "Employee code is required"),
+  visaAlertDays: z.coerce.number().max(365).optional(),
+  civilIdAlertDays: z.coerce.number().max(365).optional(),
+  passportAlertDays: z.coerce.number().max(365).optional(),
+  employeeCode: z.string().optional(),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -78,7 +78,7 @@ export default function EmployeeForm({
   const handleSubmit = (data: FormData) => {
     onSubmit({
       ...data,
-      salary: data.salary.toString(),
+      salary: data.salary?.toString(),
       transferable: data.transferable,
       residencyOnCompany: data.residencyOnCompany,
     });
