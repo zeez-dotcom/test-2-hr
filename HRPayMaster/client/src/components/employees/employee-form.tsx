@@ -46,6 +46,7 @@ export default function EmployeeForm({
       role: initialData?.role || "employee",
       departmentId: initialData?.departmentId || undefined,
       salary: initialData?.salary || "",
+      standardWorkingDays: initialData?.standardWorkingDays || 26,
       startDate: initialData?.startDate || new Date().toISOString().split('T')[0],
       status: initialData?.status || "active",
       visaAlertDays: initialData?.visaAlertDays || 90,
