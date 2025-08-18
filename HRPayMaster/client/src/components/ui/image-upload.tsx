@@ -15,11 +15,12 @@ interface ImageUploadProps {
   variant?: "profile" | "document";
 }
 
+
 export default function ImageUpload({
   label,
   value,
   onChange,
-  accept = "image/*",
+  accept,
   maxSizeMB = 5,
   preview = true,
   variant = "document"
@@ -28,6 +29,9 @@ export default function ImageUpload({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isPDF = value?.startsWith("data:application/pdf");
+  const inputAccept =
+    accept ?? (variant === "document" ? "image/*,application/pdf" : "image/*");
 
   const handleFileSelect = async (file: File) => {
     setError(null);
@@ -39,8 +43,8 @@ export default function ImageUpload({
     }
 
     // Validate file type
-    if (!file.type.startsWith('image/')) {
-      setError('Please select a valid image file');
+    if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
+      setError("Please select a valid image or PDF file");
       return;
     }
 
@@ -54,12 +58,12 @@ export default function ImageUpload({
         setIsLoading(false);
       };
       reader.onerror = () => {
-        setError('Failed to read file');
+        setError("Failed to read file");
         setIsLoading(false);
       };
       reader.readAsDataURL(file);
     } catch (err) {
-      setError('Failed to process image');
+      setError("Failed to process file");
       setIsLoading(false);
     }
   };
@@ -109,22 +113,42 @@ export default function ImageUpload({
         <Card className="relative">
           <CardContent className="p-4">
             <div className="flex items-start space-x-4">
-              <div className={`flex-shrink-0 ${variant === 'profile' ? 'w-20 h-20' : 'w-16 h-16'}`}>
-                <img
-                  src={value}
-                  alt={label}
-                  className={`w-full h-full object-cover border border-gray-200 ${
-                    variant === 'profile' ? 'rounded-full' : 'rounded-lg'
-                  }`}
-                />
+              <div
+                className={`flex-shrink-0 ${
+                  variant === "profile" ? "w-20 h-20" : "w-16 h-16"
+                }`}
+              >
+                {isPDF ? (
+                  <div className="w-full h-full flex items-center justify-center border border-gray-200 rounded-lg bg-gray-50">
+                    <FileText className="w-8 h-8 text-gray-400" />
+                  </div>
+                ) : (
+                  <img
+                    src={value}
+                    alt={label}
+                    className={`w-full h-full object-cover border border-gray-200 ${
+                      variant === "profile" ? "rounded-full" : "rounded-lg"
+                    }`}
+                  />
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">
                   {label}
                 </p>
                 <p className="text-xs text-gray-500">
-                  Image uploaded successfully
+                  {isPDF ? "PDF uploaded successfully" : "Image uploaded successfully"}
                 </p>
+                {isPDF && (
+                  <a
+                    href={value}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-600 underline"
+                  >
+                    View PDF
+                  </a>
+                )}
               </div>
               <Button
                 type="button"
@@ -161,7 +185,7 @@ export default function ImageUpload({
               </div>
               
               {isLoading ? (
-                <p className="text-sm text-gray-600">Processing image...</p>
+                <p className="text-sm text-gray-600">Processing file...</p>
               ) : (
                 <>
                   <div className="flex items-center justify-center space-x-1 mb-2">
@@ -171,7 +195,9 @@ export default function ImageUpload({
                     </span>
                   </div>
                   <p className="text-xs text-gray-500">
-                    PNG, JPG, GIF up to {maxSizeMB}MB
+                    {inputAccept.includes("application/pdf")
+                      ? `PNG, JPG, GIF, PDF up to ${maxSizeMB}MB`
+                      : `PNG, JPG, GIF up to ${maxSizeMB}MB`}
                   </p>
                 </>
               )}
@@ -187,7 +213,7 @@ export default function ImageUpload({
       <Input
         ref={fileInputRef}
         type="file"
-        accept={accept}
+        accept={inputAccept}
         onChange={handleInputChange}
         className="hidden"
       />
