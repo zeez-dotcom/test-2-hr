@@ -39,6 +39,7 @@ export default function EmployeeForm({
     defaultValues: {
       firstName: initialData?.firstName || "",
       lastName: initialData?.lastName || "",
+      arabicName: initialData?.arabicName || "",
       nickname: initialData?.nickname || "",
       employeeCode: initialData?.employeeCode || "",
       email: initialData?.email || "",
@@ -88,9 +89,10 @@ export default function EmployeeForm({
   const handleSubmit = (data: FormData) => {
     onSubmit({
       ...data,
-      salary: data.salary?.toString(),
-      transferable: data.transferable,
-      residencyOnCompany: data.residencyOnCompany,
+      employeeCode: data.employeeCode || "",
+      salary: data.salary?.toString() || "",
+      transferable: data.transferable ?? false,
+      residencyOnCompany: data.residencyOnCompany ?? false,
     });
   };
 
@@ -142,12 +144,26 @@ export default function EmployeeForm({
 
           <FormField
             control={form.control}
+            name="arabicName"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Arabic Name</FormLabel>
+                <FormControl>
+                  <Input placeholder="جون دو" {...field} value={field.value || ""} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
             name="nickname"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Nickname</FormLabel>
                 <FormControl>
-                  <Input placeholder="Johnny" {...field} />
+                  <Input placeholder="Johnny" {...field} value={field.value || ""} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
