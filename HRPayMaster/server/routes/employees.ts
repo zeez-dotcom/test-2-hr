@@ -71,44 +71,55 @@ async function optimizeImages(data: Record<string, any>) {
   const MAX_PDF_SIZE = 5 * 1024 * 1024; // 5MB
 
   for (const field of IMAGE_FIELDS) {
-    const value = data[field];
-    if (!value || typeof value !== "string") continue;
-    const match = value.match(/^data:(.*?);base64,(.*)$/);
-    if (!match) continue;
-    let mime = match[1];
-    const base64Data = match[2];
+    try {
+      const value = data[field];
+      if (!value || typeof value !== "string") continue;
 
-    if (mime === "application/pdf") {
-      const pdfSize = Buffer.from(base64Data, "base64").length;
-      if (pdfSize > MAX_PDF_SIZE) {
-        console.warn(`${field} PDF exceeds ${MAX_PDF_SIZE} bytes`);
+      const match = value.match(/^data:(.*?);base64,(.*)$/);
+      if (!match) {
+        throw new HttpError(400, `Invalid image data for ${field}`);
       }
-      continue;
-    }
+      const mime = match[1];
+      const base64Data = match[2];
 
-    if (!mime.startsWith("image/")) continue;
+      if (mime === "application/pdf") {
+        const pdfSize = Buffer.from(base64Data, "base64").length;
+        if (pdfSize > MAX_PDF_SIZE) {
+          console.warn(`${field} PDF exceeds ${MAX_PDF_SIZE} bytes`);
+        }
+        continue;
+      }
 
-    const buffer = Buffer.from(base64Data, "base64");
-    const image = sharp(buffer);
-    const metadata = await image.metadata();
-    const needsResize =
-      (metadata.width ?? 0) > MAX_DIMENSION ||
-      (metadata.height ?? 0) > MAX_DIMENSION;
-    const needsCompress = buffer.length > MAX_SIZE;
-    if (!needsResize && !needsCompress) continue;
-    let pipeline = image;
-    if (needsResize) {
-      pipeline = pipeline.resize({
-        width: MAX_DIMENSION,
-        height: MAX_DIMENSION,
-        fit: "inside",
-        withoutEnlargement: true,
-      });
+      if (!mime.startsWith("image/")) {
+        throw new HttpError(400, `Unsupported mime type for ${field}`);
+      }
+
+      const buffer = Buffer.from(base64Data, "base64");
+      const image = sharp(buffer);
+      const metadata = await image.metadata();
+      const needsResize =
+        (metadata.width ?? 0) > MAX_DIMENSION ||
+        (metadata.height ?? 0) > MAX_DIMENSION;
+      const needsCompress = buffer.length > MAX_SIZE;
+      if (!needsResize && !needsCompress) continue;
+      let pipeline = image;
+      if (needsResize) {
+        pipeline = pipeline.resize({
+          width: MAX_DIMENSION,
+          height: MAX_DIMENSION,
+          fit: "inside",
+          withoutEnlargement: true,
+        });
+      }
+      const optimized = await pipeline.jpeg({ quality: 80 }).toBuffer();
+      data[field] = `data:image/jpeg;base64,${optimized.toString("base64")}`;
+    } catch (err) {
+      console.warn(`Failed to optimize ${field}:`, err);
+      if (err instanceof HttpError) {
+        throw err;
+      }
+      throw new HttpError(400, `Invalid image data for ${field}`);
     }
-    const optimized = await pipeline
-      .jpeg({ quality: 80 })
-      .toBuffer();
-    data[field] = `data:image/jpeg;base64,${optimized.toString("base64")}`;
   }
 }
 
@@ -652,6 +663,9 @@ const upload = multer({ storage: multer.memoryStorage() });
       if (error instanceof z.ZodError) {
         return next(new HttpError(400, "Invalid employee data", error.errors));
       }
+      if (error instanceof HttpError) {
+        return next(error);
+      }
       // Surface duplicate employee code errors as a 409 conflict
       if (
         error instanceof DuplicateEmployeeCodeError ||
@@ -737,6 +751,10 @@ const upload = multer({ storage: multer.memoryStorage() });
       if (error instanceof z.ZodError) {
         return next(new HttpError(400, "Invalid employee data", error.errors));
       }
+      if (error instanceof HttpError) {
+        return next(error);
+      }
+      console.error("Failed to update employee:", error);
       next(new HttpError(500, "Failed to update employee"));
     }
   });

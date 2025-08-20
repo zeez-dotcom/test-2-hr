@@ -390,6 +390,35 @@ describe('employee routes', () => {
     expect(arg.profileImage).toBe(pdf);
   });
 
+  it('POST /api/employees rejects images without base64 prefix', async () => {
+    const res = await request(app).post('/api/employees').send({
+      firstName: 'Bad',
+      lastName: 'Img',
+      position: 'Dev',
+      salary: 1000,
+      startDate: '2024-01-01',
+      profileImage: 'not-a-data-uri'
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toMatch(/Invalid image data/);
+    expect(storage.createEmployee).not.toHaveBeenCalled();
+  });
+
+  it('POST /api/employees rejects invalid base64 image data', async () => {
+    const invalidBase64 = 'data:image/jpeg;base64,@@@';
+    const res = await request(app).post('/api/employees').send({
+      firstName: 'Bad',
+      lastName: 'Image',
+      position: 'Dev',
+      salary: 1000,
+      startDate: '2024-01-01',
+      profileImage: invalidBase64
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toMatch(/Invalid image data/);
+    expect(storage.createEmployee).not.toHaveBeenCalled();
+  });
+
   it('PUT /api/employees/:id compresses large base64 images', async () => {
     const large = await sharp({
       create: {
