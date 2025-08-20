@@ -347,7 +347,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const existingCodes = new Set(existing.map(e => e.employeeCode));
       const valid: InsertEmployee[] = [];
       const customValues: Record<string, any>[] = [];
-      const errors: { row: number; message: string }[] = [];
+      const errors: {
+        row: number;
+        message?: string;
+        column?: string;
+        value?: unknown;
+        reason?: string;
+      }[] = [];
       const seen = new Set<string>();
 
       rows.forEach((row, idx) => {
@@ -381,6 +387,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         seen.add(code);
 
+        function parseField<T>(
+          parser: (v: unknown) => T,
+          value: unknown,
+          type: string
+        ): { value: T; error: string | null } {
+          const parsed = parser(value as any) as any;
+          const empty =
+            value === undefined ||
+            value === null ||
+            (typeof value === "string" && value.trim() === "");
+          if ((parsed === undefined || parsed === null) && !empty) {
+            return { value: parsed, error: `Invalid ${type}` };
+          }
+          return { value: parsed, error: null };
+        }
+
+        let parseError = false;
+
         const dateFields = [
           "startDate",
           "civilIdIssueDate",
@@ -393,7 +417,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "dateOfBirth",
           "vacationReturnDate",
         ];
-        for (const f of dateFields) if (f in base) base[f] = parseDateToISO(base[f]);
+        for (const f of dateFields) {
+          if (f in base) {
+            const original = base[f];
+            const { value, error } = parseField(parseDateToISO, original, "date");
+            base[f] = value;
+            if (error) {
+              errors.push({
+                row: idx + 2,
+                column: f,
+                value: original,
+                reason: error,
+              });
+              parseError = true;
+            }
+          }
+        }
 
         const numberFields = [
           "salary",
@@ -404,10 +443,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "totalLoans",
           "loans",
         ];
-        for (const f of numberFields) if (f in base) base[f] = parseNumber(base[f]);
+        for (const f of numberFields) {
+          if (f in base) {
+            const original = base[f];
+            const { value, error } = parseField(parseNumber, original, "number");
+            base[f] = value;
+            if (error) {
+              errors.push({
+                row: idx + 2,
+                column: f,
+                value: original,
+                reason: error,
+              });
+              parseError = true;
+            }
+          }
+        }
 
         const booleanFields = ["transferable", "residencyOnCompany"];
-        for (const f of booleanFields) if (f in base) base[f] = parseBoolean(base[f]);
+        for (const f of booleanFields) {
+          if (f in base) {
+            const original = base[f];
+            const { value, error } = parseField(
+              parseBoolean,
+              original,
+              "boolean"
+            );
+            base[f] = value;
+            if (error) {
+              errors.push({
+                row: idx + 2,
+                column: f,
+                value: original,
+                reason: error,
+              });
+              parseError = true;
+            }
+          }
+        }
+
+        if (parseError) return;
 
         if ("civilId" in base) base.civilId = normalizeBigId(base.civilId);
         if ("passportNumber" in base) base.passportNumber = normalizeBigId(base.passportNumber);
@@ -475,7 +550,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      res.json({ success, failed: errors.length + insertFailed, errors });
+      const uniqueErrorRows = new Set(errors.map(e => e.row)).size;
+      res.json({ success, failed: uniqueErrorRows + insertFailed, errors });
     } catch {
       next(new HttpError(500, "Failed to import employees"));
     }

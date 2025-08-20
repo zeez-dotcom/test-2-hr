@@ -6,11 +6,19 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { insertEmployeeSchema } from "@shared/schema";
 
+interface ImportError {
+  row: number;
+  message?: string;
+  column?: string;
+  value?: unknown;
+  reason?: string;
+}
+
 interface ImportResult {
   success?: number;
   failed?: number;
   error?: { message: string };
-  errors?: { row: number; message: string }[];
+  errors?: ImportError[];
 }
 
 function toLabel(key: string) {
@@ -184,7 +192,11 @@ export default function EmployeeImport() {
             {result.errors && result.errors.length > 0 && (
               <ul className="text-red-500 list-disc pl-4">
                 {result.errors.map(err => (
-                  <li key={err.row}>Row {err.row}: {err.message}</li>
+                  <li key={`${err.row}-${err.column || "msg"}`}>
+                    {err.column
+                      ? `Row ${err.row} [${err.column}] value "${String(err.value)}": ${err.reason}`
+                      : `Row ${err.row}: ${err.message}`}
+                  </li>
                 ))}
               </ul>
             )}
