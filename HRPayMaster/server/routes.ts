@@ -299,6 +299,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         defval: null,
       });
 
+      const requiredTargets = [
+        "employeeCode",
+        "firstName",
+        "position",
+        "salary",
+        "startDate",
+      ];
+      const requiredColumns = Object.entries(mapping).filter(([_, target]) =>
+        requiredTargets.includes(target) ||
+        target === "fullName" ||
+        target === "englishName"
+      );
+      for (const [source] of requiredColumns) {
+        const hasData = rows.some(r => emptyToUndef(r[source]) !== undefined);
+        if (!hasData) {
+          return next(new HttpError(400, `Column '${source}' is empty`));
+        }
+      }
+
       const employeeFieldKeys = new Set(Object.keys(insertEmployeeSchema.shape));
       const mappingTargets = Object.values(mapping);
       const hasFullNameOnly =

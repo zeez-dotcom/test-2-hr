@@ -431,6 +431,34 @@ describe('employee routes', () => {
     expect(res.body).toEqual({ headers: ['Code', 'First'], mapping: { Code: 'employeeCode' } });
   });
 
+  it('POST /api/employees/import errors when required column empty', async () => {
+    const wb = XLSX.utils.book_new();
+    const data = [
+      { Code: '', Name: 'John Doe', Position: 'Dev', Start: 45432, Salary: '1000' },
+      { Code: '', Name: 'Jane Doe', Position: 'QA', Start: 45433, Salary: '1200' }
+    ];
+    const ws = XLSX.utils.json_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    const mapping = {
+      Code: 'employeeCode',
+      Name: 'englishName',
+      Position: 'position',
+      Start: 'startDate',
+      Salary: 'salary'
+    };
+
+    const res = await request(app)
+      .post('/api/employees/import')
+      .field('mapping', JSON.stringify(mapping))
+      .attach('file', buffer, 'employees.xlsx');
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toBe("Column 'Code' is empty");
+    expect(storage.createEmployeesBulk).not.toHaveBeenCalled();
+  });
+
   it('POST /api/employees/import normalizes data types and reports errors', async () => {
     (storage.getEmployees as any).mockResolvedValue([]);
     (storage.getEmployeeCustomFields as any).mockResolvedValue([]);
