@@ -59,7 +59,7 @@ import {
   employeeEvents
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
+import { eq, desc, and, gte, lte, sql, type AnyColumn } from "drizzle-orm";
 
 export class DuplicateEmployeeCodeError extends Error {
   constructor(code: string) {
@@ -1115,11 +1115,14 @@ export class DatabaseStorage implements IStorage {
     range: { startDate: string; endDate: string; groupBy: "month" | "year" }
   ): Promise<EmployeeReportPeriod[]> {
     const { startDate, endDate, groupBy } = range;
-    const format = groupBy === "year" ? "YYYY" : "YYYY-MM";
+    const periodExpr = (column: AnyColumn) =>
+      groupBy === "year"
+        ? sql<string>`to_char(${column}, 'YYYY')`
+        : sql<string>`to_char(${column}, 'YYYY-MM')`;
 
     const payrollRows = await db
       .select({
-        period: sql<string>`to_char(${payrollRuns.startDate}, '${format}')`,
+        period: periodExpr(payrollRuns.startDate),
         entry: payrollEntries,
       })
       .from(payrollEntries)
@@ -1134,7 +1137,7 @@ export class DatabaseStorage implements IStorage {
 
     const eventRows = await db
       .select({
-        period: sql<string>`to_char(${employeeEvents.eventDate}, '${format}')`,
+        period: periodExpr(employeeEvents.eventDate),
         event: employeeEvents,
       })
       .from(employeeEvents)
@@ -1149,7 +1152,7 @@ export class DatabaseStorage implements IStorage {
 
     const loanRows = await db
       .select({
-        period: sql<string>`to_char(${loans.startDate}, '${format}')`,
+        period: periodExpr(loans.startDate),
         loan: loans,
       })
       .from(loans)
@@ -1163,7 +1166,7 @@ export class DatabaseStorage implements IStorage {
 
     const vacationRows = await db
       .select({
-        period: sql<string>`to_char(${vacationRequests.startDate}, '${format}')`,
+        period: periodExpr(vacationRequests.startDate),
         vacation: vacationRequests,
       })
       .from(vacationRequests)
