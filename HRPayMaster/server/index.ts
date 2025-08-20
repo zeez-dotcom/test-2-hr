@@ -11,6 +11,7 @@ interface User {
   id: string;
   username: string;
   email: string;
+  employeeId?: string;
 }
 
 const ADMIN_USER: User = {
