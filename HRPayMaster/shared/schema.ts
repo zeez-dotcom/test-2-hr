@@ -10,6 +10,8 @@ import {
   normalizeBigId,
 } from "../server/utils/normalize";
 
+const parseDate = (v: unknown) => parseDateToISO(v).value;
+
 export const departments = pgTable("departments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(),
@@ -355,16 +357,16 @@ export const insertEmployeeSchema = createInsertSchema(employees)
     standardWorkingDays: z.preprocess(parseNumber, z.number().optional()),
     transferable: z.preprocess(parseBoolean, z.boolean().optional()),
     residencyOnCompany: z.preprocess(parseBoolean, z.boolean().optional()),
-    startDate: z.preprocess(parseDateToISO, z.string()),
-    drivingLicenseIssueDate: z.preprocess(parseDateToISO, z.string().nullable().optional()),
-    drivingLicenseExpiryDate: z.preprocess(parseDateToISO, z.string().nullable().optional()),
-    visaIssueDate: z.preprocess(parseDateToISO, z.string().nullable().optional()),
-    visaExpiryDate: z.preprocess(parseDateToISO, z.string().nullable().optional()),
-    civilIdIssueDate: z.preprocess(parseDateToISO, z.string().nullable().optional()),
-    civilIdExpiryDate: z.preprocess(parseDateToISO, z.string().nullable().optional()),
-    passportIssueDate: z.preprocess(parseDateToISO, z.string().nullable().optional()),
-    passportExpiryDate: z.preprocess(parseDateToISO, z.string().nullable().optional()),
-    dateOfBirth: z.preprocess(parseDateToISO, z.string().nullable().optional()),
+    startDate: z.preprocess(parseDate, z.string()),
+    drivingLicenseIssueDate: z.preprocess(parseDate, z.string().nullable().optional()),
+    drivingLicenseExpiryDate: z.preprocess(parseDate, z.string().nullable().optional()),
+    visaIssueDate: z.preprocess(parseDate, z.string().nullable().optional()),
+    visaExpiryDate: z.preprocess(parseDate, z.string().nullable().optional()),
+    civilIdIssueDate: z.preprocess(parseDate, z.string().nullable().optional()),
+    civilIdExpiryDate: z.preprocess(parseDate, z.string().nullable().optional()),
+    passportIssueDate: z.preprocess(parseDate, z.string().nullable().optional()),
+    passportExpiryDate: z.preprocess(parseDate, z.string().nullable().optional()),
+    dateOfBirth: z.preprocess(parseDate, z.string().nullable().optional()),
     civilId: z.preprocess(normalizeBigId, z.string().optional()),
     passportNumber: z.preprocess(normalizeBigId, z.string().optional()),
     phone: z.preprocess(v => {
