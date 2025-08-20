@@ -123,6 +123,13 @@ async function optimizeImages(data: Record<string, any>) {
   }
 }
 
+async function getAddedBy(req: Request): Promise<string | undefined> {
+  const addedById = (req.user as any)?.employeeId;
+  if (!addedById) return undefined;
+  const existing = await storage.getEmployee(addedById);
+  return existing ? addedById : undefined;
+}
+
 const upload = multer({ storage: multer.memoryStorage() });
 
   // Department routes
@@ -731,6 +738,7 @@ const upload = multer({ storage: multer.memoryStorage() });
           "additionalDocs",
         ]);
         const isDocumentUpdate = changedFields.some(field => documentFields.has(field));
+        const addedBy = await getAddedBy(req);
         const event: InsertEmployeeEvent = {
           employeeId: updatedEmployee.id,
           eventType: isDocumentUpdate ? "document_update" : "employee_update",
@@ -741,9 +749,7 @@ const upload = multer({ storage: multer.memoryStorage() });
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
-          ...(req.user && (req.user as any).employeeId
-            ? { addedBy: (req.user as any).employeeId }
-            : {}),
+          ...(addedBy ? { addedBy } : {}),
         };
         await storage.createEmployeeEvent(event);
       }
@@ -955,6 +961,7 @@ const upload = multer({ storage: multer.memoryStorage() });
       const newAssignment = await assetService.createAssignment(assignment);
       const detailed = await assetService.getAssignment(newAssignment.id);
       if (detailed?.asset?.type === "car") {
+        const addedBy = await getAddedBy(req);
         const event: InsertEmployeeEvent = {
           employeeId: detailed.employeeId,
           eventType: "fleet_assignment",
@@ -963,9 +970,7 @@ const upload = multer({ storage: multer.memoryStorage() });
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
-          ...(req.user && (req.user as any).employeeId
-            ? { addedBy: (req.user as any).employeeId }
-            : {}),
+          ...(addedBy ? { addedBy } : {}),
         };
         await storage.createEmployeeEvent(event);
       }
@@ -987,6 +992,7 @@ const upload = multer({ storage: multer.memoryStorage() });
       }
       const detailed = await assetService.getAssignment(req.params.id);
       if (detailed?.asset?.type === "car") {
+        const addedBy = await getAddedBy(req);
         const event: InsertEmployeeEvent = {
           employeeId: detailed.employeeId,
           eventType: "fleet_update",
@@ -995,9 +1001,7 @@ const upload = multer({ storage: multer.memoryStorage() });
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
-          ...(req.user && (req.user as any).employeeId
-            ? { addedBy: (req.user as any).employeeId }
-            : {}),
+          ...(addedBy ? { addedBy } : {}),
         };
         await storage.createEmployeeEvent(event);
       }
@@ -1018,6 +1022,7 @@ const upload = multer({ storage: multer.memoryStorage() });
         return next(new HttpError(404, "Asset assignment not found"));
       }
       if (existing?.asset?.type === "car") {
+        const addedBy = await getAddedBy(req);
         const event: InsertEmployeeEvent = {
           employeeId: existing.employeeId,
           eventType: "fleet_removal",
@@ -1026,9 +1031,7 @@ const upload = multer({ storage: multer.memoryStorage() });
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
-          ...(req.user && (req.user as any).employeeId
-            ? { addedBy: (req.user as any).employeeId }
-            : {}),
+          ...(addedBy ? { addedBy } : {}),
         };
         await storage.createEmployeeEvent(event);
       }
@@ -1234,6 +1237,7 @@ const upload = multer({ storage: multer.memoryStorage() });
       const newAssignment = await assetService.createAssignment(assignment);
       const detailed = await assetService.getAssignment(newAssignment.id);
       if (detailed) {
+        const addedBy = await getAddedBy(req);
         const event: InsertEmployeeEvent = {
           employeeId: detailed.employeeId,
           eventType: "fleet_assignment",
@@ -1242,9 +1246,7 @@ const upload = multer({ storage: multer.memoryStorage() });
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
-          ...(req.user && (req.user as any).employeeId
-            ? { addedBy: (req.user as any).employeeId }
-            : {}),
+          ...(addedBy ? { addedBy } : {}),
         };
         await storage.createEmployeeEvent(event);
       }
@@ -1269,6 +1271,7 @@ const upload = multer({ storage: multer.memoryStorage() });
       }
       const detailed = await assetService.getAssignment(req.params.id);
       if (detailed) {
+        const addedBy = await getAddedBy(req);
         const event: InsertEmployeeEvent = {
           employeeId: detailed.employeeId,
           eventType: "fleet_update",
@@ -1277,9 +1280,7 @@ const upload = multer({ storage: multer.memoryStorage() });
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
-          ...(req.user && (req.user as any).employeeId
-            ? { addedBy: (req.user as any).employeeId }
-            : {}),
+          ...(addedBy ? { addedBy } : {}),
         };
         await storage.createEmployeeEvent(event);
       }
@@ -1300,6 +1301,7 @@ const upload = multer({ storage: multer.memoryStorage() });
         return next(new HttpError(404, "Car assignment not found"));
       }
       if (existing) {
+        const addedBy = await getAddedBy(req);
         const event: InsertEmployeeEvent = {
           employeeId: existing.employeeId,
           eventType: "fleet_removal",
@@ -1308,9 +1310,7 @@ const upload = multer({ storage: multer.memoryStorage() });
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
-          ...(req.user && (req.user as any).employeeId
-            ? { addedBy: (req.user as any).employeeId }
-            : {}),
+          ...(addedBy ? { addedBy } : {}),
         };
         await storage.createEmployeeEvent(event);
       }
