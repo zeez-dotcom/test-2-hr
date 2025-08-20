@@ -300,9 +300,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const employeeFieldKeys = new Set(Object.keys(insertEmployeeSchema.shape));
+      const mappingTargets = Object.values(mapping);
+      const hasFullNameOnly =
+        mappingTargets.includes("fullName") &&
+        !mappingTargets.includes("firstName") &&
+        !mappingTargets.includes("lastName");
+      const excludeTargets = new Set(["englishName"]);
+      if (hasFullNameOnly) excludeTargets.add("fullName");
       const customFieldNames = new Set(
-        Object.values(mapping).filter(
-          k => !employeeFieldKeys.has(k) && k !== "englishName"
+        mappingTargets.filter(
+          k => !employeeFieldKeys.has(k) && !excludeTargets.has(k)
         )
       );
       const fieldMap = new Map<string, any>();
@@ -329,7 +336,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const custom: Record<string, any> = {};
         for (const [source, target] of Object.entries(mapping)) {
           const raw = row[source];
-          if (target === "englishName") {
+          if (target === "englishName" || (hasFullNameOnly && target === "fullName")) {
             if (typeof raw === "string") {
               const parts = raw.trim().split(/\s+/);
               base.firstName = parts.shift() || "";

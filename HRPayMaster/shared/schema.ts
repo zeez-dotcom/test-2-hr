@@ -25,7 +25,7 @@ export const employees = pgTable("employees", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   employeeCode: varchar("employee_code").notNull().unique(),
   firstName: text("first_name").notNull(),
-  lastName: text("last_name").notNull(),
+  lastName: text("last_name"),
   arabicName: text("arabic_name"),
   nickname: text("nickname"),
   email: text("email"),
@@ -291,6 +291,7 @@ export const insertEmployeeSchema = createInsertSchema(employees)
   .partial({
     arabicName: true,
     nickname: true,
+    lastName: true,
     email: true,
     phone: true,
     role: true,
