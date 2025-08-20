@@ -29,7 +29,13 @@ import {
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import type { Employee, EmployeeEvent, PayrollRun } from "@shared/schema";
+import type {
+  Employee,
+  EmployeeEvent,
+  PayrollRun,
+  VacationRequest,
+  SickLeaveTracking,
+} from "@shared/schema";
 
 export default function Reports() {
   const [selectedEmployee, setSelectedEmployee] = useState<string>("all");
@@ -180,6 +186,35 @@ export default function Reports() {
     const recentPayrolls = payrollHistory
       .sort((a, b) => b.period.localeCompare(a.period))
       .slice(0, 5);
+
+    let employeeVacationRequests: VacationRequest[] = [];
+    let sickLeave: SickLeaveTracking | undefined;
+    try {
+      const res = await apiRequest("GET", "/api/vacations");
+      const allRequests: VacationRequest[] = await res.json();
+      employeeVacationRequests = allRequests.filter(v => v.employeeId === employeeId);
+    } catch (err) {
+      console.error("Failed to fetch vacation requests", err);
+    }
+
+    try {
+      const res = await apiRequest(
+        "GET",
+        `/api/employees/${employeeId}/sick-leave-balance?year=${new Date().getFullYear()}`,
+      );
+      sickLeave = await res.json();
+    } catch (err) {
+      console.error("Failed to fetch sick leave balance", err);
+    }
+
+    const leaveTypeTotals = employeeVacationRequests.reduce<Record<string, number>>((acc, req) => {
+      acc[req.leaveType] = (acc[req.leaveType] || 0) + req.days;
+      return acc;
+    }, {});
+
+    const sickDaysUsed = sickLeave?.totalSickDaysUsed ?? leaveTypeTotals["sick"] ?? 0;
+    const remainingSickDays = sickLeave?.remainingSickDays ?? Math.max(0, 14 - sickDaysUsed);
+    const otherLeaveTotals = Object.entries(leaveTypeTotals).filter(([type]) => type !== "sick");
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -943,6 +978,64 @@ export default function Reports() {
                     <div class="document-number"><a href="${employee.otherDocs}" target="_blank" rel="noopener noreferrer">View</a></div>
                   </div>
                   ` : ''}
+                </div>
+              </div>
+
+              <div class="section">
+                <div class="section-header">
+                  <div class="section-icon">🌴</div>
+                  <h3 class="section-title">Leave Summary</h3>
+                </div>
+
+                <div class="events-summary">
+                  <h3 class="summary-title">Totals</h3>
+                  <div class="summary-grid">
+                    <div class="summary-card">
+                      <span class="summary-value">${sickDaysUsed}</span>
+                      <span class="summary-label">Sick Days Used</span>
+                    </div>
+                    <div class="summary-card">
+                      <span class="summary-value">${remainingSickDays}</span>
+                      <span class="summary-label">Sick Days Remaining</span>
+                    </div>
+                    ${otherLeaveTotals.map(([type, days]) => `
+                      <div class="summary-card">
+                        <span class="summary-value">${days}</span>
+                        <span class="summary-label">${type.charAt(0).toUpperCase() + type.slice(1)} Leave</span>
+                      </div>
+                    `).join('')}
+                  </div>
+                </div>
+
+                <div class="events-timeline">
+                  <h4 class="timeline-header">Leave Periods</h4>
+                  ${employeeVacationRequests.length > 0 ? `
+                    <table class="salary-table">
+                      <thead>
+                        <tr>
+                          <th>Type</th>
+                          <th>Dates</th>
+                          <th>Days</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${employeeVacationRequests.map(v => `
+                          <tr>
+                            <td>${v.leaveType}</td>
+                            <td>${formatDate(v.startDate)} - ${formatDate(v.endDate)}</td>
+                            <td>${v.days}</td>
+                            <td>${v.status}</td>
+                          </tr>
+                        `).join('')}
+                      </tbody>
+                    </table>
+                  ` : `
+                    <div class="no-events">
+                      <div class="no-events-icon">📄</div>
+                      <p>No leave records available</p>
+                    </div>
+                  `}
                 </div>
               </div>
 
