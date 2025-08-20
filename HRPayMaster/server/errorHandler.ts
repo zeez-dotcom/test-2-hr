@@ -20,11 +20,14 @@ export function errorHandler(err: any, _req: Request, res: Response, _next: Next
 
   const body: any = { error: { message } };
 
-  if (process.env.NODE_ENV !== "production" && details) {
-    body.error.details =
-      details instanceof Error
-        ? { message: details.message, stack: details.stack }
-        : details;
+  if (process.env.NODE_ENV !== "production") {
+    body.error.status = status;
+    if (details) {
+      body.error.details =
+        details instanceof Error
+          ? { message: details.message, stack: details.stack }
+          : details;
+    }
   }
 
   if (details) {

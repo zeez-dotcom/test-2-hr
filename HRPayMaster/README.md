@@ -49,6 +49,13 @@
    - Development: `npm run dev`
    - Production: `npm run build` followed by `npm run start`
 
+## Error Handling
+
+During development (`NODE_ENV` not set to `"production"`), API error
+responses include both a `status` code and additional `details` to aid
+debugging. In production, these fields are omitted and only a general
+error message is returned.
+
 ## Employee Import Guide
 
 ### Preparing the Excel file
