@@ -405,7 +405,7 @@ export default function Reports() {
             
             .documents-grid {
               display: grid;
-              grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+              grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
               gap: 4mm;
             }
             
@@ -822,6 +822,46 @@ export default function Reports() {
                       ${employee.visaExpiryDate ? `Expires: ${formatDate(employee.visaExpiryDate)}` : 'No expiry date'}
                     </div>
                   </div>
+
+                  ${employee.drivingLicenseImage ? `
+                  <div class="document-card valid">
+                    <div class="document-icon">🚗</div>
+                    <div class="document-title">Driving License</div>
+                    <div class="document-number"><a href="${employee.drivingLicenseImage}" target="_blank" rel="noopener noreferrer">View</a></div>
+                  </div>
+                  ` : ''}
+
+                  ${employee.civilIdImage ? `
+                  <div class="document-card valid">
+                    <div class="document-icon">🆔</div>
+                    <div class="document-title">Civil ID Copy</div>
+                    <div class="document-number"><a href="${employee.civilIdImage}" target="_blank" rel="noopener noreferrer">View</a></div>
+                  </div>
+                  ` : ''}
+
+                  ${employee.passportImage ? `
+                  <div class="document-card valid">
+                    <div class="document-icon">📘</div>
+                    <div class="document-title">Passport Copy</div>
+                    <div class="document-number"><a href="${employee.passportImage}" target="_blank" rel="noopener noreferrer">View</a></div>
+                  </div>
+                  ` : ''}
+
+                  ${employee.visaImage ? `
+                  <div class="document-card valid">
+                    <div class="document-icon">🎫</div>
+                    <div class="document-title">Visa Copy</div>
+                    <div class="document-number"><a href="${employee.visaImage}" target="_blank" rel="noopener noreferrer">View</a></div>
+                  </div>
+                  ` : ''}
+
+                  ${employee.profileImage ? `
+                  <div class="document-card valid">
+                    <div class="document-icon">👤</div>
+                    <div class="document-title">Profile Photo</div>
+                    <div class="document-number"><a href="${employee.profileImage}" target="_blank" rel="noopener noreferrer">View</a></div>
+                  </div>
+                  ` : ''}
 
                   ${employee.additionalDocs ? `
                   <div class="document-card valid">
