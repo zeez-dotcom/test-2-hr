@@ -23,6 +23,16 @@
    npm install
    ```
 
+   If the installation fails when building the optional `sharp` module, make sure
+   the necessary build tools and libraries are available on your system:
+
+   - **Debian/Ubuntu:** `sudo apt-get install -y build-essential libvips-dev`
+   - **macOS:** `brew install libvips`
+   - **Windows:** install the Windows Build Tools and ensure `libvips` is in the
+     `PATH` (see the [sharp installation guide](https://sharp.pixelplumbing.com/install)).
+
+   After installing the prerequisites, re-run `npm install`.
+
 4. **Run migrations**
 
    ```bash
