@@ -730,10 +730,13 @@ export default function Reports() {
                 min-height: 267mm;
                 margin: 0;
               }
-              .event-item: hover { transform: none; }
+              .event-item:hover { transform: none; }
               .header-gradient { padding: 10mm 15mm 8mm; }
               .content-area { padding: 10mm; }
-              .footer { page-break-inside: avoid; }
+              .section { page-break-before: always; }
+              .section:first-of-type { page-break-before: avoid; }
+              .no-print { display: none !important; }
+              .footer { page-break-inside: avoid; page-break-after: avoid; }
             }
             
             .print-actions {
@@ -1203,6 +1206,9 @@ export default function Reports() {
               border-radius: 2.12mm;
               background-color: #fafafa;
             }
+            .employee-section + .employee-section {
+              page-break-before: always;
+            }
             .employee-header { 
               display: flex; 
               justify-content: space-between; 
@@ -1239,7 +1245,10 @@ export default function Reports() {
             .summary-item { text-align: center; }
             .summary-item strong { display: block; font-size: 1.125rem; color: #0284c7; }
             @media print {
-              .employee-section { page-break-after: auto; }
+              .employee-section { page-break-after: always; }
+              .employee-section:first-of-type { page-break-before: avoid; }
+              .no-print { display: none !important; }
+              .footer { page-break-inside: avoid; }
             }
           </style>
         </head>
