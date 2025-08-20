@@ -19,8 +19,8 @@ export function parseNumber(v: unknown): number | undefined {
     return isNaN(v) ? undefined : v;
   }
   if (typeof v === 'string') {
-    const cleaned = v.replace(/,/g, '').trim();
-    if (!cleaned) return undefined;
+    const cleaned = v.replace(/[^0-9eE+\-.]/g, '');
+    if (!/[0-9]/.test(cleaned)) return undefined;
     const num = Number(cleaned);
     return isNaN(num) ? undefined : num;
   }
@@ -46,43 +46,63 @@ export function parseBoolean(v: unknown): boolean | undefined {
 }
 
 function pad(n: number) {
-  return n.toString().padStart(2,'0');
+  return n.toString().padStart(2, '0');
 }
 
-export function parseDateToISO(v: unknown): string | null {
-  if (v === undefined || v === null) return null;
+export function parseDateToISO(
+  v: unknown
+): { value: string | null; error: string | null } {
+  if (v === undefined || v === null) return { value: null, error: null };
   if (typeof v === 'number') {
     const d = XLSX.SSF.parse_date_code(v);
-    if (!d) return null;
-    return `${d.y.toString().padStart(4,'0')}-${pad(d.m)}-${pad(d.d)}`;
-    }
+    if (!d) return { value: null, error: null };
+    return {
+      value: `${d.y.toString().padStart(4, '0')}-${pad(d.m)}-${pad(d.d)}`,
+      error: null,
+    };
+  }
   if (v instanceof Date) {
-    if (isNaN(v.getTime())) return null;
-    return v.toISOString().slice(0,10);
+    if (isNaN(v.getTime())) return { value: null, error: null };
+    return { value: v.toISOString().slice(0, 10), error: null };
   }
   if (typeof v === 'string') {
     const t = v.trim();
-    if (!t || t === '-' || t.toLowerCase() === 'n/a' || t.toLowerCase() === 'null' || t === '0') return null;
+    if (
+      !t ||
+      t === '-' ||
+      t.toLowerCase() === 'n/a' ||
+      t.toLowerCase() === 'null' ||
+      t === '0'
+    )
+      return { value: null, error: null };
     if (/^\d+$/.test(t)) {
       const num = Number(t);
       const d = XLSX.SSF.parse_date_code(num);
-      if (d) return `${d.y.toString().padStart(4,'0')}-${pad(d.m)}-${pad(d.d)}`;
+      if (d)
+        return {
+          value: `${d.y.toString().padStart(4, '0')}-${pad(d.m)}-${pad(d.d)}`,
+          error: null,
+        };
     }
-    const parsed = Date.parse(t);
-    if (!isNaN(parsed)) return new Date(parsed).toISOString().slice(0,10);
     const m = t.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
     if (m) {
       let [_, a, b, c] = m;
-      // assume dd/mm/yyyy
       if (c.length === 2) c = '20' + c;
-      const iso1 = `${c.padStart(4,'0')}-${b.padStart(2,'0')}-${a.padStart(2,'0')}`;
-      if (!isNaN(Date.parse(iso1))) return iso1;
-      const iso2 = `${c.padStart(4,'0')}-${a.padStart(2,'0')}-${b.padStart(2,'0')}`;
-      if (!isNaN(Date.parse(iso2))) return iso2;
+      const iso1 = `${c.padStart(4, '0')}-${b.padStart(2, '0')}-${a.padStart(2, '0')}`;
+      const iso2 = `${c.padStart(4, '0')}-${a.padStart(2, '0')}-${b.padStart(2, '0')}`;
+      const valid1 = !isNaN(Date.parse(iso1));
+      const valid2 = !isNaN(Date.parse(iso2));
+      if (valid1 && valid2 && iso1 !== iso2)
+        return { value: null, error: 'Ambiguous date format' };
+      if (valid1) return { value: iso1, error: null };
+      if (valid2) return { value: iso2, error: null };
     }
-    return null;
+    const parsed = Date.parse(t);
+    if (!isNaN(parsed))
+      return { value: new Date(parsed).toISOString().slice(0, 10), error: null };
+    return { value: null, error: null };
   }
-  return null;
+  return { value: null, error: null };
 }
 
 export function normalizeBigId(v: unknown): string | undefined {

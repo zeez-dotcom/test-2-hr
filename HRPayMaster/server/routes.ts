@@ -388,18 +388,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         seen.add(code);
 
         function parseField<T>(
-          parser: (v: unknown) => T,
+          parser: (v: unknown) => T | { value: T; error: string | null },
           value: unknown,
           type: string
         ): { value: T; error: string | null } {
-          const parsed = parser(value as any) as any;
+          let parsed: T;
+          let error: string | null = null;
+          try {
+            const result = parser(value as any) as any;
+            if (result && typeof result === "object" && "value" in result) {
+              parsed = result.value as T;
+              error = result.error ?? null;
+            } else {
+              parsed = result as T;
+            }
+          } catch (e: any) {
+            parsed = undefined as any;
+            error = e?.message || `Invalid ${type}`;
+          }
           const empty =
             value === undefined ||
             value === null ||
             (typeof value === "string" && value.trim() === "");
           if ((parsed === undefined || parsed === null) && !empty) {
-            return { value: parsed, error: `Invalid ${type}` };
+            return { value: parsed, error: error ?? `Invalid ${type}` };
           }
+          if (error) return { value: parsed, error };
           return { value: parsed, error: null };
         }
 
