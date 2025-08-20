@@ -1,0 +1,52 @@
+@page {
+  size: A4;
+  margin: 15mm;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  line-height: 1.4;
+  color: #1a1a1a;
+}
+
+h1, h2, h3, h4 {
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  margin: 0;
+}
+
+h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 4.23mm;
+}
+
+h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 3.17mm;
+}
+
+h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 2.12mm;
+}
+
+h4 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-bottom: 1.59mm;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
