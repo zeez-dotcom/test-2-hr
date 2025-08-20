@@ -232,54 +232,13 @@ export default function Reports() {
       <html>
         <head>
           <title>Employee Profile - ${employee.firstName} ${employee.lastName}</title>
+          <link rel="stylesheet" href="/src/styles/print.css" />
           <style>
-            @page {
-              size: A4;
-              margin: 15mm;
-            }
-            
-            * {
-              box-sizing: border-box;
-            }
-            
             body {
               font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
-              margin: 0;
-              padding: 0;
-              line-height: 1.4;
               color: #1a1a1a;
               background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
               min-height: 100vh;
-            }
-
-            h1, h2, h3, h4 {
-              overflow-wrap: break-word;
-              word-wrap: break-word;
-              margin: 0;
-            }
-
-            h1 {
-              font-size: 1.5rem;
-              font-weight: 700;
-              margin-bottom: 4.23mm;
-            }
-
-            h2 {
-              font-size: 1.25rem;
-              font-weight: 600;
-              margin-bottom: 3.17mm;
-            }
-
-            h3 {
-              font-size: 1rem;
-              font-weight: 600;
-              margin-bottom: 2.12mm;
-            }
-
-            h4 {
-              font-size: 0.875rem;
-              font-weight: 600;
-              margin-bottom: 1.59mm;
             }
             
             .page-container {
@@ -765,13 +724,12 @@ export default function Reports() {
             
             @media print {
               body { background: white !important; }
-              .page-container { 
-                box-shadow: none; 
-                width: 180mm; 
+              .page-container {
+                box-shadow: none;
+                width: 180mm;
                 min-height: 267mm;
                 margin: 0;
               }
-              .no-print { display: none !important; }
               .event-item: hover { transform: none; }
               .header-gradient { padding: 10mm 15mm 8mm; }
               .content-area { padding: 10mm; }
@@ -1233,49 +1191,15 @@ export default function Reports() {
       <html>
         <head>
           <title>${reportTitle}</title>
+          <link rel="stylesheet" href="/src/styles/print.css" />
           <style>
-            @page {
-              size: A4;
-              margin: 15mm;
-            }
-
-            body { font-family: Arial, sans-serif; margin: 5.29mm; line-height: 1.6; }
-
-            h1, h2, h3, h4 {
-              overflow-wrap: break-word;
-              word-wrap: break-word;
-              margin: 0;
-            }
-
-            h1 {
-              font-size: 1.5rem;
-              font-weight: 700;
-              margin-bottom: 4.23mm;
-            }
-
-            h2 {
-              font-size: 1.25rem;
-              font-weight: 600;
-              margin-bottom: 3.17mm;
-            }
-
-            h3 {
-              font-size: 1rem;
-              font-weight: 600;
-              margin-bottom: 2.12mm;
-            }
-
-            h4 {
-              font-size: 0.875rem;
-              font-weight: 600;
-              margin-bottom: 1.59mm;
-            }
+            body { margin: 5.29mm; line-height: 1.6; }
             .header { text-align: center; margin-bottom: 7.94mm; border-bottom: 0.79mm solid #333; padding-bottom: 5.29mm; }
-            .employee-section { 
-              page-break-inside: avoid; 
-              margin-bottom: 10.58mm; 
-              border: 0.26mm solid #ddd; 
-              padding: 6.61mm; 
+            .employee-section {
+              page-break-inside: avoid;
+              margin-bottom: 10.58mm;
+              border: 0.26mm solid #ddd;
+              padding: 6.61mm;
               border-radius: 2.12mm;
               background-color: #fafafa;
             }
@@ -1314,8 +1238,7 @@ export default function Reports() {
             .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3.97mm; margin-top: 2.65mm; }
             .summary-item { text-align: center; }
             .summary-item strong { display: block; font-size: 1.125rem; color: #0284c7; }
-            @media print { 
-              .no-print { display: none; }
+            @media print {
               .employee-section { page-break-after: auto; }
             }
           </style>
