@@ -24,6 +24,7 @@ vi.mock('./storage', () => {
       updateCar: vi.fn(),
       createCarAssignment: vi.fn(),
       createEmployeeEvent: vi.fn(),
+      getEmployeeReport: vi.fn(),
     },
     DuplicateEmployeeCodeError,
   };
@@ -782,5 +783,58 @@ describe('employee routes', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error.message).toMatch('Missing mapping for required fields');
+  });
+
+  it('GET /api/reports/employees/:id returns report data', async () => {
+    const mockReport = [
+      {
+        period: '2024-01',
+        payrollEntries: [
+          {
+            bonusAmount: '100',
+            taxDeduction: '30',
+            socialSecurityDeduction: '10',
+            healthInsuranceDeduction: '5',
+            loanDeduction: '0',
+            otherDeductions: '0',
+            netPay: '2000',
+          },
+        ],
+        employeeEvents: [
+          { eventType: 'bonus', amount: '50' },
+          { eventType: 'deduction', amount: '20' },
+        ],
+        loans: [{ monthlyDeduction: '30' }],
+        vacationRequests: [],
+      },
+    ];
+    (storage.getEmployeeReport as any).mockResolvedValue(mockReport);
+
+    const res = await request(app)
+      .get('/api/reports/employees/1')
+      .query({ startDate: '2024-01-01', endDate: '2024-12-31' });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([
+      {
+        period: '2024-01',
+        totals: { bonuses: 150, deductions: 95, netPay: 2000 },
+        payrollEntries: mockReport[0].payrollEntries,
+        employeeEvents: mockReport[0].employeeEvents,
+        loans: mockReport[0].loans,
+        vacationRequests: mockReport[0].vacationRequests,
+      },
+    ]);
+  });
+
+  it('GET /api/reports/employees/:id handles errors', async () => {
+    (storage.getEmployeeReport as any).mockRejectedValue(new Error('fail'));
+
+    const res = await request(app)
+      .get('/api/reports/employees/1')
+      .query({ startDate: '2024-01-01', endDate: '2024-12-31' });
+
+    expect(res.status).toBe(500);
+    expect(res.body.error.message).toBe('Failed to fetch employee report');
   });
 });
