@@ -434,8 +434,8 @@ describe('employee routes', () => {
   it('POST /api/employees/import errors when required column empty', async () => {
     const wb = XLSX.utils.book_new();
     const data = [
-      { Code: '', Name: 'John Doe', Position: 'Dev', Start: 45432, Salary: '1000' },
-      { Code: '', Name: 'Jane Doe', Position: 'QA', Start: 45433, Salary: '1200' }
+      { Code: '', Name: '', Position: 'Dev', Start: 45432, Salary: '1000' },
+      { Code: '', Name: '', Position: 'QA', Start: 45433, Salary: '1200' }
     ];
     const ws = XLSX.utils.json_to_sheet(data);
     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
@@ -455,7 +455,7 @@ describe('employee routes', () => {
       .attach('file', buffer, 'employees.xlsx');
 
     expect(res.status).toBe(400);
-    expect(res.body.error.message).toBe("Column 'Code' is empty");
+    expect(res.body.error.message).toBe("Column 'Name' is empty");
     expect(storage.createEmployeesBulk).not.toHaveBeenCalled();
   });
 
@@ -468,7 +468,7 @@ describe('employee routes', () => {
     const wb = XLSX.utils.book_new();
     const data = [
       { Code: 'E001', Name: 'John Doe', Position: 'Dev', Start: 45432, Salary: '1000', الحالة: 'نشط', 'Civil ID Number': '2.75021E+11', Transfer: 'y', 'Passport Issue Date': '', 'residency on company or not': 'FALSE' },
-      { Code: '', Name: 'Bad Guy', Position: 'QA', Start: 45433, Salary: '1200', الحالة: 'نشط', Transfer: 'yes' }
+      { Code: '', Name: 'Bad Guy', Position: 'QA', Start: 45433, Salary: 'abc', الحالة: 'نشط', Transfer: 'yes' }
     ];
     const ws = XLSX.utils.json_to_sheet(data);
     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
@@ -496,7 +496,7 @@ describe('employee routes', () => {
     expect(res.body.success).toBe(1);
     expect(res.body.failed).toBe(1);
     expect(res.body.errors).toHaveLength(1);
-    expect(res.body.errors[0]).toEqual({ row: 3, message: 'Missing employeeCode' });
+    expect(res.body.errors[0].column).toBe('salary');
     const employee = (storage.createEmployeesBulk as any).mock.calls[0][0][0];
     expect(employee.startDate).toBe('2024-05-20');
     expect(employee.civilId).toBe('275021000000');
@@ -504,6 +504,43 @@ describe('employee routes', () => {
     expect(employee.passportIssueDate).toBe(null);
     expect(employee.status).toBe('active');
     expect(employee.residencyOnCompany).toBe(false);
+  });
+
+  it('POST /api/employees/import allows rows without employeeCode', async () => {
+    (storage.getEmployees as any).mockResolvedValue([]);
+    (storage.getEmployeeCustomFields as any).mockResolvedValue([]);
+    (storage.createEmployeeCustomField as any).mockImplementation(async ({ name }) => ({ id: 'f1', name }));
+    (storage.createEmployeesBulk as any).mockImplementation(async emps => ({ success: emps.length, failed: 0, employees: emps.map((e,i)=>({ id: String(i+1), employeeCode: `EMP${i+1}`, ...e })) }));
+
+    const wb = XLSX.utils.book_new();
+    const data = [
+      { Code: '', Name: 'John Doe', Position: 'Dev', Start: 45432, Salary: '1000' },
+      { Code: '', Name: 'Jane Doe', Position: 'QA', Start: 45433, Salary: '1200' }
+    ];
+    const ws = XLSX.utils.json_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    const mapping = {
+      Code: 'employeeCode',
+      Name: 'englishName',
+      Position: 'position',
+      Start: 'startDate',
+      Salary: 'salary'
+    };
+
+    const res = await request(app)
+      .post('/api/employees/import')
+      .field('mapping', JSON.stringify(mapping))
+      .attach('file', buffer, 'employees.xlsx');
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(2);
+    expect(res.body.failed).toBe(0);
+    expect(res.body.errors).toHaveLength(0);
+    const employeesArg = (storage.createEmployeesBulk as any).mock.calls[0][0];
+    expect(employeesArg[0].employeeCode).toBeUndefined();
+    expect(employeesArg[1].employeeCode).toBeUndefined();
   });
 
   it('GET /api/payroll returns payroll runs', async () => {

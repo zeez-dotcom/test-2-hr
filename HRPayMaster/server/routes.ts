@@ -300,7 +300,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const requiredTargets = [
-        "employeeCode",
         "firstName",
         "position",
         "salary",
@@ -377,15 +376,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ? String(base.employeeCode).trim()
           : undefined;
         const code = base.employeeCode as string | undefined;
-        if (!code) {
-          errors.push({ row: idx + 2, message: "Missing employeeCode" });
-          return;
+        if (code) {
+          if (seen.has(code) || existingCodes.has(code)) {
+            errors.push({ row: idx + 2, message: "Duplicate employeeCode" });
+            return;
+          }
+          seen.add(code);
         }
-        if (seen.has(code) || existingCodes.has(code)) {
-          errors.push({ row: idx + 2, message: "Duplicate employeeCode" });
-          return;
-        }
-        seen.add(code);
 
         function parseField<T>(
           parser: (v: unknown) => T | { value: T; error: string | null },
