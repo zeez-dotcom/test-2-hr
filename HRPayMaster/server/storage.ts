@@ -1205,7 +1205,9 @@ export class DatabaseStorage implements IStorage {
       ensure(period).vacationRequests.push(vacation);
     });
 
-    return Object.values(grouped);
+    return Object.values(grouped).sort((a, b) =>
+      a.period.localeCompare(b.period)
+    );
   }
 
   // Document expiry check methods
