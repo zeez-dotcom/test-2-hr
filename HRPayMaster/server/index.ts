@@ -3,10 +3,6 @@ import session from "express-session";
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import createMemoryStore from "memorystore";
-import { eq } from "drizzle-orm";
-import bcrypt from "bcryptjs";
-import { db } from "./db";
-import { users } from "@shared/schema";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { errorHandler } from "./errorHandler";
@@ -14,36 +10,37 @@ import { errorHandler } from "./errorHandler";
 interface User {
   id: string;
   username: string;
+  email: string;
 }
 
+const ADMIN_USER: User = {
+  id: "1",
+  username: "admin",
+  email: "admin@example.com",
+};
+const ADMIN_PASSWORD = "admin123";
+
 passport.use(
-  new LocalStrategy(async (username, password, done) => {
-    try {
-      const user = await db.query.users.findFirst({
-        where: eq(users.username, username),
-      });
-      if (!user) return done(null, false);
-      const valid = await bcrypt.compare(password, user.passwordHash);
-      if (!valid) return done(null, false);
-      return done(null, { id: user.id, username: user.username } as User);
-    } catch (err) {
-      return done(err as Error);
+  new LocalStrategy((username, password, done) => {
+    if (
+      username === ADMIN_USER.username &&
+      password === ADMIN_PASSWORD
+    ) {
+      return done(null, ADMIN_USER);
     }
+    return done(null, false);
   }),
 );
 
 passport.serializeUser((user: Express.User, done) => {
-  done(null, (user as User).id);
+  done(null, ADMIN_USER.id);
 });
 
-passport.deserializeUser(async (id: string, done) => {
-  try {
-    const user = await db.query.users.findFirst({ where: eq(users.id, id) });
-    if (!user) return done(null, false);
-    done(null, { id: user.id, username: user.username } as User);
-  } catch (err) {
-    done(err as Error, false);
+passport.deserializeUser((id: string, done) => {
+  if (id === ADMIN_USER.id) {
+    return done(null, ADMIN_USER);
   }
+  return done(null, false);
 });
 
 const MemoryStore = createMemoryStore(session);
