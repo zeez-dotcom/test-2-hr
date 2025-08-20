@@ -37,8 +37,10 @@ export function parseBoolean(v: unknown): boolean | undefined {
   }
   if (typeof v === 'string') {
     const t = v.trim().toLowerCase();
-    if (['y','yes','true','1'].includes(t)) return true;
-    if (['n','no','false','0'].includes(t)) return false;
+    const truthy = ['y','yes','true','1','نعم','صح','صحيح','oui','si','sí','ja'];
+    const falsy = ['n','no','false','0','لا','خطأ','غلط','non','nein'];
+    if (truthy.includes(t)) return true;
+    if (falsy.includes(t)) return false;
   }
   return undefined;
 }
