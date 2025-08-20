@@ -29,9 +29,6 @@ vi.mock('./storage', () => {
 });
 
 import { registerRoutes } from './routes';
-import { payrollRouter } from './routes/payroll';
-import { loansRouter } from './routes/loans';
-import { carsRouter } from './routes/cars';
 import { storage } from './storage';
 
 function createApp() {
@@ -52,9 +49,6 @@ describe('employee routes', () => {
   beforeEach(async () => {
     app = createApp();
     await registerRoutes(app);
-    app.use('/api/payroll', payrollRouter);
-    app.use('/api/loans', loansRouter);
-    app.use('/api/cars', carsRouter);
     app.use(errorHandler);
     vi.clearAllMocks();
   });
