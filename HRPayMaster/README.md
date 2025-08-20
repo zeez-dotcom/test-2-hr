@@ -41,6 +41,8 @@
 
    - Requires the `DATABASE_URL` environment variable.
    - Run this step whenever you pull changes that modify the database schema.
+   - This will create the `users` table and seed a default `admin` account
+     with the password `password` hashed via bcrypt.
 
 5. **Start the application**
    - Development: `npm run dev`

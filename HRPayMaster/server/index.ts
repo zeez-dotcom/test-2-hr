@@ -3,6 +3,10 @@ import session from "express-session";
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import createMemoryStore from "memorystore";
+import { eq } from "drizzle-orm";
+import bcrypt from "bcryptjs";
+import { db } from "./db";
+import { users } from "@shared/schema";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { errorHandler } from "./errorHandler";
@@ -10,20 +14,21 @@ import { errorHandler } from "./errorHandler";
 interface User {
   id: string;
   username: string;
-  password: string;
 }
 
-const users: User[] = [
-  { id: "1", username: "admin", password: "password" },
-];
-
 passport.use(
-  new LocalStrategy((username, password, done) => {
-    const user = users.find(
-      (u) => u.username === username && u.password === password,
-    );
-    if (!user) return done(null, false);
-    return done(null, user);
+  new LocalStrategy(async (username, password, done) => {
+    try {
+      const user = await db.query.users.findFirst({
+        where: eq(users.username, username),
+      });
+      if (!user) return done(null, false);
+      const valid = await bcrypt.compare(password, user.passwordHash);
+      if (!valid) return done(null, false);
+      return done(null, { id: user.id, username: user.username } as User);
+    } catch (err) {
+      return done(err as Error);
+    }
   }),
 );
 
@@ -31,9 +36,14 @@ passport.serializeUser((user: Express.User, done) => {
   done(null, (user as User).id);
 });
 
-passport.deserializeUser((id: string, done) => {
-  const user = users.find((u) => u.id === id);
-  done(null, user || false);
+passport.deserializeUser(async (id: string, done) => {
+  try {
+    const user = await db.query.users.findFirst({ where: eq(users.id, id) });
+    if (!user) return done(null, false);
+    done(null, { id: user.id, username: user.username } as User);
+  } catch (err) {
+    done(err as Error, false);
+  }
 });
 
 const MemoryStore = createMemoryStore(session);
