@@ -242,14 +242,41 @@ export default function Reports() {
               box-sizing: border-box;
             }
             
-            body { 
-              font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif; 
-              margin: 0; 
+            body {
+              font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+              margin: 0;
               padding: 0;
-              line-height: 1.4; 
-              color: #1a1a1a; 
+              line-height: 1.4;
+              color: #1a1a1a;
               background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
               min-height: 100vh;
+            }
+
+            h1, h2, h3, h4 {
+              font-weight: 600;
+              margin: 0 0 8px;
+              overflow-wrap: break-word;
+              word-wrap: break-word;
+            }
+
+            h1 {
+              font-size: 24px;
+              font-weight: 700;
+              margin-bottom: 16px;
+            }
+
+            h2 {
+              font-size: 20px;
+              margin-bottom: 12px;
+            }
+
+            h3 {
+              font-size: 16px;
+            }
+
+            h4 {
+              font-size: 14px;
+              margin-bottom: 6px;
             }
             
             .page-container {
@@ -402,15 +429,6 @@ export default function Reports() {
               flex: 1;
             }
             
-            .employee-name {
-              font-size: 20px;
-              font-weight: 600;
-              color: #1e293b;
-              margin: 0 0 4px;
-              letter-spacing: -0.3px;
-              word-wrap: break-word;
-            }
-            
             .employee-position {
               font-size: 14px;
               color: #667eea;
@@ -485,13 +503,6 @@ export default function Reports() {
               justify-content: center;
               margin-right: 3mm;
               font-size: 12px;
-            }
-            
-            .section-title {
-              font-size: 16px;
-              font-weight: 600;
-              color: #1e293b;
-              margin: 0;
             }
             
             .documents-grid {
@@ -590,14 +601,6 @@ export default function Reports() {
               transform: rotate(45deg);
             }
             
-            .summary-title {
-              font-size: 14px;
-              font-weight: 600;
-              margin: 0 0 4mm;
-              position: relative;
-              z-index: 1;
-            }
-            
             .summary-grid {
               display: grid;
               grid-template-columns: repeat(4, 1fr);
@@ -659,14 +662,6 @@ export default function Reports() {
               background: #f8fafc;
               border-radius: 6px;
               padding: 6mm;
-            }
-            
-            .timeline-header {
-              font-size: 14px;
-              font-weight: 600;
-              color: #1e293b;
-              margin: 0 0 4mm;
-              text-align: center;
             }
             
             .event-item {
@@ -853,7 +848,7 @@ export default function Reports() {
                 </div>
                 
                 <div class="employee-info">
-                  <h2 class="employee-name">${employee.firstName} ${employee.lastName}</h2>
+                  <h2>${employee.firstName} ${employee.lastName}</h2>
                   <p class="employee-position">${employee.position}</p>
                   
                   <div class="info-grid">
@@ -896,7 +891,7 @@ export default function Reports() {
               <div class="section">
                 <div class="section-header">
                   <div class="section-icon">📋</div>
-                  <h3 class="section-title">Identity Documents</h3>
+                  <h3>Identity Documents</h3>
                 </div>
                 <div class="documents-grid">
                   <div class="document-card ${
@@ -1002,11 +997,11 @@ export default function Reports() {
               <div class="section">
                 <div class="section-header">
                   <div class="section-icon">🌴</div>
-                  <h3 class="section-title">Leave Summary</h3>
+                  <h3>Leave Summary</h3>
                 </div>
 
                 <div class="events-summary">
-                  <h3 class="summary-title">Totals</h3>
+                  <h4>Totals</h4>
                   <div class="summary-grid">
                     <div class="summary-card">
                       <span class="summary-value">${sickDaysUsed}</span>
@@ -1026,7 +1021,7 @@ export default function Reports() {
                 </div>
 
                 <div class="events-timeline">
-                  <h4 class="timeline-header">Leave Periods</h4>
+                  <h4>Leave Periods</h4>
                   ${employeeVacationRequests.length > 0 ? `
                     <table class="salary-table">
                       <thead>
@@ -1060,11 +1055,11 @@ export default function Reports() {
               <div class="section">
                 <div class="section-header">
                   <div class="section-icon">💰</div>
-                  <h3 class="section-title">Salary History</h3>
+                  <h3>Salary History</h3>
                 </div>
 
                 <div class="events-summary">
-                  <h3 class="summary-title">Payroll Overview</h3>
+                  <h4>Payroll Overview</h4>
                   <div class="summary-grid">
                     <div class="summary-card">
                       <span class="summary-value">${formatCurrency(totalGrossPaid)}</span>
@@ -1086,7 +1081,7 @@ export default function Reports() {
                 </div>
 
                 <div class="events-timeline">
-                  <h4 class="timeline-header">Recent Payroll Periods</h4>
+                  <h4>Recent Payroll Periods</h4>
                   ${recentPayrolls.length > 0 ? `
                     <table class="salary-table">
                       <thead>
@@ -1121,11 +1116,11 @@ export default function Reports() {
                 <div class="section">
                   <div class="section-header">
                     <div class="section-icon">📊</div>
-                    <h3 class="section-title">Employee Events & History</h3>
+                    <h3>Employee Events & History</h3>
                   </div>
                   
                   <div class="events-summary">
-                    <h3 class="summary-title">Performance Summary</h3>
+                    <h4>Performance Summary</h4>
                     <div class="summary-grid">
                       <div class="summary-card">
                         <span class="summary-value">${formatCurrency(totalBonuses)}</span>
@@ -1147,7 +1142,7 @@ export default function Reports() {
                   </div>
 
                   <div class="events-timeline">
-                    <h4 class="timeline-header">Complete Event Timeline</h4>
+                    <h4>Complete Event Timeline</h4>
                     ${employeeEvents
                       .sort((a, b) => new Date(b.eventDate).getTime() - new Date(a.eventDate).getTime())
                       .map(event => `
@@ -1170,7 +1165,7 @@ export default function Reports() {
                 <div class="section">
                   <div class="section-header">
                     <div class="section-icon">📊</div>
-                    <h3 class="section-title">Employee Events & History</h3>
+                    <h3>Employee Events & History</h3>
                   </div>
                   <div class="no-events">
                     <div class="no-events-icon">📋</div>
@@ -1244,6 +1239,33 @@ export default function Reports() {
           <title>${reportTitle}</title>
           <style>
             body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+
+            h1, h2, h3, h4 {
+              font-weight: 600;
+              margin: 0 0 8px;
+              overflow-wrap: break-word;
+              word-wrap: break-word;
+            }
+
+            h1 {
+              font-size: 24px;
+              font-weight: 700;
+              margin-bottom: 16px;
+            }
+
+            h2 {
+              font-size: 20px;
+              margin-bottom: 12px;
+            }
+
+            h3 {
+              font-size: 16px;
+            }
+
+            h4 {
+              font-size: 14px;
+              margin-bottom: 6px;
+            }
             .header { text-align: center; margin-bottom: 30px; border-bottom: 3px solid #333; padding-bottom: 20px; }
             .employee-section { 
               page-break-inside: avoid; 
@@ -1261,7 +1283,6 @@ export default function Reports() {
               border-bottom: 2px solid #eee;
             }
             .employee-info { font-size: 16px; }
-            .employee-info h3 { margin: 0; color: #2563eb; font-size: 20px; }
             .employee-info p { margin: 5px 0; color: #666; }
             .events-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
             .events-table th, .events-table td { 
@@ -1319,7 +1340,7 @@ export default function Reports() {
               <div class="employee-section">
                 <div class="employee-header">
                   <div class="employee-info">
-                    <h3>${employee.firstName} ${employee.lastName}</h3>
+                    <h2>${employee.firstName} ${employee.lastName}</h2>
                     <p><strong>ID:</strong> ${employee.id}</p>
                     <p><strong>Position:</strong> ${employee.position}</p>
                     <p><strong>Work Location:</strong> ${employee.workLocation || 'Office'}</p>
@@ -1334,7 +1355,7 @@ export default function Reports() {
                 </div>
 
                 <div class="summary-box">
-                  <h4 style="margin: 0 0 10px 0;">Summary for Selected Period</h4>
+                  <h3>Summary for Selected Period</h3>
                   <div class="summary-grid">
                     <div class="summary-item">
                       <strong class="event-bonus">${formatCurrency(totalBonuses)}</strong>
