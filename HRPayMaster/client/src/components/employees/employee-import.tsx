@@ -10,6 +10,7 @@ interface ImportResult {
   success?: number;
   failed?: number;
   error?: { message: string };
+  errors?: { row: number; message: string }[];
 }
 
 function toLabel(key: string) {
@@ -102,24 +103,24 @@ export default function EmployeeImport() {
     setIsSubmitting(true);
     try {
       const res = await fetch("/api/employees/import", { method: "POST", body: formData });
-      const data = await res.json();
-      if (res.ok) {
-        queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
-        toast({
-          title: "Import complete",
-          description: `${data.success || 0} imported, ${data.failed || 0} failed`,
-          variant: data.failed ? "destructive" : "default",
-        });
-        setFile(null);
-        setHeaders([]);
-        setSelections({});
-        setCustomFields({});
-        setResult(null);
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      } else {
-        setResult(data);
-        toast({ title: "Error", description: data.error?.message || "Import failed", variant: "destructive" });
-      }
+        const data = await res.json();
+        if (res.ok) {
+          queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+          toast({
+            title: "Import complete",
+            description: `${data.success || 0} imported, ${data.failed || 0} failed`,
+            variant: data.failed ? "destructive" : "default",
+          });
+          setFile(null);
+          setHeaders([]);
+          setSelections({});
+          setCustomFields({});
+          setResult(data);
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        } else {
+          setResult(data);
+          toast({ title: "Error", description: data.error?.message || "Import failed", variant: "destructive" });
+        }
     } catch {
       toast({ title: "Error", description: "Import failed", variant: "destructive" });
     } finally {
@@ -177,11 +178,18 @@ export default function EmployeeImport() {
         </>
       )}
 
-      {result && (
-        <p className="text-sm text-muted-foreground">
-          Imported {result.success || 0}, failed {result.failed || 0}
-        </p>
-      )}
+        {result && (
+          <div className="text-sm text-muted-foreground space-y-2">
+            <p>Imported {result.success || 0}, failed {result.failed || 0}</p>
+            {result.errors && result.errors.length > 0 && (
+              <ul className="text-red-500 list-disc pl-4">
+                {result.errors.map(err => (
+                  <li key={err.row}>Row {err.row}: {err.message}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
     </div>
   );
 }
