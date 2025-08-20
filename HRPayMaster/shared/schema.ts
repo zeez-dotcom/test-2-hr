@@ -2,6 +2,13 @@ import { sql, relations } from "drizzle-orm";
 import { pgTable, text, varchar, numeric, date, timestamp, boolean, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import {
+  parseNumber,
+  parseBoolean,
+  parseDateToISO,
+  emptyToUndef,
+  normalizeBigId,
+} from "../server/utils/normalize";
 
 export const departments = pgTable("departments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -333,6 +340,52 @@ export const insertEmployeeSchema = createInsertSchema(employees)
     passportImage: true,
     additions: true,
     standardWorkingDays: true,
+  })
+  .extend({
+    employeeCode: z.preprocess(v => {
+      const val = emptyToUndef(v);
+      return val === undefined ? undefined : String(val);
+    }, z.string().optional()),
+    salary: z.preprocess(parseNumber, z.number()),
+    additions: z.preprocess(parseNumber, z.number().optional()),
+    visaAlertDays: z.preprocess(parseNumber, z.number().optional()),
+    civilIdAlertDays: z.preprocess(parseNumber, z.number().optional()),
+    passportAlertDays: z.preprocess(parseNumber, z.number().optional()),
+    standardWorkingDays: z.preprocess(parseNumber, z.number().optional()),
+    transferable: z.preprocess(parseBoolean, z.boolean().optional()),
+    residencyOnCompany: z.preprocess(parseBoolean, z.boolean().optional()),
+    startDate: z.preprocess(parseDateToISO, z.string()),
+    drivingLicenseIssueDate: z.preprocess(parseDateToISO, z.string().nullable().optional()),
+    drivingLicenseExpiryDate: z.preprocess(parseDateToISO, z.string().nullable().optional()),
+    visaIssueDate: z.preprocess(parseDateToISO, z.string().nullable().optional()),
+    visaExpiryDate: z.preprocess(parseDateToISO, z.string().nullable().optional()),
+    civilIdIssueDate: z.preprocess(parseDateToISO, z.string().nullable().optional()),
+    civilIdExpiryDate: z.preprocess(parseDateToISO, z.string().nullable().optional()),
+    passportIssueDate: z.preprocess(parseDateToISO, z.string().nullable().optional()),
+    passportExpiryDate: z.preprocess(parseDateToISO, z.string().nullable().optional()),
+    dateOfBirth: z.preprocess(parseDateToISO, z.string().nullable().optional()),
+    civilId: z.preprocess(normalizeBigId, z.string().optional()),
+    passportNumber: z.preprocess(normalizeBigId, z.string().optional()),
+    phone: z.preprocess(v => {
+      const val = emptyToUndef(v);
+      return val === undefined ? undefined : String(val);
+    }, z.string().optional()),
+    emergencyPhone: z.preprocess(v => {
+      const val = emptyToUndef(v);
+      return val === undefined ? undefined : String(val);
+    }, z.string().optional()),
+    nationalId: z.preprocess(v => {
+      const val = emptyToUndef(v);
+      return val === undefined ? undefined : String(val);
+    }, z.string().optional()),
+    iban: z.preprocess(v => {
+      const val = emptyToUndef(v);
+      return val === undefined ? undefined : String(val).replace(/\s+/g, '').toUpperCase();
+    }, z.string().optional()),
+    swiftCode: z.preprocess(v => {
+      const val = emptyToUndef(v);
+      return val === undefined ? undefined : String(val);
+    }, z.string().optional()),
   });
 
 export const insertEmployeeCustomFieldSchema = createInsertSchema(employeeCustomFields).omit({

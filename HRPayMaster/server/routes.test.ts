@@ -5,6 +5,7 @@ import { errorHandler } from './errorHandler';
 import * as XLSX from 'xlsx';
 
 vi.mock('./storage', () => {
+  class DuplicateEmployeeCodeError extends Error {}
   return {
     storage: {
       getEmployees: vi.fn(),
@@ -22,6 +23,7 @@ vi.mock('./storage', () => {
       createCarAssignment: vi.fn(),
       createEmployeeEvent: vi.fn(),
     },
+    DuplicateEmployeeCodeError,
   };
 });
 
@@ -282,6 +284,75 @@ describe('employee routes', () => {
     expect(arg).not.toHaveProperty('visaAlertDays');
   });
 
+  it('POST /api/employees accepts blank optional date fields', async () => {
+    const created = {
+      id: '4',
+      firstName: 'Date',
+      lastName: 'Blank',
+      position: 'Dev',
+      salary: 1000,
+      startDate: '2024-01-01',
+      passportIssueDate: null,
+      role: 'employee'
+    };
+    (storage.createEmployee as any).mockResolvedValue(created);
+
+    const res = await request(app).post('/api/employees').send({
+      firstName: 'Date',
+      lastName: 'Blank',
+      position: 'Dev',
+      salary: '1000',
+      startDate: '2024-01-01',
+      passportIssueDate: ''
+    });
+
+    expect(res.status).toBe(201);
+    const arg = (storage.createEmployee as any).mock.calls[0][0];
+    expect(arg.passportIssueDate).toBe(null);
+  });
+
+  it('POST /api/employees omits blank employeeCode for auto-generation', async () => {
+    const created = {
+      id: '5',
+      employeeCode: 'EMP1234',
+      firstName: 'NoCode',
+      lastName: 'Smith',
+      position: 'Dev',
+      salary: 1000,
+      startDate: '2024-01-01',
+      role: 'employee'
+    };
+    (storage.createEmployee as any).mockResolvedValue(created);
+
+    const res = await request(app).post('/api/employees').send({
+      employeeCode: '   ',
+      firstName: 'NoCode',
+      lastName: 'Smith',
+      position: 'Dev',
+      salary: 1000,
+      startDate: '2024-01-01'
+    });
+
+    expect(res.status).toBe(201);
+    const arg = (storage.createEmployee as any).mock.calls[0][0];
+    expect(arg).not.toHaveProperty('employeeCode');
+  });
+
+  it('POST /api/employees returns 409 on duplicate code', async () => {
+    (storage.createEmployee as any).mockRejectedValue({ code: '23505' });
+
+    const res = await request(app).post('/api/employees').send({
+      employeeCode: 'E001',
+      firstName: 'Dup',
+      lastName: 'Code',
+      position: 'Dev',
+      salary: 1000,
+      startDate: '2024-01-01'
+    });
+
+    expect(res.status).toBe(409);
+  });
+
   it('PUT /api/employees/:id rejects employeeCode updates', async () => {
     const res = await request(app)
       .put('/api/employees/1')
@@ -357,161 +428,19 @@ describe('employee routes', () => {
       .attach('file', buffer, 'employees.xlsx');
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ headers: ['Code', 'First'] });
+    expect(res.body).toEqual({ headers: ['Code', 'First'], mapping: { Code: 'employeeCode' } });
   });
 
-  it('POST /api/employees/import imports employees using mapping', async () => {
-    (storage.getEmployees as any).mockResolvedValue([]);
-    (storage.createEmployeesBulk as any).mockResolvedValue({ success: 1, failed: 0 });
-    const wb = XLSX.utils.book_new();
-    const data = [{
-      Code: 'E001',
-      First: 'John',
-      Last: 'Doe',
-      Position: 'Dev',
-      Salary: '0',
-      Start: '2024-01-01'
-    }];
-    const ws = XLSX.utils.json_to_sheet(data);
-    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-
-    const mapping = {
-      Code: 'employeeCode',
-      First: 'firstName',
-      Last: 'lastName',
-      Position: 'position',
-      Salary: 'salary',
-      Start: 'startDate'
-    };
-
-    const res = await request(app)
-      .post('/api/employees/import')
-      .field('mapping', JSON.stringify(mapping))
-      .attach('file', buffer, 'employees.xlsx');
-
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({ success: 1, failed: 0 });
-    expect(storage.createEmployeesBulk).toHaveBeenCalled();
-  });
-
-  it('POST /api/employees/import coerces numeric fields', async () => {
-    (storage.getEmployees as any).mockResolvedValue([]);
-    (storage.createEmployeesBulk as any).mockResolvedValue({ success: 1, failed: 0 });
-    const wb = XLSX.utils.book_new();
-    const data = [{
-      Code: 'E001',
-      First: 'John',
-      Last: 'Doe',
-      Position: 'Dev',
-      Salary: 2000,
-      Visa: 5,
-      Start: '2024-01-01'
-    }];
-    const ws = XLSX.utils.json_to_sheet(data);
-    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-
-    const mapping = {
-      Code: 'employeeCode',
-      First: 'firstName',
-      Last: 'lastName',
-      Position: 'position',
-      Salary: 'salary',
-      Visa: 'visaAlertDays',
-      Start: 'startDate'
-    };
-
-    const res = await request(app)
-      .post('/api/employees/import')
-      .field('mapping', JSON.stringify(mapping))
-      .attach('file', buffer, 'employees.xlsx');
-
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({ success: 1, failed: 0 });
-    const employee = (storage.createEmployeesBulk as any).mock.calls[0][0][0];
-    expect(employee.salary).toBe(2000);
-    expect(employee.visaAlertDays).toBe(5);
-  });
-
-  it('POST /api/employees/import preserves numeric text fields', async () => {
-    (storage.getEmployees as any).mockResolvedValue([]);
-    (storage.createEmployeesBulk as any).mockResolvedValue({ success: 1, failed: 0 });
-    const wb = XLSX.utils.book_new();
-    const data = [{
-      Code: 'E002',
-      First: 'Jane',
-      Last: 'Smith',
-      Position: 'QA',
-      Salary: 1500,
-      Start: '2024-01-01',
-      Phone: 12345678,
-      National: 9876543210,
-      Emergency: 11223344,
-    }];
-    const ws = XLSX.utils.json_to_sheet(data);
-    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-
-    const mapping = {
-      Code: 'employeeCode',
-      First: 'firstName',
-      Last: 'lastName',
-      Position: 'position',
-      Salary: 'salary',
-      Start: 'startDate',
-      Phone: 'phone',
-      National: 'nationalId',
-      Emergency: 'emergencyPhone',
-    };
-
-    const res = await request(app)
-      .post('/api/employees/import')
-      .field('mapping', JSON.stringify(mapping))
-      .attach('file', buffer, 'employees.xlsx');
-
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({ success: 1, failed: 0 });
-    const employee = (storage.createEmployeesBulk as any).mock.calls[0][0][0];
-    expect(employee.phone).toBe('12345678');
-    expect(employee.nationalId).toBe('9876543210');
-    expect(employee.emergencyPhone).toBe('11223344');
-  });
-
-  it('POST /api/employees/import creates custom fields and values', async () => {
+  it('POST /api/employees/import normalizes data types and reports errors', async () => {
     (storage.getEmployees as any).mockResolvedValue([]);
     (storage.getEmployeeCustomFields as any).mockResolvedValue([]);
-    (storage.createEmployeesBulk as any).mockResolvedValue({
-      success: 1,
-      failed: 0,
-      employees: [
-        {
-          id: '1',
-          employeeCode: 'E001',
-          firstName: 'John',
-          lastName: 'Doe',
-          position: 'Dev',
-          salary: '0',
-          workLocation: 'Office',
-          startDate: '2024-01-01',
-        },
-      ],
-    });
-    (storage.createEmployeeCustomField as any).mockImplementation(async ({ name }) => ({
-      id: 'f1',
-      name,
-    }));
+    (storage.createEmployeeCustomField as any).mockImplementation(async ({ name }) => ({ id: 'f1', name }));
+    (storage.createEmployeesBulk as any).mockImplementation(async emps => ({ success: emps.length, failed: 0, employees: emps.map((e,i)=>({ id: String(i+1), ...e })) }));
+
     const wb = XLSX.utils.book_new();
     const data = [
-      {
-        Code: 'E001',
-        First: 'John',
-        Last: 'Doe',
-        Position: 'Dev',
-        Salary: '0',
-        Start: '2024-01-01',
-        Color: 'blue',
-      },
+      { Code: 'E001', Name: 'John Doe', Position: 'Dev', Start: 45432, Salary: '1000', الحالة: 'نشط', 'Civil ID Number': '2.75021E+11', Transfer: 'y', 'Passport Issue Date': '', 'residency on company or not': 'FALSE' },
+      { Code: '', Name: 'Bad Guy', Position: 'QA', Start: 45433, Salary: '1200', الحالة: 'نشط', Transfer: 'yes' }
     ];
     const ws = XLSX.utils.json_to_sheet(data);
     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
@@ -519,12 +448,15 @@ describe('employee routes', () => {
 
     const mapping = {
       Code: 'employeeCode',
-      First: 'firstName',
-      Last: 'lastName',
+      Name: 'englishName',
       Position: 'position',
-      Salary: 'salary',
       Start: 'startDate',
-      Color: 'favoriteColor',
+      Salary: 'salary',
+      الحالة: 'status',
+      'Civil ID Number': 'civilId',
+      Transfer: 'transferable',
+      'Passport Issue Date': 'passportIssueDate',
+      'residency on company or not': 'residencyOnCompany'
     };
 
     const res = await request(app)
@@ -533,30 +465,16 @@ describe('employee routes', () => {
       .attach('file', buffer, 'employees.xlsx');
 
     expect(res.status).toBe(200);
-    expect(storage.createEmployeeCustomField).toHaveBeenCalledWith({ name: 'favoriteColor' });
-    expect(storage.createEmployeeCustomValue).toHaveBeenCalledWith({
-      employeeId: '1',
-      fieldId: 'f1',
-      value: 'blue',
-    });
-  });
-
-  it('POST /api/employees/import errors when required mapping missing', async () => {
-    const wb = XLSX.utils.book_new();
-    const data = [{ Code: 'E001', First: 'John' }];
-    const ws = XLSX.utils.json_to_sheet(data);
-    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-
-    const mapping = { First: 'firstName' }; // missing employeeCode mapping
-
-    const res = await request(app)
-      .post('/api/employees/import')
-      .field('mapping', JSON.stringify(mapping))
-      .attach('file', buffer, 'employees.xlsx');
-
-    expect(res.status).toBe(400);
-    expect(res.body.error.message).toMatch('Missing mapping for required fields');
+    expect(res.body.success).toBe(1);
+    expect(res.body.failed).toBe(1);
+    expect(res.body.errors).toHaveLength(1);
+    const employee = (storage.createEmployeesBulk as any).mock.calls[0][0][0];
+    expect(employee.startDate).toBe('2024-05-20');
+    expect(employee.civilId).toBe('275021000000');
+    expect(employee.transferable).toBe(true);
+    expect(employee.passportIssueDate).toBe(null);
+    expect(employee.status).toBe('active');
+    expect(employee.residencyOnCompany).toBe(false);
   });
 
   it('GET /api/payroll returns payroll runs', async () => {

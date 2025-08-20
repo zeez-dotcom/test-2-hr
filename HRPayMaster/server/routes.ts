@@ -30,6 +30,14 @@ import {
 import { z } from "zod";
 import multer from "multer";
 import * as XLSX from "xlsx";
+import {
+  emptyToUndef,
+  parseNumber,
+  parseBoolean,
+  parseDateToISO,
+  normalizeBigId,
+  mapHeader,
+} from "./utils/normalize";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/login", passport.authenticate("local"), (req, res) => {
@@ -247,24 +255,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.send(buffer);
   });
 
-  const employeeNumberSchema = insertEmployeeSchema.extend({
-    employeeCode: z.coerce.string().optional(),
-    phone: z.coerce.string().optional(),
-    emergencyPhone: z.coerce.string().optional(),
-    nationalId: z.coerce.string().optional(),
-    civilId: z.coerce.string().optional(),
-    passportNumber: z.coerce.string().optional(),
-    visaNumber: z.coerce.string().optional(),
-    drivingLicenseNumber: z.coerce.string().optional(),
-    bankIban: z.coerce.string().optional(),
-    iban: z.coerce.string().optional(),
-    swiftCode: z.coerce.string().optional(),
-    salary: z.coerce.number(),
-    additions: z.coerce.number().optional(),
-    visaAlertDays: z.coerce.number().optional(),
-    civilIdAlertDays: z.coerce.number().optional(),
-    passportAlertDays: z.coerce.number().optional(),
-    standardWorkingDays: z.coerce.number().optional(),
+  const employeeSchema = insertEmployeeSchema.extend({
+    status: z.preprocess(v => emptyToUndef(v)?.toLowerCase(),
+      z.enum(["active", "on_leave", "resigned"]).optional()),
+    paymentMethod: z.preprocess(v => emptyToUndef(v)?.toLowerCase(),
+      z.enum(["bank", "cash", "link"]).optional()),
   });
 
   app.post("/api/employees/import", upload.single("file"), async (req, res, next) => {
@@ -273,14 +268,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return next(new HttpError(400, "No file uploaded"));
     }
     try {
-      const workbook = XLSX.read(file.buffer, { type: "buffer" });
+      const workbook = XLSX.read(file.buffer, { type: "buffer", cellDates: true });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       const headerRow = (XLSX.utils.sheet_to_json(sheet, { header: 1 })[0] || []) as string[];
-
-      // If no mapping provided, return detected headers for client-side mapping
       const mappingRaw = (req.body as any)?.mapping;
       if (!mappingRaw) {
-        return res.json({ headers: headerRow });
+        const auto: Record<string, string> = {};
+        for (const h of headerRow) {
+          const m = mapHeader(h);
+          if (m) auto[h] = m;
+        }
+        return res.json({ headers: headerRow, mapping: auto });
       }
 
       let mapping: Record<string, string>;
@@ -290,38 +288,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return next(new HttpError(400, "Invalid mapping JSON"));
       }
 
-      // Ensure required fields are mapped
-      const requiredFields = [
-        "employeeCode",
-        "firstName",
-        "lastName",
-        "position",
-        "salary",
-        "startDate",
-      ];
-      const mappedFields = new Set(Object.values(mapping));
-      const missingMappings = requiredFields.filter(f => !mappedFields.has(f));
-      if (missingMappings.length > 0) {
-        return next(
-          new HttpError(
-            400,
-            `Missing mapping for required fields: ${missingMappings.join(", ")}`
-          )
-        );
-      }
-
-      // Validate that provided headers exist in the file
       for (const source of Object.keys(mapping)) {
         if (!headerRow.includes(source)) {
           return next(new HttpError(400, `Column '${source}' not found in uploaded file`));
         }
       }
 
+      const rows: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet, {
+        raw: false,
+        defval: null,
+      });
+
       const employeeFieldKeys = new Set(Object.keys(insertEmployeeSchema.shape));
       const customFieldNames = new Set(
-        Object.values(mapping).filter(k => !employeeFieldKeys.has(k))
+        Object.values(mapping).filter(
+          k => !employeeFieldKeys.has(k) && k !== "englishName"
+        )
       );
-
       const fieldMap = new Map<string, any>();
       if (customFieldNames.size > 0) {
         const existingFields = await storage.getEmployeeCustomFields();
@@ -334,84 +317,145 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const rows: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet);
       const existing = await storage.getEmployees();
       const existingCodes = new Set(existing.map(e => e.employeeCode));
       const valid: InsertEmployee[] = [];
       const customValues: Record<string, any>[] = [];
-      let failed = 0;
+      const errors: { row: number; column: string; value: any; reason: string }[] = [];
       const seen = new Set<string>();
 
-      for (const row of rows) {
-        const translated: Record<string, any> = {};
-        for (const [source, target] of Object.entries(mapping)) {
-          translated[target] = row[source];
-        }
-
+      rows.forEach((row, idx) => {
         const base: Record<string, any> = {};
         const custom: Record<string, any> = {};
-        for (const [key, value] of Object.entries(translated)) {
-          if (employeeFieldKeys.has(key)) base[key] = value;
-          else custom[key] = value;
+        for (const [source, target] of Object.entries(mapping)) {
+          const raw = row[source];
+          if (target === "englishName") {
+            if (typeof raw === "string") {
+              const parts = raw.trim().split(/\s+/);
+              base.firstName = parts.shift() || "";
+              base.lastName = parts.join(" ");
+            }
+            continue;
+          }
+          if (employeeFieldKeys.has(target)) base[target] = raw;
+          else custom[target] = raw;
         }
 
-        // Convert numeric-looking text fields to strings to preserve leading zeros
-        const stringFields = [
-          "employeeCode",
-          "phone",
-          "emergencyPhone",
-          "nationalId",
-          "civilId",
-          "passportNumber",
-          "visaNumber",
-          "drivingLicenseNumber",
-          "bankIban",
-          "iban",
-          "swiftCode",
-        ];
-        for (const field of stringFields) {
-          if (typeof base[field] === "number") base[field] = String(base[field]);
-        }
-
+        base.employeeCode = base.employeeCode
+          ? String(base.employeeCode).trim()
+          : undefined;
         const code = base.employeeCode as string | undefined;
-        if (!code || seen.has(code) || existingCodes.has(code)) {
-          failed++;
-          continue;
+        if (!code) {
+          errors.push({ row: idx + 2, column: "employeeCode", value: "", reason: "Missing employeeCode" });
+          return;
+        }
+        if (seen.has(code) || existingCodes.has(code)) {
+          errors.push({ row: idx + 2, column: "employeeCode", value: code, reason: "Duplicate employeeCode" });
+          return;
         }
         seen.add(code);
-        try {
-          const emp = employeeNumberSchema.parse(base);
-          valid.push(emp as any);
-          customValues.push(custom);
-        } catch {
-          failed++;
+
+        const dateFields = [
+          "startDate",
+          "civilIdIssueDate",
+          "civilIdExpiryDate",
+          "passportIssueDate",
+          "passportExpiryDate",
+          "drivingLicenseExpiryDate",
+          "visaIssueDate",
+          "visaExpiryDate",
+          "dateOfBirth",
+          "vacationReturnDate",
+        ];
+        for (const f of dateFields) if (f in base) base[f] = parseDateToISO(base[f]);
+
+        const numberFields = [
+          "salary",
+          "additions",
+          "salaryDeductions",
+          "fines",
+          "bonuses",
+          "totalLoans",
+          "loans",
+        ];
+        for (const f of numberFields) if (f in base) base[f] = parseNumber(base[f]);
+
+        const booleanFields = ["transferable", "residencyOnCompany"];
+        for (const f of booleanFields) if (f in base) base[f] = parseBoolean(base[f]);
+
+        if ("civilId" in base) base.civilId = normalizeBigId(base.civilId);
+        if ("passportNumber" in base) base.passportNumber = normalizeBigId(base.passportNumber);
+        if ("iban" in base) base.iban = emptyToUndef(base.iban)?.replace(/\s+/g, "").toUpperCase();
+        if ("phone" in base) base.phone = emptyToUndef(base.phone) ? String(emptyToUndef(base.phone)) : undefined;
+        if ("status" in base) {
+          const val = String(base.status || "").toLowerCase();
+          const smap: Record<string, string> = {
+            active: "active",
+            "نشط": "active",
+            "on-vacation": "on_leave",
+            "on vacation": "on_leave",
+            "في اجازة": "on_leave",
+            "في إجازة": "on_leave",
+            resigned: "resigned",
+            "استقال": "resigned",
+          };
+          base.status = smap[val] || "active";
         }
-      }
+        if ("paymentMethod" in base) {
+          const val = String(base.paymentMethod || "").toLowerCase();
+          const pmap: Record<string, string> = {
+            bank: "bank",
+            cash: "cash",
+            link: "link",
+          };
+          base.paymentMethod = pmap[val];
+        }
 
-      const {
-        success,
-        failed: insertFailed,
-        employees: insertedEmployees,
-      } = await storage.createEmployeesBulk(valid);
+        const cleanedBase = Object.fromEntries(
+          Object.entries(base).filter(([_, v]) => v !== undefined)
+        );
+        try {
+          const emp = employeeSchema.parse(cleanedBase);
+          valid.push(emp as InsertEmployee);
+          customValues.push(custom);
+        } catch (err) {
+          if (err instanceof z.ZodError) {
+            for (const issue of err.issues) {
+              errors.push({
+                row: idx + 2,
+                column: issue.path.join("."),
+                value: (cleanedBase as any)[issue.path[0]],
+                reason: issue.message,
+              });
+            }
+          } else {
+            errors.push({ row: idx + 2, column: "unknown", value: "", reason: "Invalid data" });
+          }
+        }
+      });
 
-      if (insertedEmployees && fieldMap.size > 0) {
-        for (let i = 0; i < insertedEmployees.length; i++) {
-          const emp = insertedEmployees[i];
+      const { success, failed: insertFailed, employees: inserted } =
+        await storage.createEmployeesBulk(valid);
+
+      if (inserted && fieldMap.size > 0) {
+        for (let i = 0; i < inserted.length; i++) {
+          const emp = inserted[i];
           const custom = customValues[i] || {};
           for (const [key, value] of Object.entries(custom)) {
             const field = fieldMap.get(key);
-            if (field && value !== undefined && value !== null && value !== "") {
+            const val = emptyToUndef(value);
+            if (field && val !== undefined) {
               await storage.createEmployeeCustomValue({
                 employeeId: emp.id,
                 fieldId: field.id,
-                value: String(value),
+                value: String(val),
               });
             }
           }
         }
       }
 
-      res.json({ success, failed: failed + insertFailed });
+      res.json({ success, failed: errors.length + insertFailed, errors });
     } catch {
       next(new HttpError(500, "Failed to import employees"));
     }
@@ -431,9 +475,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/employees", async (req, res, next) => {
     try {
-      const employee = employeeNumberSchema.parse(req.body);
+      const parsed = employeeSchema.parse(req.body);
+      const employee: any = Object.fromEntries(
+        Object.entries(parsed).filter(([_, v]) => v !== undefined)
+      );
       if (!employee.employeeCode?.trim()) {
-        delete (employee as any).employeeCode;
+        delete employee.employeeCode;
       } else {
         employee.employeeCode = employee.employeeCode.trim();
       }
@@ -441,14 +488,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const newEmployee = await storage.createEmployee({
         ...employee,
         role: employee.role || "employee",
-      } as any);
+      });
       res.status(201).json(newEmployee);
     } catch (error) {
       if (error instanceof z.ZodError) {
         return next(new HttpError(400, "Invalid employee data", error.errors));
       }
       // Surface duplicate employee code errors as a 409 conflict
-      if (error instanceof DuplicateEmployeeCodeError) {
+      if (
+        error instanceof DuplicateEmployeeCodeError ||
+        (error as any)?.code === "23505"
+      ) {
         return next(new HttpError(409, "Employee code already exists"));
       }
       console.error("Failed to create employee:", error);
@@ -467,10 +517,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if ("employeeCode" in req.body) {
         return next(new HttpError(400, "Employee code cannot be updated"));
       }
-      const updates = employeeNumberSchema
+      const parsed = employeeSchema
         .omit({ employeeCode: true })
         .partial()
         .parse(req.body) as any;
+      const updates: any = Object.fromEntries(
+        Object.entries(parsed).filter(([_, v]) => v !== undefined)
+      );
       const updatedEmployee = await storage.updateEmployee(
         req.params.id,
         updates,
