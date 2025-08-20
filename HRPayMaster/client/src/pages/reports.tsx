@@ -405,7 +405,7 @@ export default function Reports() {
             
             .documents-grid {
               display: grid;
-              grid-template-columns: repeat(3, 1fr);
+              grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
               gap: 4mm;
             }
             
@@ -461,6 +461,11 @@ export default function Reports() {
               font-family: 'Courier New', monospace;
               word-wrap: break-word;
               overflow-wrap: break-word;
+            }
+
+            .document-number a {
+              color: #2563eb;
+              text-decoration: underline;
             }
             
             .document-expiry {
@@ -817,6 +822,22 @@ export default function Reports() {
                       ${employee.visaExpiryDate ? `Expires: ${formatDate(employee.visaExpiryDate)}` : 'No expiry date'}
                     </div>
                   </div>
+
+                  ${employee.additionalDocs ? `
+                  <div class="document-card valid">
+                    <div class="document-icon">📄</div>
+                    <div class="document-title">Additional Documents</div>
+                    <div class="document-number"><a href="${employee.additionalDocs}" target="_blank" rel="noopener noreferrer">View</a></div>
+                  </div>
+                  ` : ''}
+
+                  ${employee.otherDocs ? `
+                  <div class="document-card valid">
+                    <div class="document-icon">📁</div>
+                    <div class="document-title">Other Documents</div>
+                    <div class="document-number"><a href="${employee.otherDocs}" target="_blank" rel="noopener noreferrer">View</a></div>
+                  </div>
+                  ` : ''}
                 </div>
               </div>
 
