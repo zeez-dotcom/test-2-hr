@@ -356,12 +356,29 @@ export class DatabaseStorage implements IStorage {
     let failed = 0;
     const inserted: Employee[] = [];
     await db.transaction(async tx => {
+      const usedCodes = new Set<string>();
       for (const emp of employeeList) {
         try {
+          let code = emp.employeeCode?.trim();
+          if (!code) {
+            do {
+              code = await this.generateEmployeeCode();
+            } while (usedCodes.has(code));
+          } else {
+            if (usedCodes.has(code)) throw new DuplicateEmployeeCodeError(code);
+            const existing = await tx
+              .select()
+              .from(employees)
+              .where(eq(employees.employeeCode, code))
+              .limit(1);
+            if (existing.length > 0) throw new DuplicateEmployeeCodeError(code);
+          }
+
           const [created] = await tx
             .insert(employees)
             .values({
               ...emp,
+              employeeCode: code,
               role: emp.role || "employee",
               status: emp.status || "active",
               visaAlertDays: emp.visaAlertDays || 30,
@@ -370,6 +387,7 @@ export class DatabaseStorage implements IStorage {
             })
             .returning();
           inserted.push(created);
+          usedCodes.add(code);
           success++;
         } catch {
           failed++;
