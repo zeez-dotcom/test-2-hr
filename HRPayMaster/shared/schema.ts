@@ -15,6 +15,7 @@ const parseDate = (v: unknown) => parseDateToISO(v).value;
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
+  email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
 });
 
