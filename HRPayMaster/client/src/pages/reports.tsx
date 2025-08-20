@@ -37,6 +37,15 @@ import type {
   SickLeaveTracking,
 } from "@shared/schema";
 
+function sanitizeImageSrc(src?: string): string {
+  if (!src) return "";
+  const trimmed = src.trim();
+  const isDataUrl = /^data:image\/[^;]+;base64,/i.test(trimmed);
+  const isAbsoluteUrl = /^https?:\/\//i.test(trimmed);
+  if (!isDataUrl && !isAbsoluteUrl) return "";
+  return trimmed.replace(/"/g, "&quot;");
+}
+
 export default function Reports() {
   const [selectedEmployee, setSelectedEmployee] = useState<string>("all");
   const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
@@ -216,6 +225,8 @@ export default function Reports() {
     const remainingSickDays = sickLeave?.remainingSickDays ?? Math.max(0, 14 - sickDaysUsed);
     const otherLeaveTotals = Object.entries(leaveTypeTotals).filter(([type]) => type !== "sick");
 
+    const profileSrc = sanitizeImageSrc(employee.profileImage);
+
     const htmlContent = `
       <!DOCTYPE html>
       <html>
@@ -348,6 +359,13 @@ export default function Reports() {
               width: 100%;
               height: 100%;
               object-fit: cover;
+            }
+
+            .profile-img {
+              width: 100%;
+              height: 100%;
+              object-fit: cover;
+              border-radius: 50%;
             }
             
             .photo-placeholder {
@@ -824,8 +842,8 @@ export default function Reports() {
               <div class="employee-profile">
                 <div class="employee-photo-container">
                   <div class="employee-photo">
-                    ${employee.profileImage ?
-                      `<img src="${employee.profileImage}" alt="Employee Photo">` :
+                    ${profileSrc ?
+                      `<img src="${profileSrc}" alt="Employee Photo" class="profile-img">` :
                       '<div class="photo-placeholder">No Photo<br>Available</div>'
                     }
                   </div>
@@ -955,11 +973,11 @@ export default function Reports() {
                   </div>
                   ` : ''}
 
-                  ${employee.profileImage ? `
+                  ${profileSrc ? `
                   <div class="document-card valid">
                     <div class="document-icon">👤</div>
                     <div class="document-title">Profile Photo</div>
-                    <div class="document-number"><a href="${employee.profileImage}" target="_blank" rel="noopener noreferrer">View</a></div>
+                    <div class="document-number"><a href="${profileSrc}" target="_blank" rel="noopener noreferrer">View</a></div>
                   </div>
                   ` : ''}
 
