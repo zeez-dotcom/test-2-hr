@@ -13,6 +13,7 @@ vi.mock('./storage', () => {
       createEmployee: vi.fn(),
       createEmployeesBulk: vi.fn(),
       updateEmployee: vi.fn(),
+      getEmployee: vi.fn(),
       getEmployeeCustomFields: vi.fn(),
       createEmployeeCustomField: vi.fn(),
       createEmployeeCustomValue: vi.fn(),
@@ -508,6 +509,37 @@ describe('employee routes', () => {
     expect(arg.phone).toBe('111');
     expect(arg.emergencyPhone).toBe('222');
     expect(arg.nationalId).toBe('333');
+  });
+
+  it('PUT /api/employees/:id handles missing addedBy user gracefully', async () => {
+    const appWithUser = createApp();
+    appWithUser.use((req, _res, next) => {
+      // @ts-ignore
+      req.user = { employeeId: 'missing-id' };
+      next();
+    });
+    await registerRoutes(appWithUser);
+    appWithUser.use(errorHandler);
+
+    const updated = {
+      id: 'emp1',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      salary: '0',
+      startDate: '2024-01-01',
+    };
+    (storage.updateEmployee as any).mockResolvedValue(updated);
+    (storage.getEmployee as any).mockResolvedValue(undefined);
+    (storage.createEmployeeEvent as any).mockResolvedValue({});
+
+    const res = await request(appWithUser)
+      .put('/api/employees/emp1')
+      .send({ firstName: 'Jane' });
+
+    expect(res.status).toBe(200);
+    expect(storage.createEmployeeEvent).toHaveBeenCalledTimes(1);
+    const eventArg = (storage.createEmployeeEvent as any).mock.calls[0][0];
+    expect(eventArg.addedBy).toBeUndefined();
   });
 
   it('POST /api/employees/import returns headers when no mapping provided', async () => {
