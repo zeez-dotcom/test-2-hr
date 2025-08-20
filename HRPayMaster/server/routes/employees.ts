@@ -741,7 +741,9 @@ const upload = multer({ storage: multer.memoryStorage() });
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
-          addedBy: (req.user as any)?.id,
+          ...(req.user && (req.user as any).employeeId
+            ? { addedBy: (req.user as any).employeeId }
+            : {}),
         };
         await storage.createEmployeeEvent(event);
       }
@@ -961,7 +963,9 @@ const upload = multer({ storage: multer.memoryStorage() });
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
-          addedBy: (req.user as any)?.id,
+          ...(req.user && (req.user as any).employeeId
+            ? { addedBy: (req.user as any).employeeId }
+            : {}),
         };
         await storage.createEmployeeEvent(event);
       }
@@ -991,7 +995,9 @@ const upload = multer({ storage: multer.memoryStorage() });
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
-          addedBy: (req.user as any)?.id,
+          ...(req.user && (req.user as any).employeeId
+            ? { addedBy: (req.user as any).employeeId }
+            : {}),
         };
         await storage.createEmployeeEvent(event);
       }
@@ -1020,7 +1026,9 @@ const upload = multer({ storage: multer.memoryStorage() });
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
-          addedBy: (req.user as any)?.id,
+          ...(req.user && (req.user as any).employeeId
+            ? { addedBy: (req.user as any).employeeId }
+            : {}),
         };
         await storage.createEmployeeEvent(event);
       }
@@ -1234,7 +1242,9 @@ const upload = multer({ storage: multer.memoryStorage() });
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
-          addedBy: (req.user as any)?.id,
+          ...(req.user && (req.user as any).employeeId
+            ? { addedBy: (req.user as any).employeeId }
+            : {}),
         };
         await storage.createEmployeeEvent(event);
       }
@@ -1267,7 +1277,9 @@ const upload = multer({ storage: multer.memoryStorage() });
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
-          addedBy: (req.user as any)?.id,
+          ...(req.user && (req.user as any).employeeId
+            ? { addedBy: (req.user as any).employeeId }
+            : {}),
         };
         await storage.createEmployeeEvent(event);
       }
@@ -1296,7 +1308,9 @@ const upload = multer({ storage: multer.memoryStorage() });
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
-          addedBy: (req.user as any)?.id,
+          ...(req.user && (req.user as any).employeeId
+            ? { addedBy: (req.user as any).employeeId }
+            : {}),
         };
         await storage.createEmployeeEvent(event);
       }
