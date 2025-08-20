@@ -36,7 +36,7 @@ import { storage } from './storage';
 
 function createApp() {
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: '1mb' }));
   app.use((req, _res, next) => {
     // Stub authentication for tests
     // @ts-ignore
