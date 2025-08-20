@@ -40,7 +40,7 @@ import type {
 function sanitizeImageSrc(src?: string): string {
   if (!src) return "";
   const trimmed = src.trim();
-  const isDataUrl = /^data:image\/[^;]+;base64,/i.test(trimmed);
+  const isDataUrl = /^data: image\/[^;]+;base64,/i.test(trimmed);
   const isAbsoluteUrl = /^https?:\/\//i.test(trimmed);
   if (!isDataUrl && !isAbsoluteUrl) return "";
   return trimmed.replace(/"/g, "&quot;");
@@ -259,27 +259,27 @@ export default function Reports() {
             }
 
             h1 {
-              font-size: 24px;
+              font-size: 1.5rem;
               font-weight: 700;
-              margin-bottom: 16px;
+              margin-bottom: 4.23mm;
             }
 
             h2 {
-              font-size: 20px;
+              font-size: 1.25rem;
               font-weight: 600;
-              margin-bottom: 12px;
+              margin-bottom: 3.17mm;
             }
 
             h3 {
-              font-size: 16px;
+              font-size: 1rem;
               font-weight: 600;
-              margin-bottom: 8px;
+              margin-bottom: 2.12mm;
             }
 
             h4 {
-              font-size: 14px;
+              font-size: 0.875rem;
               font-weight: 600;
-              margin-bottom: 6px;
+              margin-bottom: 1.59mm;
             }
             
             .page-container {
@@ -287,7 +287,7 @@ export default function Reports() {
               min-height: 297mm;
               margin: 0 auto;
               background: white;
-              box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+              box-shadow: 0 5.29mm 10.58mm rgba(0,0,0,0.1);
               position: relative;
               display: flex;
               flex-direction: column;
@@ -315,8 +315,8 @@ export default function Reports() {
             }
             
             @keyframes float {
-              0%, 100% { transform: translateY(0px) rotate(0deg); }
-              50% { transform: translateY(-20px) rotate(180deg); }
+              0%, 100% { transform: translateY(0mm) rotate(0deg); }
+              50% { transform: translateY(-5.29mm) rotate(180deg); }
             }
             
             .header-content {
@@ -325,24 +325,24 @@ export default function Reports() {
             }
             
             .company-logo {
-              width: 60px;
-              height: 60px;
+              width: 15.87mm;
+              height: 15.87mm;
               background: rgba(255,255,255,0.2);
               border-radius: 50%;
-              margin: 0 auto 20px;
+              margin: 0 auto 5.29mm;
               display: flex;
               align-items: center;
               justify-content: center;
-              font-size: 24px;
+              font-size: 1.5rem;
               font-weight: bold;
-              backdrop-filter: blur(10px);
-              border: 2px solid rgba(255,255,255,0.3);
+              backdrop-filter: blur(2.65mm);
+              border: 0.53mm solid rgba(255,255,255,0.3);
             }
             
             .header-content p {
-              margin: 6px 0 0;
+              margin: 1.59mm 0 0;
               opacity: 0.9;
-              font-size: 14px;
+              font-size: 0.875rem;
             }
             
             .content-area {
@@ -368,11 +368,11 @@ export default function Reports() {
             .employee-photo {
               width: 45mm;
               height: 55mm;
-              border-radius: 8px;
+              border-radius: 2.12mm;
               overflow: hidden;
               position: relative;
               background: linear-gradient(145deg, #f0f4f8, #e2e8f0);
-              box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+              box-shadow: 0 1.06mm 3.97mm rgba(0,0,0,0.1);
               display: flex;
               align-items: center;
               justify-content: center;
@@ -393,22 +393,22 @@ export default function Reports() {
             
             .photo-placeholder {
               color: #64748b;
-              font-size: 14px;
+              font-size: 0.875rem;
               text-align: center;
               font-weight: 500;
             }
             
             .status-badge {
               position: absolute;
-              top: -10px;
-              right: -10px;
-              padding: 8px 16px;
-              border-radius: 20px;
-              font-size: 12px;
+              top: -2.65mm;
+              right: -2.65mm;
+              padding: 2.12mm 4.23mm;
+              border-radius: 5.29mm;
+              font-size: 0.75rem;
               font-weight: 600;
               text-transform: uppercase;
-              letter-spacing: 0.5px;
-              box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+              letter-spacing: 0.0312rem;
+              box-shadow: 0 1.06mm 3.17mm rgba(0,0,0,0.15);
             }
             
             .status-badge.active {
@@ -426,7 +426,7 @@ export default function Reports() {
             }
             
             .employee-position {
-              font-size: 14px;
+              font-size: 0.875rem;
               color: #667eea;
               margin: 0 0 8mm;
               font-weight: 500;
@@ -441,9 +441,9 @@ export default function Reports() {
             
             .info-card {
               background: linear-gradient(145deg, #f8fafc, #f1f5f9);
-              border-radius: 6px;
-              padding: 8px;
-              border: 1px solid #e2e8f0;
+              border-radius: 1.59mm;
+              padding: 2.12mm;
+              border: 0.26mm solid #e2e8f0;
               position: relative;
               overflow: hidden;
               page-break-inside: avoid;
@@ -454,22 +454,22 @@ export default function Reports() {
               position: absolute;
               top: 0;
               left: 0;
-              width: 4px;
+              width: 1.06mm;
               height: 100%;
               background: linear-gradient(135deg, #667eea, #764ba2);
             }
             
             .info-label {
-              font-size: 10px;
+              font-size: 0.625rem;
               color: #64748b;
               text-transform: uppercase;
-              letter-spacing: 0.3px;
+              letter-spacing: 0.0187rem;
               font-weight: 600;
-              margin-bottom: 3px;
+              margin-bottom: 0.79mm;
             }
             
             .info-value {
-              font-size: 12px;
+              font-size: 0.75rem;
               color: #1e293b;
               font-weight: 500;
               word-wrap: break-word;
@@ -486,7 +486,7 @@ export default function Reports() {
               align-items: center;
               margin-bottom: 4mm;
               padding-bottom: 2mm;
-              border-bottom: 1px solid #e2e8f0;
+              border-bottom: 0.26mm solid #e2e8f0;
             }
             
             .section-icon {
@@ -498,22 +498,22 @@ export default function Reports() {
               align-items: center;
               justify-content: center;
               margin-right: 3mm;
-              font-size: 12px;
+              font-size: 0.75rem;
             }
             
             .documents-grid {
               display: grid;
-              grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+              grid-template-columns: repeat(auto-fill, minmax(47.62mm, 1fr));
               gap: 4mm;
             }
             
             .document-card {
               background: white;
-              border-radius: 6px;
+              border-radius: 1.59mm;
               padding: 6mm;
               text-align: center;
-              box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-              border: 1px solid transparent;
+              box-shadow: 0 0.53mm 2.12mm rgba(0,0,0,0.08);
+              border: 0.26mm solid transparent;
               position: relative;
               overflow: hidden;
               page-break-inside: avoid;
@@ -525,13 +525,13 @@ export default function Reports() {
               top: 0;
               left: 0;
               right: 0;
-              height: 4px;
+              height: 1.06mm;
               background: #e2e8f0;
             }
             
-            .document-card.valid::before { background: linear-gradient(135deg, #10b981, #059669); }
-            .document-card.expiring::before { background: linear-gradient(135deg, #f59e0b, #d97706); }
-            .document-card.expired::before { background: linear-gradient(135deg, #ef4444, #dc2626); }
+            .document-card.valid: :before { background: linear-gradient(135deg, #10b981, #059669); }
+            .document-card.expiring: :before { background: linear-gradient(135deg, #f59e0b, #d97706); }
+            .document-card.expired: :before { background: linear-gradient(135deg, #ef4444, #dc2626); }
             
             .document-icon {
               width: 8mm;
@@ -542,18 +542,18 @@ export default function Reports() {
               display: flex;
               align-items: center;
               justify-content: center;
-              font-size: 14px;
+              font-size: 0.875rem;
             }
             
             .document-title {
-              font-size: 12px;
+              font-size: 0.75rem;
               font-weight: 600;
               color: #1e293b;
               margin-bottom: 2mm;
             }
             
             .document-number {
-              font-size: 10px;
+              font-size: 0.625rem;
               color: #64748b;
               margin-bottom: 2mm;
               font-family: 'Courier New', monospace;
@@ -567,7 +567,7 @@ export default function Reports() {
             }
             
             .document-expiry {
-              font-size: 10px;
+              font-size: 0.625rem;
               font-weight: 500;
             }
             
@@ -577,7 +577,7 @@ export default function Reports() {
             
             .events-summary {
               background: linear-gradient(135deg, #667eea, #764ba2);
-              border-radius: 8px;
+              border-radius: 2.12mm;
               padding: 8mm;
               margin-bottom: 4mm;
               color: white;
@@ -608,21 +608,21 @@ export default function Reports() {
             .summary-card {
               text-align: center;
               background: rgba(255,255,255,0.1);
-              border-radius: 4px;
+              border-radius: 1.06mm;
               padding: 3mm;
-              backdrop-filter: blur(10px);
+              backdrop-filter: blur(2.65mm);
             }
             
             .summary-value {
-              font-size: 16px;
+              font-size: 1rem;
               font-weight: 700;
-              margin-bottom: 2px;
+              margin-bottom: 0.53mm;
               display: block;
               word-wrap: break-word;
             }
             
             .summary-label {
-              font-size: 10px;
+              font-size: 0.625rem;
               opacity: 0.9;
               font-weight: 500;
             }
@@ -630,14 +630,14 @@ export default function Reports() {
             .salary-table {
               width: 100%;
               border-collapse: collapse;
-              font-size: 10px;
+              font-size: 0.625rem;
               margin-top: 4mm;
             }
 
             .salary-table th,
             .salary-table td {
               padding: 2mm;
-              border-bottom: 1px solid #e2e8f0;
+              border-bottom: 0.26mm solid #e2e8f0;
             }
 
             .salary-table th {
@@ -656,7 +656,7 @@ export default function Reports() {
 
             .events-timeline {
               background: #f8fafc;
-              border-radius: 6px;
+              border-radius: 1.59mm;
               padding: 6mm;
             }
             
@@ -668,15 +668,15 @@ export default function Reports() {
               padding: 3mm;
               margin-bottom: 2mm;
               background: white;
-              border-radius: 4px;
-              box-shadow: 0 1px 4px rgba(0,0,0,0.05);
-              border-left: 2px solid #e2e8f0;
+              border-radius: 1.06mm;
+              box-shadow: 0 0.26mm 1.06mm rgba(0,0,0,0.05);
+              border-left: 0.53mm solid #e2e8f0;
               page-break-inside: avoid;
             }
             
             .event-item:hover {
-              transform: translateY(-2px);
-              box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+              transform: translateY(-0.53mm);
+              box-shadow: 0 2.12mm 6.61mm rgba(0,0,0,0.1);
             }
             
             .event-item.bonus { border-left-color: #10b981; }
@@ -684,15 +684,15 @@ export default function Reports() {
             .event-item.vacation { border-left-color: #8b5cf6; }
             
             .event-date {
-              font-size: 9px;
+              font-size: 0.5625rem;
               color: #64748b;
               font-weight: 600;
             }
             
             .event-badge {
-              padding: 2px 4px;
-              border-radius: 8px;
-              font-size: 8px;
+              padding: 0.53mm 1.06mm;
+              border-radius: 2.12mm;
+              font-size: 0.5rem;
               font-weight: 600;
               text-transform: uppercase;
               text-align: center;
@@ -703,26 +703,26 @@ export default function Reports() {
             .event-badge.vacation { background: #e0e7ff; color: #3730a3; }
             
             .event-details {
-              font-size: 11px;
+              font-size: 0.6875rem;
             }
             
             .event-title {
               font-weight: 600;
               color: #1e293b;
-              margin-bottom: 1px;
+              margin-bottom: 0.26mm;
               word-wrap: break-word;
               overflow-wrap: break-word;
             }
             
             .event-description {
-              font-size: 9px;
+              font-size: 0.5625rem;
               color: #64748b;
               word-wrap: break-word;
               overflow-wrap: break-word;
             }
             
             .event-amount {
-              font-size: 10px;
+              font-size: 0.625rem;
               font-weight: 700;
               text-align: right;
               word-wrap: break-word;
@@ -732,7 +732,7 @@ export default function Reports() {
             .event-amount.deduction { color: #dc2626; }
             
             .event-status {
-              font-size: 8px;
+              font-size: 0.5rem;
               text-transform: uppercase;
               color: #64748b;
               text-align: center;
@@ -743,11 +743,11 @@ export default function Reports() {
               padding: 10mm;
               color: #64748b;
               background: white;
-              border-radius: 6px;
+              border-radius: 1.59mm;
             }
             
             .no-events-icon {
-              font-size: 24px;
+              font-size: 1.5rem;
               margin-bottom: 4mm;
               opacity: 0.3;
             }
@@ -755,10 +755,10 @@ export default function Reports() {
             .footer {
               margin-top: auto;
               padding: 8mm 15mm;
-              border-top: 1px solid #e2e8f0;
+              border-top: 0.26mm solid #e2e8f0;
               background: #f8fafc;
               text-align: center;
-              font-size: 10px;
+              font-size: 0.625rem;
               color: #64748b;
               flex-shrink: 0;
             }
@@ -772,7 +772,7 @@ export default function Reports() {
                 margin: 0;
               }
               .no-print { display: none !important; }
-              .event-item:hover { transform: none; }
+              .event-item: hover { transform: none; }
               .header-gradient { padding: 10mm 15mm 8mm; }
               .content-area { padding: 10mm; }
               .footer { page-break-inside: avoid; }
@@ -780,42 +780,42 @@ export default function Reports() {
             
             .print-actions {
               position: fixed;
-              bottom: 30px;
-              right: 30px;
+              bottom: 7.94mm;
+              right: 7.94mm;
               display: flex;
-              gap: 15px;
+              gap: 3.97mm;
               z-index: 1000;
             }
             
             .btn {
-              padding: 12px 24px;
+              padding: 3.17mm 6.35mm;
               border: none;
-              border-radius: 25px;
-              font-size: 14px;
+              border-radius: 6.61mm;
+              font-size: 0.875rem;
               font-weight: 600;
               cursor: pointer;
               transition: all 0.3s ease;
               text-decoration: none;
               display: inline-flex;
               align-items: center;
-              gap: 8px;
+              gap: 2.12mm;
             }
             
             .btn-primary {
               background: linear-gradient(135deg, #667eea, #764ba2);
               color: white;
-              box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+              box-shadow: 0 1.06mm 3.97mm rgba(102, 126, 234, 0.4);
             }
             
             .btn-secondary {
               background: #64748b;
               color: white;
-              box-shadow: 0 4px 15px rgba(100, 116, 139, 0.4);
+              box-shadow: 0 1.06mm 3.97mm rgba(100, 116, 139, 0.4);
             }
             
             .btn:hover {
-              transform: translateY(-2px);
-              box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+              transform: translateY(-0.53mm);
+              box-shadow: 0 2.12mm 6.61mm rgba(0,0,0,0.2);
             }
           </style>
         </head>
@@ -1234,7 +1234,12 @@ export default function Reports() {
         <head>
           <title>${reportTitle}</title>
           <style>
-            body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+            @page {
+              size: A4;
+              margin: 15mm;
+            }
+
+            body { font-family: Arial, sans-serif; margin: 5.29mm; line-height: 1.6; }
 
             h1, h2, h3, h4 {
               overflow-wrap: break-word;
@@ -1243,72 +1248,72 @@ export default function Reports() {
             }
 
             h1 {
-              font-size: 24px;
+              font-size: 1.5rem;
               font-weight: 700;
-              margin-bottom: 16px;
+              margin-bottom: 4.23mm;
             }
 
             h2 {
-              font-size: 20px;
+              font-size: 1.25rem;
               font-weight: 600;
-              margin-bottom: 12px;
+              margin-bottom: 3.17mm;
             }
 
             h3 {
-              font-size: 16px;
+              font-size: 1rem;
               font-weight: 600;
-              margin-bottom: 8px;
+              margin-bottom: 2.12mm;
             }
 
             h4 {
-              font-size: 14px;
+              font-size: 0.875rem;
               font-weight: 600;
-              margin-bottom: 6px;
+              margin-bottom: 1.59mm;
             }
-            .header { text-align: center; margin-bottom: 30px; border-bottom: 3px solid #333; padding-bottom: 20px; }
+            .header { text-align: center; margin-bottom: 7.94mm; border-bottom: 0.79mm solid #333; padding-bottom: 5.29mm; }
             .employee-section { 
               page-break-inside: avoid; 
-              margin-bottom: 40px; 
-              border: 1px solid #ddd; 
-              padding: 25px; 
-              border-radius: 8px;
+              margin-bottom: 10.58mm; 
+              border: 0.26mm solid #ddd; 
+              padding: 6.61mm; 
+              border-radius: 2.12mm;
               background-color: #fafafa;
             }
             .employee-header { 
               display: flex; 
               justify-content: space-between; 
-              margin-bottom: 20px;
-              padding-bottom: 15px;
-              border-bottom: 2px solid #eee;
+              margin-bottom: 5.29mm;
+              padding-bottom: 3.97mm;
+              border-bottom: 0.53mm solid #eee;
             }
-            .employee-info { font-size: 16px; }
-            .employee-info p { margin: 5px 0; color: #666; }
-            .events-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            .employee-info { font-size: 1rem; }
+            .employee-info p { margin: 1.32mm 0; color: #666; }
+            .events-table { width: 100%; border-collapse: collapse; margin-top: 5.29mm; }
             .events-table th, .events-table td { 
-              border: 1px solid #ddd; 
-              padding: 12px; 
+              border: 0.26mm solid #ddd; 
+              padding: 3.17mm; 
               text-align: left; 
-              font-size: 13px;
+              font-size: 0.8125rem;
             }
             .events-table th { 
               background-color: #f8f9fa; 
               font-weight: bold; 
               color: #333;
             }
-            .events-table tr:nth-child(even) { background-color: #f9f9f9; }
+            .events-table tr: nth-child(even) { background-color: #f9f9f9; }
             .event-bonus { color: #059669; font-weight: bold; }
             .event-deduction { color: #dc2626; font-weight: bold; }
             .event-vacation { color: #7c3aed; font-weight: bold; }
             .summary-box { 
               background-color: #e0f2fe; 
-              padding: 15px; 
-              border-radius: 5px; 
-              margin-top: 20px;
-              border-left: 4px solid #0284c7;
+              padding: 3.97mm; 
+              border-radius: 1.32mm; 
+              margin-top: 5.29mm;
+              border-left: 1.06mm solid #0284c7;
             }
-            .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 10px; }
+            .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3.97mm; margin-top: 2.65mm; }
             .summary-item { text-align: center; }
-            .summary-item strong { display: block; font-size: 18px; color: #0284c7; }
+            .summary-item strong { display: block; font-size: 1.125rem; color: #0284c7; }
             @media print { 
               .no-print { display: none; }
               .employee-section { page-break-after: auto; }
@@ -1347,7 +1352,7 @@ export default function Reports() {
                     <p><strong>Current Salary:</strong> ${formatCurrency(employee.salary)}</p>
                   </div>
                   <div style="text-align: right;">
-                    <p><strong>Status:</strong> <span style="color: ${employee.status === 'active' ? '#059669' : '#dc2626'};">${employee.status?.toUpperCase()}</span></p>
+                    <p><strong>Status: </strong> <span style="color: ${employee.status === 'active' ? '#059669' : '#dc2626'};">${employee.status?.toUpperCase()}</span></p>
                     <p><strong>Email:</strong> ${employee.email || 'N/A'}</p>
                     <p><strong>Phone:</strong> ${employee.phone || 'N/A'}</p>
                   </div>
@@ -1405,7 +1410,7 @@ export default function Reports() {
                     </tbody>
                   </table>
                 ` : `
-                  <p style="text-align: center; color: #666; margin-top: 20px; font-style: italic;">
+                  <p style="text-align: center; color: #666; margin-top: 5.29mm; font-style: italic;">
                     No events found for the selected period
                   </p>
                 `}
@@ -1413,11 +1418,11 @@ export default function Reports() {
             `;
           }).join('')}
 
-          <div class="no-print" style="margin-top: 30px; text-align: center; page-break-inside: avoid;">
-            <button onclick="window.print()" style="padding: 12px 24px; background-color: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; margin-right: 10px; font-size: 14px;">
+          <div class="no-print" style="margin-top: 7.94mm; text-align: center; page-break-inside: avoid;">
+            <button onclick="window.print()" style="padding: 3.17mm 6.35mm; background-color: #3b82f6; color: white; border: none; border-radius: 1.59mm; cursor: pointer; margin-right: 2.65mm; font-size: 0.875rem;">
               Print Report
             </button>
-            <button onclick="window.close()" style="padding: 12px 24px; background-color: #6b7280; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">
+            <button onclick="window.close()" style="padding: 3.17mm 6.35mm; background-color: #6b7280; color: white; border: none; border-radius: 1.59mm; cursor: pointer; font-size: 0.875rem;">
               Close
             </button>
           </div>
