@@ -3,6 +3,7 @@ import express from 'express';
 import request from 'supertest';
 import { errorHandler } from './errorHandler';
 import * as XLSX from 'xlsx';
+import sharp from 'sharp';
 
 vi.mock('./storage', () => {
   class DuplicateEmployeeCodeError extends Error {}
@@ -351,6 +352,76 @@ describe('employee routes', () => {
     });
 
     expect(res.status).toBe(409);
+  });
+
+  it('POST /api/employees compresses large base64 images', async () => {
+    const large = await sharp({
+      create: {
+        width: 2000,
+        height: 2000,
+        channels: 3,
+        background: { r: 255, g: 0, b: 0 }
+      }
+    })
+      .jpeg()
+      .toBuffer();
+    const base64 = `data:image/jpeg;base64,${large.toString('base64')}`;
+    (storage.createEmployee as any).mockImplementation(async e => e);
+    const res = await request(app).post('/api/employees').send({
+      firstName: 'Img',
+      lastName: 'Big',
+      position: 'Dev',
+      salary: 1000,
+      startDate: '2024-01-01',
+      profileImage: base64
+    });
+    expect(res.status).toBe(201);
+    const arg = (storage.createEmployee as any).mock.calls[0][0];
+    expect(arg.profileImage.length).toBeLessThan(base64.length);
+  });
+
+  it('POST /api/employees leaves non-image inputs unchanged', async () => {
+    const pdf = `data:application/pdf;base64,${Buffer.from('%PDF').toString('base64')}`;
+    (storage.createEmployee as any).mockImplementation(async e => e);
+    const res = await request(app).post('/api/employees').send({
+      firstName: 'Pdf',
+      lastName: 'Test',
+      position: 'Dev',
+      salary: 1000,
+      startDate: '2024-01-01',
+      profileImage: pdf
+    });
+    expect(res.status).toBe(201);
+    const arg = (storage.createEmployee as any).mock.calls[0][0];
+    expect(arg.profileImage).toBe(pdf);
+  });
+
+  it('PUT /api/employees/:id compresses large base64 images', async () => {
+    const large = await sharp({
+      create: {
+        width: 2000,
+        height: 2000,
+        channels: 3,
+        background: { r: 255, g: 0, b: 0 }
+      }
+    })
+      .jpeg()
+      .toBuffer();
+    const base64 = `data:image/jpeg;base64,${large.toString('base64')}`;
+    (storage.updateEmployee as any).mockImplementation(async (_id, u) => ({ id: '1', firstName: 'T', lastName: 'U', ...u }));
+    const res = await request(app).put('/api/employees/1').send({ profileImage: base64 });
+    expect(res.status).toBe(200);
+    const arg = (storage.updateEmployee as any).mock.calls[0][1];
+    expect(arg.profileImage.length).toBeLessThan(base64.length);
+  });
+
+  it('PUT /api/employees/:id leaves non-image inputs unchanged', async () => {
+    const pdf = `data:application/pdf;base64,${Buffer.from('%PDF').toString('base64')}`;
+    (storage.updateEmployee as any).mockImplementation(async (_id, u) => ({ id: '1', firstName: 'T', lastName: 'U', ...u }));
+    const res = await request(app).put('/api/employees/1').send({ profileImage: pdf });
+    expect(res.status).toBe(200);
+    const arg = (storage.updateEmployee as any).mock.calls[0][1];
+    expect(arg.profileImage).toBe(pdf);
   });
 
   it('PUT /api/employees/:id rejects employeeCode updates', async () => {

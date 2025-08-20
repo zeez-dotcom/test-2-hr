@@ -30,6 +30,7 @@ import {
 import { z } from "zod";
 import multer from "multer";
 import * as XLSX from "xlsx";
+import sharp from "sharp";
 import {
   emptyToUndef,
   parseNumber,
@@ -38,6 +39,63 @@ import {
   normalizeBigId,
   mapHeader,
 } from "./utils/normalize";
+
+const IMAGE_FIELDS = [
+  "profileImage",
+  "visaImage",
+  "civilIdImage",
+  "passportImage",
+  "drivingLicenseImage",
+  "otherDocs",
+  "additionalDocs",
+];
+
+async function optimizeImages(data: Record<string, any>) {
+  const MAX_DIMENSION = 1024;
+  const MAX_SIZE = 200 * 1024; // 200KB
+  const MAX_PDF_SIZE = 5 * 1024 * 1024; // 5MB
+
+  for (const field of IMAGE_FIELDS) {
+    const value = data[field];
+    if (!value || typeof value !== "string") continue;
+    const match = value.match(/^data:(.*?);base64,(.*)$/);
+    if (!match) continue;
+    let mime = match[1];
+    const base64Data = match[2];
+
+    if (mime === "application/pdf") {
+      const pdfSize = Buffer.from(base64Data, "base64").length;
+      if (pdfSize > MAX_PDF_SIZE) {
+        console.warn(`${field} PDF exceeds ${MAX_PDF_SIZE} bytes`);
+      }
+      continue;
+    }
+
+    if (!mime.startsWith("image/")) continue;
+
+    const buffer = Buffer.from(base64Data, "base64");
+    const image = sharp(buffer);
+    const metadata = await image.metadata();
+    const needsResize =
+      (metadata.width ?? 0) > MAX_DIMENSION ||
+      (metadata.height ?? 0) > MAX_DIMENSION;
+    const needsCompress = buffer.length > MAX_SIZE;
+    if (!needsResize && !needsCompress) continue;
+    let pipeline = image;
+    if (needsResize) {
+      pipeline = pipeline.resize({
+        width: MAX_DIMENSION,
+        height: MAX_DIMENSION,
+        fit: "inside",
+        withoutEnlargement: true,
+      });
+    }
+    const optimized = await pipeline
+      .jpeg({ quality: 80 })
+      .toBuffer();
+    data[field] = `data:image/jpeg;base64,${optimized.toString("base64")}`;
+  }
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/login", passport.authenticate("local"), (req, res) => {
@@ -592,6 +650,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         employee.employeeCode = employee.employeeCode.trim();
       }
 
+      await optimizeImages(employee);
       const newEmployee = await storage.createEmployee({
         ...employee,
         role: employee.role || "employee",
@@ -631,6 +690,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updates: any = Object.fromEntries(
         Object.entries(parsed).filter(([_, v]) => v !== undefined)
       );
+      await optimizeImages(updates);
       const updatedEmployee = await storage.updateEmployee(
         req.params.id,
         updates,
