@@ -4,9 +4,6 @@ import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import createMemoryStore from "memorystore";
 import { registerRoutes } from "./routes";
-import { payrollRouter } from "./routes/payroll";
-import { loansRouter } from "./routes/loans";
-import { carsRouter } from "./routes/cars";
 import { setupVite, serveStatic, log } from "./vite";
 import { errorHandler } from "./errorHandler";
 
@@ -104,10 +101,6 @@ app.use((req, res, next) => {
 
 (async () => {
   const server = await registerRoutes(app);
-
-  app.use("/api/payroll", payrollRouter);
-  app.use("/api/loans", loansRouter);
-  app.use("/api/cars", carsRouter);
 
   app.use(errorHandler);
 
