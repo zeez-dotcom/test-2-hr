@@ -43,8 +43,8 @@ const MemoryStore = createMemoryStore(session);
 
 const app = express();
 app.set("etag", false);
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use("/api", (_req, res, next) => {
   res.set("Cache-Control", "no-store");
   next();
