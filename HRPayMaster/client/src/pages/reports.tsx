@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import type { Employee, EmployeeEvent, PayrollRun } from "@shared/schema";
 
 export default function Reports() {
@@ -112,7 +113,7 @@ export default function Reports() {
   }) || [];
 
   // Generate individual employee comprehensive report
-  const generateIndividualEmployeeReport = (employeeId: string) => {
+  const generateIndividualEmployeeReport = async (employeeId: string) => {
     const employee = employees?.find(emp => emp.id === employeeId);
     if (!employee) {
       toast({
@@ -124,7 +125,7 @@ export default function Reports() {
     }
 
     const employeeEvents = filteredEvents.filter(event => event.employeeId === employeeId);
-    
+
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       toast({
@@ -142,6 +143,43 @@ export default function Reports() {
       .filter(event => event.eventType === "deduction")
       .reduce((sum, event) => sum + parseFloat(event.amount || "0"), 0);
     const vacationEvents = employeeEvents.filter(event => event.eventType === "vacation");
+
+    type EmployeePayrollPeriod = {
+      period: string;
+      totals: { deductions: number; netPay: number };
+      payrollEntries: { grossPay?: string | null }[];
+    };
+
+    let payrollHistory: EmployeePayrollPeriod[] = [];
+    try {
+      const now = new Date();
+      const start = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+      const res = await apiRequest(
+        "GET",
+        `/api/reports/employees/${employeeId}?startDate=${start.toISOString()}&endDate=${now.toISOString()}`,
+      );
+      payrollHistory = await res.json();
+    } catch (err) {
+      console.error("Failed to fetch payroll history", err);
+    }
+
+    const payrollRunCount = payrollHistory.length;
+    const totalGrossPaid = payrollHistory.reduce(
+      (sum, p) =>
+        sum + p.payrollEntries.reduce((s, e) => s + Number(e.grossPay ?? 0), 0),
+      0,
+    );
+    const totalNetPaid = payrollHistory.reduce(
+      (sum, p) => sum + Number(p.totals.netPay ?? 0),
+      0,
+    );
+    const totalPayrollDeductions = payrollHistory.reduce(
+      (sum, p) => sum + Number(p.totals.deductions ?? 0),
+      0,
+    );
+    const recentPayrolls = payrollHistory
+      .sort((a, b) => b.period.localeCompare(a.period))
+      .slice(0, 5);
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -536,7 +574,34 @@ export default function Reports() {
               opacity: 0.9;
               font-weight: 500;
             }
-            
+
+            .salary-table {
+              width: 100%;
+              border-collapse: collapse;
+              font-size: 10px;
+              margin-top: 4mm;
+            }
+
+            .salary-table th,
+            .salary-table td {
+              padding: 2mm;
+              border-bottom: 1px solid #e2e8f0;
+            }
+
+            .salary-table th {
+              background: #f8fafc;
+              text-align: left;
+            }
+
+            .salary-table td {
+              text-align: right;
+            }
+
+            .salary-table td:first-child,
+            .salary-table th:first-child {
+              text-align: left;
+            }
+
             .events-timeline {
               background: #f8fafc;
               border-radius: 6px;
@@ -878,6 +943,66 @@ export default function Reports() {
                     <div class="document-number"><a href="${employee.otherDocs}" target="_blank" rel="noopener noreferrer">View</a></div>
                   </div>
                   ` : ''}
+                </div>
+              </div>
+
+              <div class="section">
+                <div class="section-header">
+                  <div class="section-icon">💰</div>
+                  <h3 class="section-title">Salary History</h3>
+                </div>
+
+                <div class="events-summary">
+                  <h3 class="summary-title">Payroll Overview</h3>
+                  <div class="summary-grid">
+                    <div class="summary-card">
+                      <span class="summary-value">${formatCurrency(totalGrossPaid)}</span>
+                      <span class="summary-label">Total Gross</span>
+                    </div>
+                    <div class="summary-card">
+                      <span class="summary-value">${formatCurrency(totalNetPaid)}</span>
+                      <span class="summary-label">Total Net</span>
+                    </div>
+                    <div class="summary-card">
+                      <span class="summary-value">${formatCurrency(totalPayrollDeductions)}</span>
+                      <span class="summary-label">Deductions</span>
+                    </div>
+                    <div class="summary-card">
+                      <span class="summary-value">${payrollRunCount}</span>
+                      <span class="summary-label">Payroll Runs</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="events-timeline">
+                  <h4 class="timeline-header">Recent Payroll Periods</h4>
+                  ${recentPayrolls.length > 0 ? `
+                    <table class="salary-table">
+                      <thead>
+                        <tr>
+                          <th>Period</th>
+                          <th>Gross</th>
+                          <th>Deductions</th>
+                          <th>Net</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${recentPayrolls.map(p => `
+                          <tr>
+                            <td>${p.period}</td>
+                            <td>${formatCurrency(p.payrollEntries.reduce((s, e) => s + Number(e.grossPay ?? 0), 0))}</td>
+                            <td>${formatCurrency(p.totals.deductions)}</td>
+                            <td>${formatCurrency(p.totals.netPay)}</td>
+                          </tr>
+                        `).join('')}
+                      </tbody>
+                    </table>
+                  ` : `
+                    <div class="no-events">
+                      <div class="no-events-icon">📄</div>
+                      <p>No payroll history available</p>
+                    </div>
+                  `}
                 </div>
               </div>
 
