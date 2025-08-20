@@ -30,7 +30,7 @@ import {
 import { z } from "zod";
 import multer from "multer";
 import * as XLSX from "xlsx";
-import sharp from "sharp";
+import type Sharp from "sharp";
 import {
   emptyToUndef,
   parseNumber,
@@ -39,6 +39,18 @@ import {
   normalizeBigId,
   mapHeader,
 } from "./utils/normalize";
+
+let sharp: typeof Sharp | null = null;
+try {
+  const mod = await import("sharp");
+  sharp = mod.default;
+} catch (err) {
+  console.error(
+    'Failed to import "sharp". Image optimization will be disabled. ' +
+      'Ensure the sharp package and its native dependencies are installed.',
+    err
+  );
+}
 
 const IMAGE_FIELDS = [
   "profileImage",
@@ -51,6 +63,7 @@ const IMAGE_FIELDS = [
 ];
 
 async function optimizeImages(data: Record<string, any>) {
+  if (!sharp) return;
   const MAX_DIMENSION = 1024;
   const MAX_SIZE = 200 * 1024; // 200KB
   const MAX_PDF_SIZE = 5 * 1024 * 1024; // 5MB
