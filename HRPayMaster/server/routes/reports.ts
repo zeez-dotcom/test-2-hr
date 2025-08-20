@@ -72,10 +72,11 @@ reportsRouter.get("/api/reports/employees/:id", async (req, res, next) => {
 
     res.json(response);
   } catch (error) {
+    console.error(error);
     if (error instanceof z.ZodError) {
       return next(new HttpError(400, "Invalid query parameters", error.errors));
     }
-    next(new HttpError(500, "Failed to fetch employee report"));
+    next(new HttpError(500, "Failed to fetch employee report", error));
   }
 });
 

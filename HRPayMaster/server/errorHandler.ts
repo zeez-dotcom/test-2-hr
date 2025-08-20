@@ -19,8 +19,12 @@ export function errorHandler(err: any, _req: Request, res: Response, _next: Next
   const details = isZodError ? err.errors : err.details;
 
   const body: any = { error: { message } };
-  if (details) {
-    body.error.details = details;
+
+  if (process.env.NODE_ENV !== "production" && details) {
+    body.error.details =
+      details instanceof Error
+        ? { message: details.message, stack: details.stack }
+        : details;
   }
 
   if (details) {
