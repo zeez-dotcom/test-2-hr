@@ -328,7 +328,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const existingCodes = new Set(existing.map(e => e.employeeCode));
       const valid: InsertEmployee[] = [];
       const customValues: Record<string, any>[] = [];
-      const errors: { row: number; column: string; value: any; reason: string }[] = [];
+      const errors: { row: number; message: string }[] = [];
       const seen = new Set<string>();
 
       rows.forEach((row, idx) => {
@@ -353,11 +353,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           : undefined;
         const code = base.employeeCode as string | undefined;
         if (!code) {
-          errors.push({ row: idx + 2, column: "employeeCode", value: "", reason: "Missing employeeCode" });
+          errors.push({ row: idx + 2, message: "Missing employeeCode" });
           return;
         }
         if (seen.has(code) || existingCodes.has(code)) {
-          errors.push({ row: idx + 2, column: "employeeCode", value: code, reason: "Duplicate employeeCode" });
+          errors.push({ row: idx + 2, message: "Duplicate employeeCode" });
           return;
         }
         seen.add(code);
@@ -427,16 +427,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           customValues.push(custom);
         } catch (err) {
           if (err instanceof z.ZodError) {
-            for (const issue of err.issues) {
-              errors.push({
-                row: idx + 2,
-                column: issue.path.join("."),
-                value: (cleanedBase as any)[issue.path[0]],
-                reason: issue.message,
-              });
-            }
+            const message = err.errors.map(i => i.message).join(", ");
+            errors.push({ row: idx + 2, message });
           } else {
-            errors.push({ row: idx + 2, column: "unknown", value: "", reason: "Invalid data" });
+            errors.push({ row: idx + 2, message: "Invalid data" });
           }
         }
       });

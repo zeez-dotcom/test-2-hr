@@ -468,6 +468,7 @@ describe('employee routes', () => {
     expect(res.body.success).toBe(1);
     expect(res.body.failed).toBe(1);
     expect(res.body.errors).toHaveLength(1);
+    expect(res.body.errors[0]).toEqual({ row: 3, message: 'Missing employeeCode' });
     const employee = (storage.createEmployeesBulk as any).mock.calls[0][0][0];
     expect(employee.startDate).toBe('2024-05-20');
     expect(employee.civilId).toBe('275021000000');
