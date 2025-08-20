@@ -253,10 +253,9 @@ export default function Reports() {
             }
 
             h1, h2, h3, h4 {
-              font-weight: 600;
-              margin: 0 0 8px;
               overflow-wrap: break-word;
               word-wrap: break-word;
+              margin: 0;
             }
 
             h1 {
@@ -267,15 +266,19 @@ export default function Reports() {
 
             h2 {
               font-size: 20px;
+              font-weight: 600;
               margin-bottom: 12px;
             }
 
             h3 {
               font-size: 16px;
+              font-weight: 600;
+              margin-bottom: 8px;
             }
 
             h4 {
               font-size: 14px;
+              font-weight: 600;
               margin-bottom: 6px;
             }
             
@@ -336,14 +339,7 @@ export default function Reports() {
               border: 2px solid rgba(255,255,255,0.3);
             }
             
-            .header h1 {
-              margin: 0;
-              font-size: 24px;
-              font-weight: 300;
-              letter-spacing: -0.5px;
-            }
-            
-            .header p {
+            .header-content p {
               margin: 6px 0 0;
               opacity: 0.9;
               font-size: 14px;
@@ -1241,10 +1237,9 @@ export default function Reports() {
             body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
 
             h1, h2, h3, h4 {
-              font-weight: 600;
-              margin: 0 0 8px;
               overflow-wrap: break-word;
               word-wrap: break-word;
+              margin: 0;
             }
 
             h1 {
@@ -1255,15 +1250,19 @@ export default function Reports() {
 
             h2 {
               font-size: 20px;
+              font-weight: 600;
               margin-bottom: 12px;
             }
 
             h3 {
               font-size: 16px;
+              font-weight: 600;
+              margin-bottom: 8px;
             }
 
             h4 {
               font-size: 14px;
+              font-weight: 600;
               margin-bottom: 6px;
             }
             .header { text-align: center; margin-bottom: 30px; border-bottom: 3px solid #333; padding-bottom: 20px; }
