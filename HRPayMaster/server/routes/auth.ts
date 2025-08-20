@@ -4,8 +4,15 @@ import { HttpError } from "../errorHandler";
 
 export const authRouter = Router();
 
-authRouter.post("/login", passport.authenticate("local"), (req, res) => {
-  res.json({ user: req.user });
+authRouter.post("/login", (req, res, next) => {
+  passport.authenticate("local", (err, user, info) => {
+    if (err) return next(err);
+    if (!user) return res.status(401).json({ error: "Invalid credentials" });
+    req.logIn(user, err => {
+      if (err) return next(err);
+      res.json({ user });
+    });
+  })(req, res, next);
 });
 
 authRouter.post("/logout", (req, res, next) => {
