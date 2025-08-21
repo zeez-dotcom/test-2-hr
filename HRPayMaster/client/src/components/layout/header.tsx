@@ -1,5 +1,6 @@
 import { Menu, Bell, ChevronDown, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import LanguageSwitcher from "@/components/language-switcher";
 
 interface HeaderProps {
   title: string;
@@ -24,6 +25,7 @@ export default function Header({ title, onToggleSidebar }: HeaderProps) {
           </div>
           
           <div className="flex items-center space-x-4">
+            <LanguageSwitcher />
             <div className="relative">
               <Button variant="ghost" size="sm" className="text-gray-500 hover:text-gray-700">
                 <Bell size={20} />
@@ -32,7 +34,7 @@ export default function Header({ title, onToggleSidebar }: HeaderProps) {
                 </span>
               </Button>
             </div>
-            
+
             <div className="flex items-center space-x-3">
               <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
                 <User className="text-gray-600" size={16} />
