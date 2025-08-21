@@ -1,0 +1,14 @@
+[
+  {
+    "browser": "chromium",
+    "status": "failed"
+  },
+  {
+    "browser": "firefox",
+    "status": "failed"
+  },
+  {
+    "browser": "webkit",
+    "status": "failed"
+  }
+]
