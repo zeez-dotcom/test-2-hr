@@ -9,5 +9,11 @@ export const viewports = {
 
 export default defineConfig({
   testDir: './tests',
-  outputDir: 'artifacts'
+  outputDir: 'artifacts',
+  reporter: [['list'], ['./browser-matrix-reporter.ts']],
+  projects: [
+    { name: 'chromium', use: { browserName: 'chromium' } },
+    { name: 'firefox', use: { browserName: 'firefox' } },
+    { name: 'webkit', use: { browserName: 'webkit' } }
+  ]
 });

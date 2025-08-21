@@ -1,0 +1,19 @@
+{
+  "name": "test-2-hr",
+  "version": "1.0.0",
+  "description": "test2hr",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@playwright/test": "^1.55.0"
+  }
+}
