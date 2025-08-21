@@ -1,4 +1,6 @@
 import { Switch, Route, useLocation } from "wouter";
+import { useEffect } from "react";
+import { useTranslation } from "@/lib/i18n";
 import { queryClient, getQueryFn } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -59,6 +61,14 @@ function Router() {
 }
 
 function App() {
+  const { i18n } = useTranslation();
+
+  useEffect(() => {
+    const lang = i18n.language;
+    document.documentElement.lang = lang === "ar" ? "ar" : "en";
+    document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+  }, [i18n.language]);
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
