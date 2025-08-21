@@ -15,6 +15,7 @@ import {
 import { Link } from "wouter";
 import type { EmployeeWithDepartment, PayrollRun } from "@shared/schema";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 interface DashboardStats {
   totalEmployees: number;
@@ -24,6 +25,7 @@ interface DashboardStats {
 }
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   const {
     data: stats,
     isLoading: statsLoading,
@@ -57,8 +59,8 @@ export default function Dashboard() {
     return (
       <div className="space-y-8">
         <div className="border-b border-gray-200 pb-4">
-          <h1 className="text-3xl font-bold tracking-tight text-gray-900">Dashboard</h1>
-          <p className="text-gray-600 mt-2">Overview of your HR management system</p>
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900">{t('dashboard.title')}</h1>
+          <p className="text-gray-600 mt-2">{t('dashboard.overview')}</p>
         </div>
         <div className="animate-pulse">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -81,8 +83,8 @@ export default function Dashboard() {
   return (
     <div className="space-y-8">
       <div className="border-b border-gray-200 pb-4">
-        <h1 className="text-3xl font-bold tracking-tight text-gray-900">Dashboard</h1>
-        <p className="text-gray-600 mt-2">Overview of your HR management system</p>
+        <h1 className="text-3xl font-bold tracking-tight text-gray-900">{t('dashboard.title')}</h1>
+        <p className="text-gray-600 mt-2">{t('dashboard.overview')}</p>
       </div>
       
       {/* Stats Overview */}

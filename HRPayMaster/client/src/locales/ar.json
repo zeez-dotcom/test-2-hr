@@ -1,3 +1,21 @@
 {
-  "greeting": "مرحبا"
+  "greeting": "مرحبا",
+  "dashboard": {
+    "title": "لوحة التحكم",
+    "overview": "نظرة عامة على نظام إدارة الموارد البشرية"
+  },
+  "nav": {
+    "dashboard": "لوحة التحكم",
+    "employees": "الموظفون",
+    "departments": "الأقسام",
+    "payroll": "الرواتب",
+    "employeeEvents": "أحداث الموظفين",
+    "reports": "التقارير",
+    "vacations": "الإجازات",
+    "loans": "القروض",
+    "assets": "الأصول",
+    "cars": "الأسطول",
+    "documents": "الوثائق",
+    "notifications": "الإشعارات"
+  }
 }

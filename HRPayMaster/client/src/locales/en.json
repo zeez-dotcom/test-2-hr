@@ -1,3 +1,21 @@
 {
-  "greeting": "Hello"
+  "greeting": "Hello",
+  "dashboard": {
+    "title": "Dashboard",
+    "overview": "Overview of your HR management system"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "employees": "Employees",
+    "departments": "Departments",
+    "payroll": "Payroll",
+    "employeeEvents": "Employee Events",
+    "reports": "Reports",
+    "vacations": "Vacations",
+    "loans": "Loans",
+    "assets": "Assets",
+    "cars": "Fleet",
+    "documents": "Documents",
+    "notifications": "Notifications"
+  }
 }
