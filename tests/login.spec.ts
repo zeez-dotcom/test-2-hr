@@ -1,7 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { submitForm, submitAndExpectError } from './utils/formHelper';
+import { submitForm } from './utils/formHelper';
 import { viewports } from '../playwright.config';
 import { captureScreenshot } from './utils/screenshot';
+import en from '../HRPayMaster/client/src/locales/en.json';
+import ar from '../HRPayMaster/client/src/locales/ar.json';
 
 const baseURL = process.env.BASE_URL || 'http://localhost:5173';
 
@@ -14,10 +16,18 @@ for (const [name, viewport] of Object.entries(viewports)) {
     });
 
     test.describe('Login form', () => {
-      test('required field errors', async ({ page }) => {
-        await page.goto(`${baseURL}/login`);
-        await page.click('button[type="submit"]');
-        await expect(page.getByText('Username and password are required')).toBeVisible();
+      const translations: any = { en, ar };
+
+      test('required field errors show in selected language', async ({ page }) => {
+        for (const lang of ['en', 'ar']) {
+          await page.goto('about:blank');
+          await page.evaluate(l => localStorage.setItem('language', l), lang);
+          await page.goto(`${baseURL}/login`);
+          await page.click('button[type="submit"]');
+          await expect(page.getByTestId('form-error')).toHaveText(
+            translations[lang].errors.loginRequired
+          );
+        }
       });
 
       test('handles 500 error response', async ({ page }) => {
@@ -26,11 +36,14 @@ for (const [name, viewport] of Object.entries(viewports)) {
           contentType: 'application/json',
           body: JSON.stringify({ message: 'Server error' })
         }));
+        await page.goto('about:blank');
+        await page.evaluate(() => localStorage.setItem('language', 'en'));
         await page.goto(`${baseURL}/login`);
-        await submitAndExpectError(page, {
+        await submitForm(page, {
           '#username': 'john',
           '#password': 'doe'
-        }, 'Server error');
+        });
+        await expect(page.getByTestId('form-error')).toHaveText('Server error');
       });
 
       test('handles 429 error response', async ({ page }) => {
@@ -39,11 +52,14 @@ for (const [name, viewport] of Object.entries(viewports)) {
           contentType: 'application/json',
           body: JSON.stringify({ message: 'Too many requests' })
         }));
+        await page.goto('about:blank');
+        await page.evaluate(() => localStorage.setItem('language', 'en'));
         await page.goto(`${baseURL}/login`);
-        await submitAndExpectError(page, {
+        await submitForm(page, {
           '#username': 'john',
           '#password': 'doe'
-        }, 'Too many requests');
+        });
+        await expect(page.getByTestId('form-error')).toHaveText('Too many requests');
       });
 
       test('handles timeout', async ({ page }) => {

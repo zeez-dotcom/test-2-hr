@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -14,12 +15,13 @@ export default function Login() {
   const [, navigate] = useLocation();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
+  const { t } = useTranslation();
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     if (!username || !password) {
-      setError("Username and password are required");
+      setError(t("errors.loginRequired"));
       return;
     }
     try {
@@ -75,9 +77,13 @@ export default function Login() {
                 </button>
               </div>
             </div>
-            {error && <p className="text-sm text-red-500">{error}</p>}
+            {error && (
+              <p className="text-sm text-red-500" data-testid="form-error">
+                {error}
+              </p>
+            )}
             <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "Logging in…" : "Login"}
+              {isSubmitting ? t("login.loggingIn") : t("login.submit")}
             </Button>
           </form>
         </CardContent>

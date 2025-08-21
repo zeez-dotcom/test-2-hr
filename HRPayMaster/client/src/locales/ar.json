@@ -16,6 +16,14 @@
     "assets": "الأصول",
     "cars": "الأسطول",
     "documents": "الوثائق",
-    "notifications": "الإشعارات"
+    "notifications": "الإشعارات",
+    "login": "تسجيل الدخول"
+  },
+  "login": {
+    "submit": "تسجيل الدخول",
+    "loggingIn": "جاري تسجيل الدخول..."
+  },
+  "errors": {
+    "loginRequired": "اسم المستخدم وكلمة المرور مطلوبة"
   }
 }

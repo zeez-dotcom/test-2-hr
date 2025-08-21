@@ -16,6 +16,14 @@
     "assets": "Assets",
     "cars": "Fleet",
     "documents": "Documents",
-    "notifications": "Notifications"
+    "notifications": "Notifications",
+    "login": "Login"
+  },
+  "login": {
+    "submit": "Login",
+    "loggingIn": "Logging in…"
+  },
+  "errors": {
+    "loginRequired": "Username and password are required"
   }
 }
