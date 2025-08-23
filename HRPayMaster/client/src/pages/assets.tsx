@@ -7,9 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { CheckCircle, Users, AlertTriangle } from "lucide-react";
 
 import {
   insertAssetSchema,
@@ -84,6 +86,19 @@ export default function Assets() {
       notes: "",
     },
   });
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "available":
+        return <Badge className="bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1" />Available</Badge>;
+      case "assigned":
+        return <Badge className="bg-blue-100 text-blue-800"><Users className="w-3 h-3 mr-1" />Assigned</Badge>;
+      case "maintenance":
+        return <Badge variant="destructive"><AlertTriangle className="w-3 h-3 mr-1" />Maintenance</Badge>;
+      default:
+        return <Badge variant="secondary">{status}</Badge>;
+    }
+  };
 
   if (assetsError || assignmentsError || employeesError) {
     return <div>Error loading assets</div>;
@@ -223,7 +238,10 @@ export default function Assets() {
           <div key={asset.id} className="border rounded p-4 space-y-2">
             <div className="font-medium">{asset.name}</div>
             <div className="text-sm text-muted-foreground">{asset.type}</div>
-            <div className="text-sm">Status: {asset.status}</div>
+            <div className="text-sm flex items-center space-x-1">
+              <span>Status:</span>
+              {getStatusBadge(asset.status)}
+            </div>
             {asset.currentAssignment && (
               <div className="text-sm">
                 Assigned to: {asset.currentAssignment.employee?.firstName} {asset.currentAssignment.employee?.lastName}

@@ -959,6 +959,7 @@ const upload = multer({ storage: multer.memoryStorage() });
     try {
       const assignment = insertAssetAssignmentSchema.parse(req.body);
       const newAssignment = await assetService.createAssignment(assignment);
+      await assetService.updateAsset(assignment.assetId, { status: "assigned" });
       const detailed = await assetService.getAssignment(newAssignment.id);
       if (detailed?.asset?.type === "car") {
         const addedBy = await getAddedBy(req);
@@ -1020,6 +1021,9 @@ const upload = multer({ storage: multer.memoryStorage() });
       const deleted = await assetService.deleteAssignment(req.params.id);
       if (!deleted) {
         return next(new HttpError(404, "Asset assignment not found"));
+      }
+      if (existing) {
+        await assetService.updateAsset(existing.assetId, { status: "available" });
       }
       if (existing?.asset?.type === "car") {
         const addedBy = await getAddedBy(req);
@@ -1235,6 +1239,7 @@ const upload = multer({ storage: multer.memoryStorage() });
         assetId: req.body.carId,
       });
       const newAssignment = await assetService.createAssignment(assignment);
+      await assetService.updateAsset(assignment.assetId, { status: "assigned" });
       const detailed = await assetService.getAssignment(newAssignment.id);
       if (detailed) {
         const addedBy = await getAddedBy(req);
@@ -1301,6 +1306,7 @@ const upload = multer({ storage: multer.memoryStorage() });
         return next(new HttpError(404, "Car assignment not found"));
       }
       if (existing) {
+        await assetService.updateAsset(existing.assetId, { status: "available" });
         const addedBy = await getAddedBy(req);
         const event: InsertEmployeeEvent = {
           employeeId: existing.employeeId,
