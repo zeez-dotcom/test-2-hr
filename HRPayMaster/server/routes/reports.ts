@@ -7,15 +7,24 @@ export const reportsRouter = Router();
 
 // Employee report route
 reportsRouter.get("/api/reports/employees/:id", async (req, res, next) => {
-  const querySchema = z.object({
-    startDate: z
-      .string()
-      .refine((d) => !isNaN(Date.parse(d)), { message: "Invalid startDate" }),
-    endDate: z
-      .string()
-      .refine((d) => !isNaN(Date.parse(d)), { message: "Invalid endDate" }),
-    groupBy: z.enum(["month", "year"]).optional().default("month"),
-  });
+  const querySchema = z
+    .object({
+      startDate: z
+        .string()
+        .refine((d) => !isNaN(Date.parse(d)), { message: "Invalid startDate" }),
+      endDate: z
+        .string()
+        .refine((d) => !isNaN(Date.parse(d)), { message: "Invalid endDate" }),
+      groupBy: z.enum(["month", "year"]).optional().default("month"),
+    })
+    .refine(
+      ({ startDate, endDate }) =>
+        new Date(startDate) <= new Date(endDate),
+      {
+        message: "startDate must be before or equal to endDate",
+        path: ["endDate"],
+      }
+    );
 
   try {
     const { startDate, endDate, groupBy } = querySchema.parse(req.query);
@@ -82,15 +91,24 @@ reportsRouter.get("/api/reports/employees/:id", async (req, res, next) => {
 
 // Company payroll summary
 reportsRouter.get("/api/reports/payroll", async (req, res, next) => {
-  const querySchema = z.object({
-    startDate: z
-      .string()
-      .refine((d) => !isNaN(Date.parse(d)), { message: "Invalid startDate" }),
-    endDate: z
-      .string()
-      .refine((d) => !isNaN(Date.parse(d)), { message: "Invalid endDate" }),
-    groupBy: z.enum(["month", "year"]).optional().default("month"),
-  });
+  const querySchema = z
+    .object({
+      startDate: z
+        .string()
+        .refine((d) => !isNaN(Date.parse(d)), { message: "Invalid startDate" }),
+      endDate: z
+        .string()
+        .refine((d) => !isNaN(Date.parse(d)), { message: "Invalid endDate" }),
+      groupBy: z.enum(["month", "year"]).optional().default("month"),
+    })
+    .refine(
+      ({ startDate, endDate }) =>
+        new Date(startDate) <= new Date(endDate),
+      {
+        message: "startDate must be before or equal to endDate",
+        path: ["endDate"],
+      }
+    );
 
   try {
     const { startDate, endDate, groupBy } = querySchema.parse(req.query);
