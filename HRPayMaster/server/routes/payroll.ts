@@ -1,8 +1,16 @@
 import { Router } from "express";
 import { HttpError } from "../errorHandler";
 import { storage } from "../storage";
-import { insertPayrollRunSchema, insertPayrollEntrySchema } from "@shared/schema";
+import {
+  insertPayrollRunSchema,
+  insertPayrollEntrySchema,
+  payrollRuns,
+  payrollEntries as payrollEntriesTable,
+  loans as loansTable,
+} from "@shared/schema";
 import { z } from "zod";
+import { db } from "../db";
+import { eq } from "drizzle-orm";
 
 export const payrollRouter = Router();
 
@@ -200,36 +208,49 @@ payrollRouter.post("/generate", async (req, res, next) => {
 
     const netAmount = grossAmount - totalDeductions;
 
-    // Create payroll run
-    const payrollRun = await storage.createPayrollRun({
-      period,
-      startDate,
-      endDate,
-      grossAmount: grossAmount.toString(),
-      totalDeductions: totalDeductions.toString(),
-      netAmount: netAmount.toString(),
-      status: "completed"
-    });
+    // Wrap payroll run creation, entry insertion, and loan updates in a transaction
+    const payrollRun = await db.transaction(async tx => {
+      const [newRun] = await tx
+        .insert(payrollRuns)
+        .values({
+          period,
+          startDate,
+          endDate,
+          grossAmount: grossAmount.toString(),
+          totalDeductions: totalDeductions.toString(),
+          netAmount: netAmount.toString(),
+          status: "completed",
+        })
+        .returning();
 
-    // Create payroll entries
-    for (const entry of payrollEntries) {
-      await storage.createPayrollEntry({
-        ...entry,
-        payrollRunId: payrollRun.id
-      });
-    }
-
-    // Update loan remaining amounts
-    for (const loan of loans.filter(l => l.status === "active")) {
-      const loanDeduction = payrollEntries.find(entry => entry.employeeId === loan.employeeId)?.loanDeduction;
-      if (loanDeduction && parseFloat(loanDeduction) > 0) {
-        const newRemaining = Math.max(0, parseFloat(loan.remainingAmount) - parseFloat(loanDeduction));
-        await storage.updateLoan(loan.id, {
-          remainingAmount: newRemaining.toString(),
-          status: newRemaining <= 0 ? "completed" : "active"
+      for (const entry of payrollEntries) {
+        await tx.insert(payrollEntriesTable).values({
+          ...entry,
+          payrollRunId: newRun.id,
         });
       }
-    }
+
+      for (const loan of loans.filter(l => l.status === "active")) {
+        const loanDeduction = payrollEntries.find(
+          entry => entry.employeeId === loan.employeeId,
+        )?.loanDeduction;
+        if (loanDeduction && parseFloat(loanDeduction) > 0) {
+          const newRemaining = Math.max(
+            0,
+            parseFloat(loan.remainingAmount) - parseFloat(loanDeduction),
+          );
+          await tx
+            .update(loansTable)
+            .set({
+              remainingAmount: newRemaining.toString(),
+              status: newRemaining <= 0 ? "completed" : "active",
+            })
+            .where(eq(loansTable.id, loan.id));
+        }
+      }
+
+      return newRun;
+    });
 
     res.status(201).json(payrollRun);
   } catch (error) {
