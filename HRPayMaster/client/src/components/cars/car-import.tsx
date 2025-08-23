@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient } from "@/lib/queryClient";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 
 interface ImportResult {
   success?: number;
@@ -42,9 +42,9 @@ export default function CarImport() {
     formData.append("file", file);
     setIsSubmitting(true);
     try {
-      const res = await fetch("/api/cars/import", { method: "POST", body: formData });
+      const res = await apiRequest("POST", "/api/cars/import", formData);
       const data = await res.json();
-      if (res.ok && Array.isArray(data.headers)) {
+      if (Array.isArray(data.headers)) {
         setHeaders(data.headers);
         setSelections({});
         setCustomFields({});
@@ -60,8 +60,7 @@ export default function CarImport() {
 
   const downloadTemplate = async () => {
     try {
-      const res = await fetch("/api/cars/import/template");
-      if (!res.ok) throw new Error("Failed to download");
+      const res = await apiRequest("GET", "/api/cars/import/template");
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -105,7 +104,7 @@ export default function CarImport() {
     formData.append("mapping", JSON.stringify(mapping));
     setIsSubmitting(true);
     try {
-      const res = await fetch("/api/cars/import", { method: "POST", body: formData });
+      const res = await apiRequest("POST", "/api/cars/import", formData);
       const data = await res.json();
       setResult(data);
       if (res.ok) {

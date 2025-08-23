@@ -259,18 +259,32 @@ export default function Employees() {
             <DialogHeader>
               <DialogTitle>Edit Employee</DialogTitle>
             </DialogHeader>
-              {editingEmployee && (
-              <EmployeeForm
-                key={editingEmployee.id}
-                departments={departments || []}
-                companies={companies || []}
-                onSubmit={handleUpdateEmployee}
-                isSubmitting={updateEmployeeMutation.isPending}
-                initialData={editingEmployee}
-              />
-            )}
-          </DialogContent>
-        </Dialog>
+              {editingEmployee && (() => {
+                const { department, company, ...rest } = editingEmployee;
+                const cleaned: any = { ...rest };
+                for (const key in cleaned) {
+                  if (cleaned[key] === null) cleaned[key] = undefined;
+                }
+                const initialData: Partial<InsertEmployee> = {
+                  ...cleaned,
+                  salary: Number(editingEmployee.salary),
+                  additions: editingEmployee.additions
+                    ? Number(editingEmployee.additions)
+                    : undefined,
+                };
+                return (
+                  <EmployeeForm
+                    key={editingEmployee.id}
+                    departments={departments || []}
+                    companies={companies || []}
+                    onSubmit={handleUpdateEmployee}
+                    isSubmitting={updateEmployeeMutation.isPending}
+                    initialData={initialData}
+                  />
+                );
+              })()}
+            </DialogContent>
+          </Dialog>
         <ConfirmDialog
           open={isConfirmOpen}
           onOpenChange={handleConfirmOpenChange}
