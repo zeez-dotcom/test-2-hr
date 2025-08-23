@@ -311,10 +311,13 @@ export class DatabaseStorage implements IStorage {
     }
 
     try {
+      const { salary, additions, ...rest } = employee;
       const [newEmployee] = await db
         .insert(employees)
         .values({
-          ...employee,
+          ...rest,
+          salary: salary.toString(),
+          ...(additions !== undefined ? { additions: additions.toString() } : {}),
           employeeCode: code,
           role: employee.role || "employee",
           status: employee.status || "active",
@@ -374,10 +377,13 @@ export class DatabaseStorage implements IStorage {
             if (existing.length > 0) throw new DuplicateEmployeeCodeError(code);
           }
 
+          const { salary, additions, ...restEmp } = emp;
           const [created] = await tx
             .insert(employees)
             .values({
-              ...emp,
+              ...restEmp,
+              salary: salary.toString(),
+              ...(additions !== undefined ? { additions: additions.toString() } : {}),
               employeeCode: code,
               role: emp.role || "employee",
               status: emp.status || "active",
@@ -404,9 +410,19 @@ export class DatabaseStorage implements IStorage {
     if ("employeeCode" in (employee as any)) {
       delete (employee as any).employeeCode;
     }
+    const { salary, additions, ...rest } = employee;
+    const updateData = {
+      ...rest,
+      ...(salary !== undefined ? { salary: salary.toString() } : {}),
+      ...(additions !== undefined ? { additions: additions.toString() } : {}),
+    } as Partial<Omit<InsertEmployee, "employeeCode">> & {
+      salary?: string;
+      additions?: string;
+    };
+
     const [updated] = await db
       .update(employees)
-      .set(employee)
+      .set(updateData)
       .where(eq(employees.id, id))
       .returning();
     return updated || undefined;

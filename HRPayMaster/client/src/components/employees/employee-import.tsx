@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient } from "@/lib/queryClient";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { insertEmployeeSchema } from "@shared/schema";
 
 interface ImportError {
@@ -47,9 +47,9 @@ export default function EmployeeImport() {
     formData.append("file", file);
     setIsSubmitting(true);
     try {
-      const res = await fetch("/api/employees/import", { method: "POST", body: formData });
+      const res = await apiRequest("POST", "/api/employees/import", formData);
       const data = await res.json();
-      if (res.ok && Array.isArray(data.headers)) {
+      if (Array.isArray(data.headers)) {
         setHeaders(data.headers);
         setSelections({});
         setCustomFields({});
@@ -65,8 +65,7 @@ export default function EmployeeImport() {
 
   const downloadTemplate = async () => {
     try {
-      const res = await fetch("/api/employees/import/template");
-      if (!res.ok) throw new Error("Failed to download");
+      const res = await apiRequest("GET", "/api/employees/import/template");
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -110,7 +109,7 @@ export default function EmployeeImport() {
     formData.append("mapping", JSON.stringify(mapping));
     setIsSubmitting(true);
     try {
-      const res = await fetch("/api/employees/import", { method: "POST", body: formData });
+      const res = await apiRequest("POST", "/api/employees/import", formData);
         const data = await res.json();
         if (res.ok) {
           queryClient.invalidateQueries({ queryKey: ["/api/employees"] });

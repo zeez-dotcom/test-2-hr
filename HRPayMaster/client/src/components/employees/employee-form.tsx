@@ -1,4 +1,4 @@
-import { useForm } from "react-hook-form";
+import { useForm, type SubmitHandler } from "react-hook-form";
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -73,8 +73,12 @@ export default function EmployeeForm({
       role: initialData?.role || "employee",
       departmentId: initialData?.departmentId || undefined,
       companyId: initialData?.companyId || undefined,
-      salary: initialData?.salary || "",
-      additions: initialData?.additions || "",
+      salary:
+        initialData?.salary !== undefined ? String(initialData.salary) : "",
+      additions:
+        initialData?.additions !== undefined
+          ? String(initialData.additions)
+          : "",
       standardWorkingDays: initialData?.standardWorkingDays || 26,
       startDate: initialData?.startDate || new Date().toISOString().split('T')[0],
       status: initialData?.status || "active",
@@ -130,7 +134,7 @@ export default function EmployeeForm({
 
   const residencyOnCompany = form.watch("residencyOnCompany");
 
-  const handleSubmit = (data: FormData) => {
+  const handleSubmit: SubmitHandler<FormData> = (data) => {
     const {
       employeeCode,
       workLocation,
@@ -1099,32 +1103,32 @@ export default function EmployeeForm({
               />
             </div>
 
-            <FormField
-              control={form.control}
-              name="drivingLicenseImage"
-              render={({ field }) => (
-                <FormItem>
-                  <ImageUpload
-                    label="Driving License Image"
-                    value={field.value || ""}
-                    onChange={field.onChange}
-                    variant="document"
-                  />
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          <FormField
+            control={form.control as any}
+            name="drivingLicenseImage"
+            render={({ field }) => (
+              <FormItem>
+                <ImageUpload
+                  label="Driving License Image"
+                  value={String(field.value || "")}
+                  onChange={field.onChange}
+                  variant="document"
+                />
+                <FormMessage />
+              </FormItem>
+            )}
+          />
           </div>
 
           {/* Additional Documents */}
           <FormField
-            control={form.control}
+            control={form.control as any}
             name="additionalDocs"
             render={({ field }) => (
               <FormItem>
                 <ImageUpload
                   label="Additional Documents"
-                  value={field.value || ""}
+                  value={String(field.value || "")}
                   onChange={field.onChange}
                   variant="document"
                 />
@@ -1135,13 +1139,13 @@ export default function EmployeeForm({
 
           {/* Other Documents */}
           <FormField
-            control={form.control}
+            control={form.control as any}
             name="otherDocs"
             render={({ field }) => (
               <FormItem>
                 <ImageUpload
                   label="Other Documents"
-                  value={field.value || ""}
+                  value={String(field.value || "")}
                   onChange={field.onChange}
                   variant="document"
                 />

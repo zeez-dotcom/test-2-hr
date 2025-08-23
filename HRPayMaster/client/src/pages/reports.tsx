@@ -37,7 +37,7 @@ import type {
   SickLeaveTracking,
 } from "@shared/schema";
 
-function sanitizeImageSrc(src?: string): string {
+function sanitizeImageSrc(src?: string | null): string {
   if (!src) return "";
   const trimmed = src.trim();
   const isDataUrl = /^data: image\/[^;]+;base64,/i.test(trimmed);

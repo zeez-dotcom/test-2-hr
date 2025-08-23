@@ -62,20 +62,21 @@ const PaginationLink = ({
     )
   }
 
-  return (
-    <button
-      type="button"
-      aria-current={isActive ? "page" : undefined}
-      className={cn(
-        buttonVariants({
-          variant: isActive ? "outline" : "ghost",
-          size,
-        }),
-        className
-      )}
-      {...props}
-    />
-  )
+    const buttonProps = props as React.ComponentProps<"button">;
+    return (
+      <button
+        type="button"
+        aria-current={isActive ? "page" : undefined}
+        className={cn(
+          buttonVariants({
+            variant: isActive ? "outline" : "ghost",
+            size,
+          }),
+          className
+        )}
+        {...buttonProps}
+      />
+    )
 }
 PaginationLink.displayName = "PaginationLink"
 
