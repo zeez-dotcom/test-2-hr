@@ -76,6 +76,22 @@ export interface EmployeeReportPeriod {
   vacationRequests: VacationRequest[];
 }
 
+export interface PayrollSummaryPeriod {
+  period: string;
+  payrollEntries: PayrollEntry[];
+}
+
+export interface LoanBalance {
+  employeeId: string;
+  balance: number;
+}
+
+export interface AssetUsage {
+  assetId: string;
+  name: string;
+  assignments: number;
+}
+
 export interface IStorage {
   // Department methods
   getDepartments(): Promise<Department[]>;
@@ -201,6 +217,11 @@ export interface IStorage {
     employeeId: string,
     range: { startDate: string; endDate: string; groupBy: "month" | "year" }
   ): Promise<EmployeeReportPeriod[]>;
+  getCompanyPayrollSummary(
+    range: { startDate: string; endDate: string; groupBy: "month" | "year" }
+  ): Promise<PayrollSummaryPeriod[]>;
+  getLoanBalances(): Promise<LoanBalance[]>;
+  getAssetUsage(): Promise<AssetUsage[]>;
 
   // Document expiry check methods
   checkDocumentExpiries(): Promise<DocumentExpiryCheck[]>;
@@ -1245,6 +1266,70 @@ export class DatabaseStorage implements IStorage {
     return Object.values(grouped).sort((a, b) =>
       a.period.localeCompare(b.period)
     );
+  }
+
+  async getCompanyPayrollSummary(
+    range: { startDate: string; endDate: string; groupBy: "month" | "year" }
+  ): Promise<PayrollSummaryPeriod[]> {
+    const { startDate, endDate, groupBy } = range;
+    const periodExpr = (column: AnyColumn) =>
+      groupBy === "year"
+        ? sql<string>`to_char(${column}, 'YYYY')`
+        : sql<string>`to_char(${column}, 'YYYY-MM')`;
+
+    const rows = await db
+      .select({
+        period: periodExpr(payrollRuns.startDate),
+        entry: payrollEntries,
+      })
+      .from(payrollEntries)
+      .innerJoin(payrollRuns, eq(payrollEntries.payrollRunId, payrollRuns.id))
+      .where(and(gte(payrollRuns.startDate, startDate), lte(payrollRuns.startDate, endDate)));
+
+    const grouped: Record<string, PayrollSummaryPeriod> = {};
+    rows.forEach(({ period, entry }) => {
+      if (!grouped[period]) {
+        grouped[period] = { period, payrollEntries: [] };
+      }
+      grouped[period].payrollEntries.push(entry);
+    });
+
+    return Object.values(grouped).sort((a, b) => a.period.localeCompare(b.period));
+  }
+
+  async getLoanBalances(): Promise<LoanBalance[]> {
+    const rows = await db
+      .select({ employeeId: loans.employeeId, remaining: loans.remainingAmount })
+      .from(loans)
+      .where(eq(loans.status, "active"));
+
+    const grouped: Record<string, number> = {};
+    rows.forEach(({ employeeId, remaining }) => {
+      grouped[employeeId] = (grouped[employeeId] || 0) + Number(remaining);
+    });
+    return Object.entries(grouped).map(([employeeId, balance]) => ({
+      employeeId,
+      balance,
+    }));
+  }
+
+  async getAssetUsage(): Promise<AssetUsage[]> {
+    const rows = await db
+      .select({
+        assetId: assets.id,
+        name: assets.name,
+        count: sql<number>`count(${assetAssignments.id})`,
+      })
+      .from(assetAssignments)
+      .innerJoin(assets, eq(assetAssignments.assetId, assets.id))
+      .where(eq(assetAssignments.status, "active"))
+      .groupBy(assets.id);
+
+    return rows.map(r => ({
+      assetId: r.assetId,
+      name: r.name,
+      assignments: Number(r.count),
+    }));
   }
 
   // Document expiry check methods

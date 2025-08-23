@@ -80,4 +80,70 @@ reportsRouter.get("/api/reports/employees/:id", async (req, res, next) => {
   }
 });
 
+// Company payroll summary
+reportsRouter.get("/api/reports/payroll", async (req, res, next) => {
+  const querySchema = z.object({
+    startDate: z
+      .string()
+      .refine((d) => !isNaN(Date.parse(d)), { message: "Invalid startDate" }),
+    endDate: z
+      .string()
+      .refine((d) => !isNaN(Date.parse(d)), { message: "Invalid endDate" }),
+    groupBy: z.enum(["month", "year"]).optional().default("month"),
+  });
+
+  try {
+    const { startDate, endDate, groupBy } = querySchema.parse(req.query);
+    const report = await storage.getCompanyPayrollSummary({
+      startDate,
+      endDate,
+      groupBy,
+    });
+
+    const response = report.map((period) => ({
+      period: period.period,
+      totals: {
+        grossPay: period.payrollEntries.reduce(
+          (sum, e) => sum + Number(e.grossPay || 0),
+          0
+        ),
+        netPay: period.payrollEntries.reduce(
+          (sum, e) => sum + Number(e.netPay || 0),
+          0
+        ),
+      },
+    }));
+
+    res.json(response);
+  } catch (error) {
+    console.error(error);
+    if (error instanceof z.ZodError) {
+      return next(new HttpError(400, "Invalid query parameters", error.errors));
+    }
+    next(new HttpError(500, "Failed to fetch payroll summary", error));
+  }
+});
+
+// Loan balances
+reportsRouter.get("/api/reports/loan-balances", async (_req, res, next) => {
+  try {
+    const report = await storage.getLoanBalances();
+    res.json(report);
+  } catch (error) {
+    console.error(error);
+    next(new HttpError(500, "Failed to fetch loan balances", error));
+  }
+});
+
+// Asset usage
+reportsRouter.get("/api/reports/asset-usage", async (_req, res, next) => {
+  try {
+    const report = await storage.getAssetUsage();
+    res.json(report);
+  } catch (error) {
+    console.error(error);
+    next(new HttpError(500, "Failed to fetch asset usage", error));
+  }
+});
+
 
