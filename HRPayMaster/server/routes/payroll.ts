@@ -61,11 +61,9 @@ payrollRouter.post("/generate", async (req, res, next) => {
     const vacationRequests = await storage.getVacationRequests();
     const employeeEvents = await storage.getEmployeeEvents();
 
-    // Calculate working days in the period
+    // Define period range
     const start = new Date(startDate);
     const end = new Date(endDate);
-    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    const workingDays = Math.max(1, totalDays - Math.floor(totalDays / 7) * 2); // Approximate working days
 
     // Calculate totals
     let grossAmount = 0;
