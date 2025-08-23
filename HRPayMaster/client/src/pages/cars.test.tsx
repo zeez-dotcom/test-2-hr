@@ -18,11 +18,11 @@ vi.mock('@tanstack/react-query', async () => {
       const mock = {
         shouldError: false,
         isPending: false,
-        mutate: (vars: any) => {
+        mutate: async (vars: any) => {
           if (mock.shouldError) {
-            options.onError?.('error', vars, null);
+            await options.onError?.('error', vars, null);
           } else {
-            options.onSuccess?.('success', vars, null);
+            await options.onSuccess?.('success', vars, null);
           }
         }
       };
@@ -118,7 +118,7 @@ beforeEach(() => {
   toast.mockReset();
   mutationMocks.length = 0;
   // @ts-ignore
-  global.fetch = vi.fn();
+  global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
 });
 
 afterEach(() => {
@@ -127,7 +127,7 @@ afterEach(() => {
 });
 
 describe('Cars page', () => {
-  it('renders cars and handles mutations with error handling', () => {
+  it('renders cars and handles mutations with error handling', async () => {
     const cars = [
       {
         id: '1',
@@ -153,45 +153,45 @@ describe('Cars page', () => {
     expect(screen.getByText('2024 Toyota Corolla')).toBeInTheDocument();
 
     // create car success
-    mutationMocks[0].mutate({});
+    await mutationMocks[0].mutate({});
     expect(toast).toHaveBeenCalledWith({ title: 'Car added successfully' });
     toast.mockReset();
     // create car error
     mutationMocks[0].shouldError = true;
-    mutationMocks[0].mutate({});
+    await mutationMocks[0].mutate({});
     expect(toast).toHaveBeenCalledWith({ title: 'Failed to add car', variant: 'destructive' });
     mutationMocks[0].shouldError = false;
     toast.mockReset();
 
     // assign car success
-    mutationMocks[1].mutate({});
+    await mutationMocks[1].mutate({});
     expect(toast).toHaveBeenCalledWith({ title: 'Car assigned successfully' });
     toast.mockReset();
     // assign car error
     mutationMocks[1].shouldError = true;
-    mutationMocks[1].mutate({});
+    await mutationMocks[1].mutate({});
     expect(toast).toHaveBeenCalledWith({ title: 'Failed to assign car', variant: 'destructive' });
     mutationMocks[1].shouldError = false;
     toast.mockReset();
 
     // update assignment success
-    mutationMocks[2].mutate({});
+    await mutationMocks[2].mutate({});
     expect(toast).toHaveBeenCalledWith({ title: 'Assignment updated successfully' });
     toast.mockReset();
     // update assignment error
     mutationMocks[2].shouldError = true;
-    mutationMocks[2].mutate({});
+    await mutationMocks[2].mutate({});
     expect(toast).toHaveBeenCalledWith({ title: 'Failed to update assignment', variant: 'destructive' });
     mutationMocks[2].shouldError = false;
     toast.mockReset();
 
     // delete car success
-    mutationMocks[3].mutate('1');
+    await mutationMocks[3].mutate('1');
     expect(toast).toHaveBeenCalledWith({ title: 'Car deleted successfully' });
     toast.mockReset();
     // delete car error
     mutationMocks[3].shouldError = true;
-    mutationMocks[3].mutate('1');
+    await mutationMocks[3].mutate('1');
     expect(toast).toHaveBeenCalledWith({ title: 'Failed to delete car', variant: 'destructive' });
   });
 });
