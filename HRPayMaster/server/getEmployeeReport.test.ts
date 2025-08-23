@@ -58,3 +58,15 @@ describe('getEmployeeReport', () => {
   });
 });
 
+describe('getCompanyPayrollSummary', () => {
+  it.todo('returns aggregated payroll data');
+});
+
+describe('getLoanBalances', () => {
+  it.todo('returns outstanding loan balances');
+});
+
+describe('getAssetUsage', () => {
+  it.todo('returns active asset assignment counts');
+});
+

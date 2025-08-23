@@ -68,7 +68,26 @@ export default function Reports() {
     queryKey: ["/api/payroll"],
   });
 
-  if (employeesError || employeeEventsError || payrollRunsError) {
+  const { data: payrollSummary, error: payrollSummaryError } = useQuery<any[]>({
+    queryKey: ["/api/reports/payroll"],
+  });
+
+  const { data: loanBalances, error: loanBalancesError } = useQuery<any[]>({
+    queryKey: ["/api/reports/loan-balances"],
+  });
+
+  const { data: assetUsage, error: assetUsageError } = useQuery<any[]>({
+    queryKey: ["/api/reports/asset-usage"],
+  });
+
+  if (
+    employeesError ||
+    employeeEventsError ||
+    payrollRunsError ||
+    payrollSummaryError ||
+    loanBalancesError ||
+    assetUsageError
+  ) {
     return <div>Error loading reports data</div>;
   }
 
@@ -1401,7 +1420,7 @@ export default function Reports() {
       </div>
 
       <Tabs defaultValue="employee-history" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="employee-history" className="flex items-center gap-2">
             <History className="h-4 w-4" />
             Employee History
@@ -1413,6 +1432,18 @@ export default function Reports() {
           <TabsTrigger value="analytics" className="flex items-center gap-2">
             <PieChart className="h-4 w-4" />
             Analytics
+          </TabsTrigger>
+          <TabsTrigger value="payroll-summary" className="flex items-center gap-2">
+            <Building className="h-4 w-4" />
+            Payroll Summary
+          </TabsTrigger>
+          <TabsTrigger value="loan-balances" className="flex items-center gap-2">
+            <DollarSign className="h-4 w-4" />
+            Loan Balances
+          </TabsTrigger>
+          <TabsTrigger value="asset-usage" className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            Asset Usage
           </TabsTrigger>
         </TabsList>
 
@@ -1746,6 +1777,48 @@ export default function Reports() {
                   Interactive charts, workforce analytics, and performance metrics will be available soon.
                 </p>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="payroll-summary" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building className="h-5 w-5" />
+                Payroll Summary
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <pre className="text-sm">{JSON.stringify(payrollSummary, null, 2)}</pre>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="loan-balances" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5" />
+                Loan Balances
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <pre className="text-sm">{JSON.stringify(loanBalances, null, 2)}</pre>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="asset-usage" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Asset Usage
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <pre className="text-sm">{JSON.stringify(assetUsage, null, 2)}</pre>
             </CardContent>
           </Card>
         </TabsContent>
