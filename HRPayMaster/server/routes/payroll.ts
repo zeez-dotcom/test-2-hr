@@ -56,6 +56,20 @@ payrollRouter.post("/generate", async (req, res, next) => {
       return next(new HttpError(400, "Period, start date, and end date are required"));
     }
 
+    // Prevent duplicate payroll runs for overlapping periods
+    const existingRuns = await storage.getPayrollRuns();
+    const newStart = new Date(startDate);
+    const newEnd = new Date(endDate);
+    const hasOverlap = existingRuns.some(run => {
+      const runStart = new Date(run.startDate);
+      const runEnd = new Date(run.endDate);
+      return runStart <= newEnd && runEnd >= newStart;
+    });
+
+    if (hasOverlap) {
+      return next(new HttpError(409, "Payroll run already exists for this period"));
+    }
+
     // Get all active employees
     const employees = await storage.getEmployees();
     const activeEmployees = employees.filter(emp => emp.status === "active");

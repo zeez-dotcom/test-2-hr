@@ -838,3 +838,39 @@ describe('employee routes', () => {
     expect(res.body.error.message).toBe('Failed to fetch employee report');
   });
 });
+
+describe('payroll routes', () => {
+  let app: express.Express;
+
+  beforeEach(async () => {
+    app = createApp();
+    await registerRoutes(app);
+    app.use(errorHandler);
+    vi.clearAllMocks();
+  });
+
+  it('POST /api/payroll/generate returns 409 when period overlaps existing run', async () => {
+    const existing = [
+      {
+        id: 'run1',
+        period: 'Jan 2024',
+        startDate: '2024-01-01',
+        endDate: '2024-01-31',
+        grossAmount: '0',
+        totalDeductions: '0',
+        netAmount: '0',
+        status: 'completed',
+      },
+    ];
+    (storage.getPayrollRuns as any).mockResolvedValue(existing);
+
+    const res = await request(app)
+      .post('/api/payroll/generate')
+      .send({ period: 'Feb 2024', startDate: '2024-01-15', endDate: '2024-01-20' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.message).toBe('Payroll run already exists for this period');
+    expect(storage.getEmployees).not.toHaveBeenCalled();
+  });
+});
+
