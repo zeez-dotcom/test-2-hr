@@ -12,12 +12,14 @@ interface User {
   username: string;
   email: string;
   employeeId?: string;
+  role: string;
 }
 
 const ADMIN_USER: User = {
   id: "1",
   username: "admin",
   email: "admin@example.com",
+  role: "admin",
 };
 const ADMIN_PASSWORD = "admin123";
 

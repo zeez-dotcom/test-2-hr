@@ -21,11 +21,16 @@ import { cn } from "@/lib/utils";
 import Sidebar from "./sidebar";
 import { Button } from "@/components/ui/button";
 
-interface LayoutProps {
-  children: React.ReactNode;
+interface User {
+  role: string;
 }
 
-export default function Layout({ children }: LayoutProps) {
+interface LayoutProps {
+  children: React.ReactNode;
+  user: User;
+}
+
+export default function Layout({ children, user }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
@@ -60,11 +65,14 @@ export default function Layout({ children }: LayoutProps) {
             <X size={20} />
           </Button>
         </div>
-        <MobileSidebarContent setSidebarOpen={setSidebarOpen} />
+        <MobileSidebarContent
+          setSidebarOpen={setSidebarOpen}
+          role={user.role}
+        />
       </div>
 
       {/* Desktop sidebar */}
-      <Sidebar />
+      <Sidebar role={user.role} />
 
       {/* Main content */}
       <div className="lg:pl-64">
@@ -99,42 +107,52 @@ export default function Layout({ children }: LayoutProps) {
 }
 
 // Mobile sidebar content component
-function MobileSidebarContent({ setSidebarOpen }: { setSidebarOpen: (open: boolean) => void }) {
+function MobileSidebarContent({
+  setSidebarOpen,
+  role,
+}: {
+  setSidebarOpen: (open: boolean) => void;
+  role: string;
+}) {
   const [location] = useLocation();
-  
+
   const navigation = [
     { name: "Dashboard", href: "/", icon: BarChart3 },
-    { name: "Employees", href: "/employees", icon: Users },
-    { name: "Departments", href: "/departments", icon: Building },
-    { name: "Payroll", href: "/payroll", icon: DollarSign },
-    { name: "Employee Events", href: "/employee-events", icon: Award },
+    { name: "Employees", href: "/employees", icon: Users, roles: ["admin", "hr"] },
+    { name: "Departments", href: "/departments", icon: Building, roles: ["admin", "hr"] },
+    { name: "Payroll", href: "/payroll", icon: DollarSign, roles: ["admin", "hr"] },
+    { name: "Employee Events", href: "/employee-events", icon: Award, roles: ["admin", "hr"] },
     { name: "Reports", href: "/reports", icon: TrendingUp },
     { name: "Vacations", href: "/vacations", icon: Calendar },
-    { name: "Loans", href: "/loans", icon: CreditCard },
-    { name: "Assets", href: "/assets", icon: Package },
-    { name: "Fleet", href: "/cars", icon: Car },
+    { name: "Loans", href: "/loans", icon: CreditCard, roles: ["admin", "hr"] },
+    { name: "Assets", href: "/assets", icon: Package, roles: ["admin", "hr"] },
+    { name: "Fleet", href: "/cars", icon: Car, roles: ["admin", "hr"] },
     { name: "Documents", href: "/documents", icon: FileText },
     { name: "Notifications", href: "/notifications", icon: Bell },
     { name: "Chatbot", href: "/chat", icon: MessageSquare },
   ];
 
+  const filteredNav = navigation.filter(
+    (item) => !item.roles || item.roles.includes(role),
+  );
+
   return (
     <nav className="mt-6">
       <div className="px-3">
         <ul className="space-y-1">
-          {navigation.map((item) => {
+          {filteredNav.map((item) => {
             const Icon = item.icon;
             const isActive = location === item.href;
-            
+
             return (
               <li key={item.name}>
-                <Link 
-                  href={item.href} 
+                <Link
+                  href={item.href}
                   className={cn(
                     "group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
                     isActive
                       ? "bg-primary text-white"
-                      : "text-gray-700 hover:bg-gray-100"
+                      : "text-gray-700 hover:bg-gray-100",
                   )}
                   onClick={() => setSidebarOpen(false)}
                 >

@@ -34,6 +34,18 @@ export const ensureAuth = (
   next(new HttpError(401, "Unauthorized"));
 };
 
+export const requireRole = (roles: string[]) => (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  const user = req.user as Express.User & { role?: string };
+  if (req.isAuthenticated() && user?.role && roles.includes(user.role)) {
+    return next();
+  }
+  next(new HttpError(403, "Forbidden"));
+};
+
 authRouter.get("/api/me", (req, res) => {
   res.json(req.user);
 });

@@ -41,7 +41,7 @@ function Router() {
   }
 
   return (
-    <Layout>
+    <Layout user={user}>
       <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/employees" component={Employees} />

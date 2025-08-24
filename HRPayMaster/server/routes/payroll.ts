@@ -11,6 +11,7 @@ import {
 import { z } from "zod";
 import { db } from "../db";
 import { eq } from "drizzle-orm";
+import { requireRole } from "./auth";
 
 export const payrollRouter = Router();
 
@@ -48,7 +49,7 @@ payrollRouter.post("/", async (req, res, next) => {
   }
 });
 
-payrollRouter.post("/generate", async (req, res, next) => {
+payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, next) => {
   try {
     const { period, startDate, endDate } = req.body;
 
