@@ -1268,6 +1268,7 @@ export class DatabaseStorage implements IStorage {
     );
   }
 
+  // Company-level report queries
   async getCompanyPayrollSummary(
     range: { startDate: string; endDate: string; groupBy: "month" | "year" }
   ): Promise<PayrollSummaryPeriod[]> {
