@@ -62,8 +62,7 @@ export default function Cars() {
 
   const assignCarMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/car-assignments", data),
-    onSuccess: async (_, variables) => {
-      await apiRequest("PUT", `/api/cars/${variables.carId}`, { status: "assigned" });
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
       queryClient.invalidateQueries({ queryKey: ["/api/car-assignments"] });
       setIsAssignCarDialogOpen(false);
@@ -75,15 +74,11 @@ export default function Cars() {
   });
 
   const updateAssignmentMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any; carId?: string }) =>
+    mutationFn: ({ id, data }: { id: string; data: any }) =>
       apiRequest("PUT", `/api/car-assignments/${id}`, data),
-    onSuccess: async (_, variables) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
       queryClient.invalidateQueries({ queryKey: ["/api/car-assignments"] });
-      if (variables?.carId) {
-        await apiRequest("PUT", `/api/cars/${variables.carId}`, { status: "available" });
-        queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
-      }
       toast({ title: "Assignment updated successfully" });
     },
     onError: () => {
@@ -137,10 +132,9 @@ export default function Cars() {
     assignCarMutation.mutate(data);
   };
 
-  const handleReturnCar = (assignmentId: string, carId: string) => {
+  const handleReturnCar = (assignmentId: string) => {
     updateAssignmentMutation.mutate({
       id: assignmentId,
-      carId,
       data: {
         status: "completed",
         returnDate: new Date().toISOString().split('T')[0]
@@ -529,7 +523,7 @@ export default function Cars() {
                           <Button 
                             size="sm" 
                             variant="outline"
-                            onClick={() => handleReturnCar(assignment.id, assignment.carId)}
+                            onClick={() => handleReturnCar(assignment.id)}
                             disabled={updateAssignmentMutation.isPending}
                           >
                             <XCircle className="w-3 h-3 mr-1" />

@@ -68,7 +68,8 @@ export function Chatbot() {
 
     let intent: { type: ChatIntent } = { type: "unknown" };
     try {
-      intent = await apiRequest("POST", "/api/chatbot", { message: text });
+      const res = await apiRequest("POST", "/api/chatbot", { message: text });
+      intent = await res.json();
     } catch {
       // Fallback to unknown intent on failure
     }
@@ -174,6 +175,9 @@ export function Chatbot() {
               period: pending.data.period!,
               startDate: pending.data.startDate!,
               endDate: pending.data.endDate!,
+              grossAmount: "0",
+              totalDeductions: "0",
+              netAmount: "0",
             };
             await apiRequest("POST", "/api/payroll/generate", payroll);
             setMessages((m) => [
