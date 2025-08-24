@@ -91,7 +91,7 @@ describe('createAssetAssignment', () => {
 
     await expect(
       storage.createAssetAssignment(newAssignment as any),
-    ).rejects.toThrow('Asset already assigned');
+    ).rejects.toThrow('Asset already assigned to this employee');
 
     expect(updateMock).not.toHaveBeenCalled();
     expect(insertMock).not.toHaveBeenCalled();
