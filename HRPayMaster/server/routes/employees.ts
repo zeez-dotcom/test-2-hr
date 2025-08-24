@@ -991,6 +991,11 @@ const upload = multer({ storage: multer.memoryStorage() });
       if (!updated) {
         return next(new HttpError(404, "Asset assignment not found"));
       }
+      if (updates.status) {
+        await assetService.updateAsset(updated.assetId, {
+          status: updates.status === "completed" ? "available" : "assigned",
+        });
+      }
       const detailed = await assetService.getAssignment(req.params.id);
       if (detailed?.asset?.type === "car") {
         const addedBy = await getAddedBy(req);
@@ -1273,6 +1278,11 @@ const upload = multer({ storage: multer.memoryStorage() });
       const updated = await assetService.updateAssignment(req.params.id, updates);
       if (!updated) {
         return next(new HttpError(404, "Car assignment not found"));
+      }
+      if (updates.status) {
+        await assetService.updateAsset(updated.assetId, {
+          status: updates.status === "completed" ? "available" : "assigned",
+        });
       }
       const detailed = await assetService.getAssignment(req.params.id);
       if (detailed) {
