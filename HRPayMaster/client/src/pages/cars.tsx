@@ -62,7 +62,11 @@ export default function Cars() {
 
   const assignCarMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/car-assignments", data),
-    onSuccess: () => {
+    onSuccess: async (_, variables) => {
+      // Mark the car as assigned when a new assignment is created
+      if (variables?.carId) {
+        await apiRequest("PUT", `/api/cars/${variables.carId}`, { status: "assigned" });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
       queryClient.invalidateQueries({ queryKey: ["/api/car-assignments"] });
       setIsAssignCarDialogOpen(false);
@@ -74,9 +78,13 @@ export default function Cars() {
   });
 
   const updateAssignmentMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) =>
+    mutationFn: ({ id, data }: { id: string; data: any; carId?: string }) =>
       apiRequest("PUT", `/api/car-assignments/${id}`, data),
-    onSuccess: () => {
+    onSuccess: async (_, variables) => {
+      // When an assignment is completed, return the car to available
+      if (variables?.carId && variables.data.status === "completed") {
+        await apiRequest("PUT", `/api/cars/${variables.carId}`, { status: "available" });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
       queryClient.invalidateQueries({ queryKey: ["/api/car-assignments"] });
       toast({ title: "Assignment updated successfully" });
@@ -133,12 +141,14 @@ export default function Cars() {
   };
 
   const handleReturnCar = (assignmentId: string) => {
+    const assignment = carAssignments.find(a => a.id === assignmentId);
     updateAssignmentMutation.mutate({
       id: assignmentId,
       data: {
         status: "completed",
         returnDate: new Date().toISOString().split('T')[0]
-      }
+      },
+      carId: assignment?.carId
     });
   };
 
