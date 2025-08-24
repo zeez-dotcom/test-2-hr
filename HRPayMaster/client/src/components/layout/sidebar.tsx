@@ -12,7 +12,8 @@ import {
   FileText,
   TrendingUp,
   Award,
-  Package
+  Package,
+  MessageSquare
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -28,7 +29,8 @@ const navigation = [
   { key: "assets", href: "/assets", icon: Package },
   { key: "cars", href: "/cars", icon: Car },
   { key: "documents", href: "/documents", icon: FileText },
-  { key: "notifications", href: "/notifications", icon: Bell }
+  { key: "notifications", href: "/notifications", icon: Bell },
+  { key: "chatbot", href: "/chat", icon: MessageSquare }
 ];
 
 export default function Sidebar() {

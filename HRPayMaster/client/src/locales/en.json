@@ -17,6 +17,7 @@
     "cars": "Fleet",
     "documents": "Documents",
     "notifications": "Notifications",
+    "chatbot": "Chatbot",
     "login": "Login"
   },
   "login": {
