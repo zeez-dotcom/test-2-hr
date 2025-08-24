@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { 
+import {
   Download,
   FileText,
   TableIcon,
@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { openPdf } from "@/lib/pdf";
+import type { TDocumentDefinitions } from "pdfmake/interfaces";
 import type { PayrollRunWithEntries, PayrollEntry, Employee } from "@shared/schema";
 
 interface ExportPayrollProps {
@@ -41,7 +43,6 @@ export function ExportPayroll({ payrollRun, isOpen, onClose }: ExportPayrollProp
       ...entry,
       employee: employees?.find(e => e.id === entry.employeeId),
     }));
-
   // Get unique work locations
   const workLocations = Array.from(
     new Set(
@@ -62,228 +63,42 @@ export function ExportPayroll({ payrollRun, isOpen, onClose }: ExportPayrollProp
 
   const generatePDFPayslips = () => {
     const locationLabel = selectedLocation === "all" ? "All Locations" : selectedLocation;
-    
-    // Create a new window for printing
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      toast({
-        title: "Error",
-        description: "Could not open print window. Please check your popup blocker.",
-        variant: "destructive",
-      });
-      return;
-    }
 
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Payroll - ${locationLabel} - ${formatDate(payrollRun.startDate)} to ${formatDate(payrollRun.endDate)}</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 20px; }
-            .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 15px; }
-            .company-info { margin-bottom: 20px; }
-            .payroll-info { display: flex; justify-content: space-between; margin-bottom: 30px; }
-            .employee-card { 
-              page-break-inside: avoid; 
-              margin-bottom: 25px; 
-              border: 1px solid #ddd; 
-              padding: 20px; 
-              border-radius: 8px;
-            }
-            .employee-header { 
-              display: flex; 
-              justify-content: space-between; 
-              align-items: center; 
-              margin-bottom: 15px;
-              border-bottom: 1px solid #eee;
-              padding-bottom: 10px;
-            }
-            .employee-name { font-size: 18px; font-weight: bold; }
-            .employee-details { font-size: 12px; color: #666; }
-            .pay-details { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-            .pay-section { }
-            .pay-section h4 { margin: 0 0 8px 0; color: #333; font-size: 14px; }
-            .pay-item { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 13px; }
-            .pay-item.total { font-weight: bold; border-top: 1px solid #ddd; padding-top: 5px; margin-top: 8px; }
-            .summary { 
-              margin-top: 30px; 
-              padding: 15px; 
-              background-color: #f8f9fa; 
-              border-radius: 5px;
-            }
-            @media print {
-              .no-print { display: none; }
-              .employee-card { page-break-after: auto; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>HR Pro - Payroll Summary</h1>
-            <h2>${locationLabel}</h2>
-            <p>Period: ${formatDate(payrollRun.startDate)} to ${formatDate(payrollRun.endDate)}</p>
-          </div>
-          
-          <div class="payroll-info">
-            <div>
-              <strong>Payroll Run ID:</strong> ${payrollRun.id}<br>
-              <strong>Status:</strong> ${payrollRun.status}<br>
-              <strong>Generated:</strong> ${formatDate(payrollRun.createdAt ?? new Date())}
-            </div>
-            <div>
-              <strong>Total Employees:</strong> ${filteredEntries.length}<br>
-              <strong>Work Location:</strong> ${locationLabel}<br>
-              <strong>Total Amount:</strong> ${formatCurrency(payrollRun.netAmount)}
-            </div>
-          </div>
-
-          ${filteredEntries.map(entry => {
+    const docDefinition: TDocumentDefinitions = {
+      info: { title: `Payroll - ${locationLabel}`, creationDate: new Date(0) },
+      styles: {
+        header: { fontSize: 18, bold: true, alignment: "center" },
+        subheader: { fontSize: 14, alignment: "center", margin: [0, 5, 0, 10] },
+      },
+      content: [
+        { text: "HR Pro - Payroll Summary", style: "header" },
+        { text: locationLabel, style: "subheader" },
+        {
+          text: `Period: ${formatDate(payrollRun.startDate)} to ${formatDate(payrollRun.endDate)}`,
+          margin: [0, 0, 0, 10],
+        },
+        {
+          ol: filteredEntries.map(entry => {
             const grossPay = parseFloat(entry.grossPay?.toString() || "0");
-            const totalDeductions = (
+            const totalDeductions =
               parseFloat(entry.taxDeduction?.toString() || "0") +
               parseFloat(entry.socialSecurityDeduction?.toString() || "0") +
               parseFloat(entry.healthInsuranceDeduction?.toString() || "0") +
               parseFloat(entry.loanDeduction?.toString() || "0") +
-              parseFloat(entry.otherDeductions?.toString() || "0")
-            );
+              parseFloat(entry.otherDeductions?.toString() || "0");
             const netPay = grossPay - totalDeductions;
+            return `${entry.employee?.firstName || "Employee"} ${entry.employee?.lastName || ""} - Net Pay: ${formatCurrency(netPay)}`;
+          }),
+        },
+      ],
+    };
 
-            return `
-              <div class="employee-card">
-                <div class="employee-header">
-                  <div>
-                    <div class="employee-name">
-                      ${entry.employee?.firstName} ${entry.employee?.lastName}
-                    </div>
-                    <div class="employee-details">
-                      ID: ${entry.employeeId} | Position: ${entry.employee?.position || 'N/A'} | Location: ${entry.employee?.workLocation || 'Office'}
-                    </div>
-                  </div>
-                  <div style="text-align: right;">
-                    <div style="font-size: 16px; font-weight: bold; color: #059669;">
-                      Net Pay: ${formatCurrency(netPay)}
-                    </div>
-                  </div>
-                </div>
-                
-                <div class="pay-details">
-                  <div class="pay-section">
-                    <h4>📊 Earnings</h4>
-                    <div class="pay-item">
-                      <span>Base Salary:</span>
-                      <span>${formatCurrency(entry.baseSalary)}</span>
-                    </div>
-                    <div class="pay-item">
-                      <span>Bonus:</span>
-                      <span>${formatCurrency(entry.bonusAmount || 0)}</span>
-                    </div>
-                    <div class="pay-item total">
-                      <span>Gross Pay:</span>
-                      <span>${formatCurrency(grossPay)}</span>
-                    </div>
-                  </div>
-                  
-                  <div class="pay-section">
-                    <h4>📉 Deductions</h4>
-                    <div class="pay-item">
-                      <span>Tax:</span>
-                      <span>${formatCurrency(entry.taxDeduction || 0)}</span>
-                    </div>
-                    <div class="pay-item">
-                      <span>Social Security:</span>
-                      <span>${formatCurrency(entry.socialSecurityDeduction || 0)}</span>
-                    </div>
-                    <div class="pay-item">
-                      <span>Health Insurance:</span>
-                      <span>${formatCurrency(entry.healthInsuranceDeduction || 0)}</span>
-                    </div>
-                    <div class="pay-item">
-                      <span>Loan Deduction:</span>
-                      <span>${formatCurrency(entry.loanDeduction || 0)}</span>
-                    </div>
-                    <div class="pay-item">
-                      <span>Other Deductions:</span>
-                      <span>${formatCurrency(entry.otherDeductions || 0)}</span>
-                    </div>
-                    <div class="pay-item total">
-                      <span>Total Deductions:</span>
-                      <span>${formatCurrency(totalDeductions)}</span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #eee; font-size: 12px; color: #666;">
-                  Working Days: ${entry.actualWorkingDays}/${entry.workingDays} | Vacation Days: ${entry.vacationDays || 0}
-                  ${entry.adjustmentReason ? `| Note: ${entry.adjustmentReason}` : ''}
-                </div>
-              </div>
-            `;
-          }).join('')}
-          
-          <div class="summary">
-            <h3>Summary for ${locationLabel}</h3>
-            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
-              <div>
-                <strong>Total Employees:</strong> ${filteredEntries.length}<br>
-                <strong>Total Gross Pay:</strong> ${formatCurrency(
-                  filteredEntries.reduce((sum, entry) => 
-                    sum + parseFloat(entry.grossPay?.toString() || "0"), 0
-                  )
-                )}
-              </div>
-              <div>
-                <strong>Total Deductions:</strong> ${formatCurrency(
-                  filteredEntries.reduce((sum, entry) => {
-                    return sum + (
-                      parseFloat(entry.taxDeduction?.toString() || "0") +
-                      parseFloat(entry.socialSecurityDeduction?.toString() || "0") +
-                      parseFloat(entry.healthInsuranceDeduction?.toString() || "0") +
-                      parseFloat(entry.loanDeduction?.toString() || "0") +
-                      parseFloat(entry.otherDeductions?.toString() || "0")
-                    );
-                  }, 0)
-                )}
-              </div>
-              <div>
-                <strong>Total Net Pay:</strong> ${formatCurrency(
-                  filteredEntries.reduce((sum, entry) => {
-                    const grossPay = parseFloat(entry.grossPay?.toString() || "0");
-                    const totalDeductions = (
-                      parseFloat(entry.taxDeduction?.toString() || "0") +
-                      parseFloat(entry.socialSecurityDeduction?.toString() || "0") +
-                      parseFloat(entry.healthInsuranceDeduction?.toString() || "0") +
-                      parseFloat(entry.loanDeduction?.toString() || "0") +
-                      parseFloat(entry.otherDeductions?.toString() || "0")
-                    );
-                    return sum + (grossPay - totalDeductions);
-                  }, 0)
-                )}
-              </div>
-            </div>
-          </div>
-          
-          <div class="no-print" style="margin-top: 30px; text-align: center;">
-            <button onclick="window.print()" style="padding: 10px 20px; background-color: #3b82f6; color: white; border: none; border-radius: 5px; cursor: pointer;">
-              Print Payroll
-            </button>
-            <button onclick="window.close()" style="padding: 10px 20px; background-color: #6b7280; color: white; border: none; border-radius: 5px; cursor: pointer; margin-left: 10px;">
-              Close
-            </button>
-          </div>
-        </body>
-      </html>
-    `;
-
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-    
+    openPdf(docDefinition);
     toast({
       title: "Success",
-      description: `Payroll for ${locationLabel} opened in new window for printing`,
+      description: `Payroll for ${locationLabel} opened for printing`,
     });
   };
-
   const generateExcelExport = () => {
     const locationLabel = selectedLocation === "all" ? "All Locations" : selectedLocation;
     
