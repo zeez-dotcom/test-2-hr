@@ -19,21 +19,21 @@ import { useTranslation } from "react-i18next";
 
 const navigation = [
   { key: "dashboard", href: "/", icon: BarChart3 },
-  { key: "employees", href: "/employees", icon: Users },
-  { key: "departments", href: "/departments", icon: Building },
-  { key: "payroll", href: "/payroll", icon: DollarSign },
-  { key: "employeeEvents", href: "/employee-events", icon: Award },
+  { key: "employees", href: "/employees", icon: Users, roles: ["admin", "hr"] },
+  { key: "departments", href: "/departments", icon: Building, roles: ["admin", "hr"] },
+  { key: "payroll", href: "/payroll", icon: DollarSign, roles: ["admin", "hr"] },
+  { key: "employeeEvents", href: "/employee-events", icon: Award, roles: ["admin", "hr"] },
   { key: "reports", href: "/reports", icon: TrendingUp },
   { key: "vacations", href: "/vacations", icon: Calendar },
-  { key: "loans", href: "/loans", icon: CreditCard },
-  { key: "assets", href: "/assets", icon: Package },
-  { key: "cars", href: "/cars", icon: Car },
+  { key: "loans", href: "/loans", icon: CreditCard, roles: ["admin", "hr"] },
+  { key: "assets", href: "/assets", icon: Package, roles: ["admin", "hr"] },
+  { key: "cars", href: "/cars", icon: Car, roles: ["admin", "hr"] },
   { key: "documents", href: "/documents", icon: FileText },
   { key: "notifications", href: "/notifications", icon: Bell },
   { key: "chatbot", href: "/chat", icon: MessageSquare }
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ role }: { role: string }) {
   const [location] = useLocation();
   const { t } = useTranslation();
 
@@ -51,7 +51,9 @@ export default function Sidebar() {
       <nav className="mt-6">
         <div className="px-3">
           <ul className="space-y-1">
-            {navigation.map((item) => {
+            {navigation
+              .filter(item => !item.roles || item.roles.includes(role))
+              .map((item) => {
               const Icon = item.icon;
               const isActive = location === item.href;
 

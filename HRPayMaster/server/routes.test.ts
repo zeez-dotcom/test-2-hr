@@ -38,9 +38,11 @@ function createApp() {
   const app = express();
   app.use(express.json({ limit: '1mb' }));
   app.use((req, _res, next) => {
-    // Stub authentication for tests
+    // Stub authentication and user role for tests
     // @ts-ignore
     req.isAuthenticated = () => true;
+    // @ts-ignore
+    req.user = { role: 'admin' };
     next();
   });
   return app;

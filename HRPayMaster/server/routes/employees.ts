@@ -37,6 +37,7 @@ import {
   normalizeBigId,
   mapHeader,
 } from "../utils/normalize";
+import { requireRole } from "./auth";
 
 export const employeesRouter = Router();
 
@@ -921,17 +922,21 @@ const upload = multer({ storage: multer.memoryStorage() });
     }
   });
 
-  employeesRouter.delete("/api/assets/:id", async (req, res, next) => {
-    try {
-      const deleted = await assetService.deleteAsset(req.params.id);
-      if (!deleted) {
-        return next(new HttpError(404, "Asset not found"));
+  employeesRouter.delete(
+    "/api/assets/:id",
+    requireRole(["admin"]),
+    async (req, res, next) => {
+      try {
+        const deleted = await assetService.deleteAsset(req.params.id);
+        if (!deleted) {
+          return next(new HttpError(404, "Asset not found"));
+        }
+        res.status(204).send();
+      } catch (error) {
+        next(new HttpError(500, "Failed to delete asset"));
       }
-      res.status(204).send();
-    } catch (error) {
-      next(new HttpError(500, "Failed to delete asset"));
-    }
-  });
+    },
+  );
 
   // Asset assignment routes
   employeesRouter.get("/api/asset-assignments", async (req, res, next) => {
