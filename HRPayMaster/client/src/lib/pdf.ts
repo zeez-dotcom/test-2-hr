@@ -49,14 +49,20 @@ export interface EmployeeEventLite {
   amount?: string | null;
 }
 
-export function buildEmployeeReport(data: { employee: EmployeeLite; events: EmployeeEventLite[] }): TDocumentDefinitions {
+export function buildEmployeeReport(
+  data: { employee: EmployeeLite; events: EmployeeEventLite[] }
+): TDocumentDefinitions {
   const { employee, events } = data;
+  const firstName = sanitizeString(employee.firstName);
+  const lastName = sanitizeString(employee.lastName);
+  const position = employee.position ? sanitizeString(employee.position) : '';
+  const id = sanitizeString(employee.id);
   return {
-    info: { title: `${employee.firstName} ${employee.lastName} Report` },
+    info: { title: `${firstName} ${lastName} Report` },
     content: [
-      { text: `${employee.firstName} ${employee.lastName}`, style: 'header' },
-      employee.position ? { text: employee.position } : '',
-      { text: `ID: ${employee.id}`, margin: [0, 0, 0, 10] },
+      { text: `${firstName} ${lastName}`, style: 'header' },
+      position ? { text: position } : '',
+      { text: `ID: ${id}`, margin: [0, 0, 0, 10] },
       { text: 'Events', style: 'subheader' },
       {
         table: {
@@ -64,7 +70,10 @@ export function buildEmployeeReport(data: { employee: EmployeeLite; events: Empl
           widths: ['*', 'auto'],
           body: [
             ['Title', 'Date'],
-            ...events.map(e => [e.title, new Date(e.eventDate).toISOString().split('T')[0]]),
+            ...events.map(e => [
+              sanitizeString(e.title),
+              new Date(e.eventDate).toISOString().split('T')[0]
+            ]),
           ],
         },
       },
@@ -76,7 +85,9 @@ export function buildEmployeeReport(data: { employee: EmployeeLite; events: Empl
   };
 }
 
-export function buildEmployeeHistoryReport(employees: EmployeeLite[]): TDocumentDefinitions {
+export function buildEmployeeHistoryReport(
+  employees: EmployeeLite[]
+): TDocumentDefinitions {
   return {
     info: { title: 'Employee History Report' },
     content: [
@@ -87,7 +98,10 @@ export function buildEmployeeHistoryReport(employees: EmployeeLite[]): TDocument
           widths: ['*', 'auto'],
           body: [
             ['Name', 'ID'],
-            ...employees.map(e => [`${e.firstName} ${e.lastName}`, e.id]),
+            ...employees.map(e => [
+              `${sanitizeString(e.firstName)} ${sanitizeString(e.lastName)}`,
+              sanitizeString(e.id),
+            ]),
           ],
         },
       },
