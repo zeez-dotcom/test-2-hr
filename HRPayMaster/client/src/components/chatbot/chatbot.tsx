@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { Employee, InsertEmployeeEvent } from "@shared/schema";
-import { parseIntent, resolveDate, ChatIntent } from "@shared/chatbot";
+import type {
+  Employee,
+  InsertEmployeeEvent,
+  InsertVacationRequest,
+  InsertPayrollRun,
+} from "@shared/schema";
+import { resolveDate, ChatIntent } from "@shared/chatbot";
+import { differenceInCalendarDays } from "date-fns";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +20,15 @@ interface Message {
 
 interface PendingIntent {
   type: ChatIntent;
-  data: { amount?: number; date?: string; reason?: string };
+  data: {
+    amount?: number;
+    date?: string;
+    reason?: string;
+    startDate?: string;
+    endDate?: string;
+    period?: string;
+  };
+  confirm?: boolean;
 }
 
 export function Chatbot() {
@@ -38,83 +52,251 @@ export function Chatbot() {
     setInput("");
     setMessages((m) => [...m, { from: "user", text }]);
 
-    if (!selectedEmployee) {
-      setMessages((m) => [...m, { from: "bot", text: "Please select an employee first." }]);
-      return;
-    }
-
     if (pending) {
       await handlePending(text);
       return;
     }
 
-    const intent = parseIntent(text);
+    // Ensure an employee is selected for intents that require it
+    if (!selectedEmployee) {
+      setMessages((m) => [
+        ...m,
+        { from: "bot", text: "Please select an employee first." },
+      ]);
+      return;
+    }
+
+    let intent: { type: ChatIntent } = { type: "unknown" };
+    try {
+      intent = await apiRequest("POST", "/api/chatbot", { message: text });
+    } catch {
+      // Fallback to unknown intent on failure
+    }
+
     switch (intent.type) {
       case "addBonus":
         setPending({ type: "addBonus", data: {} });
         setMessages((m) => [...m, { from: "bot", text: "Sure, what's the amount?" }]);
         break;
-      case "deductLoan":
-        setPending({ type: "deductLoan", data: {} });
-        setMessages((m) => [...m, { from: "bot", text: "Okay, loan deduction amount?" }]);
+      case "addDeduction":
+        setPending({ type: "addDeduction", data: {} });
+        setMessages((m) => [...m, { from: "bot", text: "Deduction amount?" }]);
+        break;
+      case "requestVacation":
+        setPending({ type: "requestVacation", data: {} });
+        setMessages((m) => [...m, { from: "bot", text: "When does the vacation start?" }]);
+        break;
+      case "runPayroll":
+        setPending({ type: "runPayroll", data: {} });
+        setMessages((m) => [...m, { from: "bot", text: "What is the payroll period name?" }]);
         break;
       case "help":
-        setMessages((m) => [...m, { from: "bot", text: "You can say 'add bonus' or 'deduct loan'." }]);
+        setMessages((m) => [
+          ...m,
+          {
+            from: "bot",
+            text: "You can say 'add bonus', 'add deduction', 'request vacation', or 'run payroll'.",
+          },
+        ]);
         break;
       default:
         setMessages((m) => [
           ...m,
-          { from: "bot", text: "Sorry, I didn't understand. Try 'add bonus' or 'deduct loan'." },
+          {
+            from: "bot",
+            text: "Sorry, I didn't understand. Try 'add bonus', 'add deduction', 'request vacation', or 'run payroll'.",
+          },
         ]);
     }
   };
 
   const handlePending = async (text: string) => {
     if (!pending) return;
-    if (pending.data.amount === undefined) {
-      const amount = parseFloat(text);
-      if (isNaN(amount)) {
-        setMessages((m) => [...m, { from: "bot", text: "Please provide a valid amount." }]);
-        return;
+    const lower = text.toLowerCase();
+
+    if (pending.confirm) {
+      if (lower.startsWith("y")) {
+        // User confirmed action
+        switch (pending.type) {
+          case "addBonus":
+          case "addDeduction": {
+            const eventData: InsertEmployeeEvent = {
+              employeeId: selectedEmployee,
+              eventType: pending.type === "addBonus" ? "bonus" : "deduction",
+              title: pending.type === "addBonus" ? "Bonus" : "Deduction",
+              description: pending.data.reason!,
+              amount: pending.data.amount?.toString() || "0",
+              eventDate: pending.data.date!,
+              affectsPayroll: true,
+              status: "active",
+            };
+            await apiRequest("POST", "/api/employee-events", eventData);
+            setMessages((m) => [
+              ...m,
+              {
+                from: "bot",
+                text:
+                  pending.type === "addBonus"
+                    ? `Bonus of ${pending.data.amount} added for ${pending.data.date}.`
+                    : `Deduction of ${pending.data.amount} recorded for ${pending.data.date}.`,
+              },
+            ]);
+            break;
+          }
+          case "requestVacation": {
+            const days =
+              differenceInCalendarDays(
+                new Date(pending.data.endDate!),
+                new Date(pending.data.startDate!)
+              ) + 1;
+            const vacation: InsertVacationRequest = {
+              employeeId: selectedEmployee,
+              startDate: pending.data.startDate!,
+              endDate: pending.data.endDate!,
+              days,
+              reason: pending.data.reason,
+              leaveType: "annual",
+              deductFromSalary: false,
+              status: "approved",
+            };
+            await apiRequest("POST", "/api/vacations", vacation);
+            setMessages((m) => [
+              ...m,
+              {
+                from: "bot",
+                text: `Vacation from ${vacation.startDate} to ${vacation.endDate} recorded.`,
+              },
+            ]);
+            break;
+          }
+          case "runPayroll": {
+            const payroll: InsertPayrollRun = {
+              period: pending.data.period!,
+              startDate: pending.data.startDate!,
+              endDate: pending.data.endDate!,
+            };
+            await apiRequest("POST", "/api/payroll/generate", payroll);
+            setMessages((m) => [
+              ...m,
+              {
+                from: "bot",
+                text: `Payroll for ${payroll.period} generated.`,
+              },
+            ]);
+            break;
+          }
+        }
+      } else {
+        setMessages((m) => [...m, { from: "bot", text: "Action cancelled." }]);
       }
-      setPending({ ...pending, data: { amount } });
-      setMessages((m) => [...m, { from: "bot", text: "When should it apply? (e.g., 2024-05-01, next Friday, this month)" }]);
-      return;
-    }
-    if (!pending.data.date) {
-      const date = resolveDate(text, currentDate);
-      setPending({ ...pending, data: { ...pending.data, date } });
-      setMessages((m) => [...m, { from: "bot", text: "Reason?" }]);
-      return;
-    }
-    if (!pending.data.reason) {
-      const finalData = { ...pending.data, reason: text };
       setPending(null);
-      const eventData: InsertEmployeeEvent = {
-        employeeId: selectedEmployee,
-        eventType: pending.type === "addBonus" ? "bonus" : "deduction",
-        title: pending.type === "addBonus" ? "Bonus" : "Loan Deduction",
-        description: finalData.reason,
-        amount: finalData.amount?.toString() || "0",
-        eventDate: finalData.date!,
-        affectsPayroll: true,
-        status: "active",
-      };
-
-      await apiRequest("POST", "/api/employee-events", eventData);
-
-      if (pending.type === "addBonus") {
-        setMessages((m) => [
-          ...m,
-          { from: "bot", text: `Bonus of ${finalData.amount} added for ${finalData.date}.` },
-        ]);
-      } else if (pending.type === "deductLoan") {
-        setMessages((m) => [
-          ...m,
-          { from: "bot", text: `Loan deduction of ${finalData.amount} recorded for ${finalData.date}.` },
-        ]);
-      }
       return;
+    }
+
+    switch (pending.type) {
+      case "addBonus":
+      case "addDeduction": {
+        if (pending.data.amount === undefined) {
+          const amount = parseFloat(text);
+          if (isNaN(amount)) {
+            setMessages((m) => [
+              ...m,
+              { from: "bot", text: "Please provide a valid amount." },
+            ]);
+            return;
+          }
+          setPending({ ...pending, data: { amount } });
+          setMessages((m) => [
+            ...m,
+            {
+              from: "bot",
+              text: "When should it apply? (e.g., 2024-05-01, next Friday, next month)",
+            },
+          ]);
+          return;
+        }
+        if (!pending.data.date) {
+          const date = resolveDate(text, currentDate);
+          setPending({ ...pending, data: { ...pending.data, date } });
+          setMessages((m) => [...m, { from: "bot", text: "Reason?" }]);
+          return;
+        }
+        if (!pending.data.reason) {
+          const reason = text;
+          setPending({ ...pending, data: { ...pending.data, reason }, confirm: true });
+          setMessages((m) => [
+            ...m,
+            {
+              from: "bot",
+              text: `Confirm ${
+                pending.type === "addBonus" ? "bonus" : "deduction"
+              } of ${pending.data.amount} on ${pending.data.date}? (yes/no)`,
+            },
+          ]);
+          return;
+        }
+        break;
+      }
+      case "requestVacation": {
+        if (!pending.data.startDate) {
+          const startDate = resolveDate(text, currentDate);
+          setPending({ ...pending, data: { ...pending.data, startDate } });
+          setMessages((m) => [...m, { from: "bot", text: "When does it end?" }]);
+          return;
+        }
+        if (!pending.data.endDate) {
+          const endDate = resolveDate(text, currentDate);
+          setPending({ ...pending, data: { ...pending.data, endDate } });
+          setMessages((m) => [...m, { from: "bot", text: "Reason?" }]);
+          return;
+        }
+        if (!pending.data.reason) {
+          const reason = text;
+          const start = pending.data.startDate!;
+          const end = pending.data.endDate!;
+          setPending({
+            ...pending,
+            data: { ...pending.data, reason },
+            confirm: true,
+          });
+          setMessages((m) => [
+            ...m,
+            {
+              from: "bot",
+              text: `Confirm vacation from ${start} to ${end}? (yes/no)`,
+            },
+          ]);
+          return;
+        }
+        break;
+      }
+      case "runPayroll": {
+        if (!pending.data.period) {
+          setPending({ ...pending, data: { period: text } });
+          setMessages((m) => [...m, { from: "bot", text: "Start date?" }]);
+          return;
+        }
+        if (!pending.data.startDate) {
+          const startDate = resolveDate(text, currentDate);
+          setPending({ ...pending, data: { ...pending.data, startDate } });
+          setMessages((m) => [...m, { from: "bot", text: "End date?" }]);
+          return;
+        }
+        if (!pending.data.endDate) {
+          const endDate = resolveDate(text, currentDate);
+          const data = { ...pending.data, endDate };
+          setPending({ ...pending, data, confirm: true });
+          setMessages((m) => [
+            ...m,
+            {
+              from: "bot",
+              text: `Confirm payroll for ${data.period} from ${data.startDate} to ${endDate}? (yes/no)`,
+            },
+          ]);
+          return;
+        }
+        break;
+      }
     }
   };
 
