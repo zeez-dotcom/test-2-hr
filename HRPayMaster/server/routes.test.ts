@@ -25,6 +25,7 @@ vi.mock('./storage', () => {
       createCarAssignment: vi.fn(),
       createEmployeeEvent: vi.fn(),
       getEmployeeReport: vi.fn(),
+      getCompanyPayrollSummary: vi.fn(),
     },
     DuplicateEmployeeCodeError,
   };
@@ -846,6 +847,16 @@ describe('employee routes', () => {
     expect(res.status).toBe(400);
     expect(res.body.error.message).toBe('Invalid query parameters');
     expect(storage.getEmployeeReport).not.toHaveBeenCalled();
+  });
+
+  it('GET /api/reports/payroll returns 400 for invalid date range', async () => {
+    const res = await request(app)
+      .get('/api/reports/payroll')
+      .query({ startDate: '2024-12-31', endDate: '2024-01-01' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toBe('Invalid query parameters');
+    expect(storage.getCompanyPayrollSummary).not.toHaveBeenCalled();
   });
 });
 
