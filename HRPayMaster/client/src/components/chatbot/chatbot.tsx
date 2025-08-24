@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { Employee } from "@shared/schema";
+import type { Employee, InsertEmployeeEvent } from "@shared/schema";
 import { parseIntent, resolveDate, ChatIntent } from "@shared/chatbot";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -90,32 +90,25 @@ export function Chatbot() {
     if (!pending.data.reason) {
       const finalData = { ...pending.data, reason: text };
       setPending(null);
+      const eventData: InsertEmployeeEvent = {
+        employeeId: selectedEmployee,
+        eventType: pending.type === "addBonus" ? "bonus" : "deduction",
+        title: pending.type === "addBonus" ? "Bonus" : "Loan Deduction",
+        description: finalData.reason,
+        amount: finalData.amount?.toString() || "0",
+        eventDate: finalData.date!,
+        affectsPayroll: true,
+        status: "active",
+      };
+
+      await apiRequest("POST", "/api/employee-events", eventData);
+
       if (pending.type === "addBonus") {
-        await apiRequest("POST", "/api/employee-events", {
-          employeeId: selectedEmployee,
-          eventType: "bonus",
-          title: "Bonus",
-          description: finalData.reason,
-          amount: finalData.amount?.toString() || "0",
-          eventDate: finalData.date,
-          affectsPayroll: true,
-          status: "active",
-        });
         setMessages((m) => [
           ...m,
           { from: "bot", text: `Bonus of ${finalData.amount} added for ${finalData.date}.` },
         ]);
       } else if (pending.type === "deductLoan") {
-        await apiRequest("POST", "/api/employee-events", {
-          employeeId: selectedEmployee,
-          eventType: "deduction",
-          title: "Loan Deduction",
-          description: finalData.reason,
-          amount: finalData.amount?.toString() || "0",
-          eventDate: finalData.date,
-          affectsPayroll: true,
-          status: "active",
-        });
         setMessages((m) => [
           ...m,
           { from: "bot", text: `Loan deduction of ${finalData.amount} recorded for ${finalData.date}.` },
