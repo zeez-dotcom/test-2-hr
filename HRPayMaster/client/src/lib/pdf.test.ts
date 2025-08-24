@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pdfBuffer, sanitizeString } from './pdf';
+import { pdfBuffer, sanitizeString, buildEmployeeReport } from './pdf';
 
 describe('pdf utility', () => {
   it('sanitizes strings', () => {
@@ -11,6 +11,16 @@ describe('pdf utility', () => {
       content: [{ text: '<b>hello</b>' }],
       info: { title: 'Test', creationDate: new Date(0) }
     });
+    expect(Buffer.from(buffer).toString('base64')).toMatchSnapshot();
+  });
+
+  it('creates employee report', async () => {
+    const def = buildEmployeeReport({
+      employee: { firstName: '<b>Alice</b>', lastName: 'Smith', id: '1' },
+      events: [{ title: '<i>Bonus</i>', eventDate: new Date(0) }]
+    });
+    def.info = { ...(def.info || {}), creationDate: new Date(0) };
+    const buffer = await pdfBuffer(def);
     expect(Buffer.from(buffer).toString('base64')).toMatchSnapshot();
   });
 });
