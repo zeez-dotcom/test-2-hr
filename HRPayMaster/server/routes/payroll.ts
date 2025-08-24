@@ -226,46 +226,51 @@ payrollRouter.post("/generate", async (req, res, next) => {
 
     // Wrap payroll run creation, entry insertion, and loan updates in a transaction
     const payrollRun = await db.transaction(async tx => {
-      const [newRun] = await tx
-        .insert(payrollRuns)
-        .values({
-          period,
-          startDate,
-          endDate,
-          grossAmount: grossAmount.toString(),
-          totalDeductions: totalDeductions.toString(),
-          netAmount: netAmount.toString(),
-          status: "completed",
-        })
-        .returning();
+      try {
+        const [newRun] = await tx
+          .insert(payrollRuns)
+          .values({
+            period,
+            startDate,
+            endDate,
+            grossAmount: grossAmount.toString(),
+            totalDeductions: totalDeductions.toString(),
+            netAmount: netAmount.toString(),
+            status: "completed",
+          })
+          .returning();
 
-      for (const entry of payrollEntries) {
-        await tx.insert(payrollEntriesTable).values({
-          ...entry,
-          payrollRunId: newRun.id,
-        });
-      }
-
-      for (const loan of loans.filter(l => l.status === "active")) {
-        const loanDeduction = payrollEntries.find(
-          entry => entry.employeeId === loan.employeeId,
-        )?.loanDeduction;
-        if (loanDeduction && parseFloat(loanDeduction) > 0) {
-          const newRemaining = Math.max(
-            0,
-            parseFloat(loan.remainingAmount) - parseFloat(loanDeduction),
-          );
-          await tx
-            .update(loansTable)
-            .set({
-              remainingAmount: newRemaining.toString(),
-              status: newRemaining <= 0 ? "completed" : "active",
-            })
-            .where(eq(loansTable.id, loan.id));
+        for (const entry of payrollEntries) {
+          await tx.insert(payrollEntriesTable).values({
+            ...entry,
+            payrollRunId: newRun.id,
+          });
         }
-      }
 
-      return newRun;
+        for (const loan of loans.filter(l => l.status === "active")) {
+          const loanDeduction = payrollEntries.find(
+            entry => entry.employeeId === loan.employeeId,
+          )?.loanDeduction;
+          if (loanDeduction && parseFloat(loanDeduction) > 0) {
+            const newRemaining = Math.max(
+              0,
+              parseFloat(loan.remainingAmount) - parseFloat(loanDeduction),
+            );
+            await tx
+              .update(loansTable)
+              .set({
+                remainingAmount: newRemaining.toString(),
+                status: newRemaining <= 0 ? "completed" : "active",
+              })
+              .where(eq(loansTable.id, loan.id));
+          }
+        }
+
+        return newRun;
+      } catch (error) {
+        await tx.rollback();
+        throw error;
+      }
     });
 
     res.status(201).json(payrollRun);
