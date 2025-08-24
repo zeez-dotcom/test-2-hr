@@ -44,7 +44,7 @@ export function openPdf(docDefinition: TDocumentDefinitions) {
 export function pdfBuffer(docDefinition: TDocumentDefinitions): Promise<Uint8Array> {
   const sanitized = sanitize(docDefinition) as TDocumentDefinitions;
   return new Promise(resolve => {
-    pdfMake.createPdf(sanitized).getBuffer(buffer => {
+    pdfMake.createPdf(sanitized).getBuffer((buffer: Uint8Array) => {
       resolve(buffer);
     });
   });
