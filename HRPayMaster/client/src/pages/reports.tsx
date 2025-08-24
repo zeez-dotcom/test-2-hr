@@ -37,10 +37,10 @@ import type {
   SickLeaveTracking,
 } from "@shared/schema";
 
-function sanitizeImageSrc(src?: string | null): string {
+export function sanitizeImageSrc(src?: string | null): string {
   if (!src) return "";
   const trimmed = src.trim();
-  const isDataUrl = /^data: image\/[^;]+;base64,/i.test(trimmed);
+  const isDataUrl = /^data:image\/[^;]+;base64,/i.test(trimmed);
   const isAbsoluteUrl = /^https?:\/\//i.test(trimmed);
   if (!isDataUrl && !isAbsoluteUrl) return "";
   return trimmed.replace(/"/g, "&quot;");
