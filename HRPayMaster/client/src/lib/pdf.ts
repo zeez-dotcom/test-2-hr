@@ -1,5 +1,5 @@
-import pdfMake from 'pdfmake/build/pdfmake';
-import pdfFonts from 'pdfmake/build/vfs_fonts';
+import pdfMake from 'pdfmake/build/pdfmake.js';
+import pdfFonts from 'pdfmake/build/vfs_fonts.js';
 import type { TDocumentDefinitions } from 'pdfmake/interfaces';
 
 pdfMake.vfs = pdfFonts as any;
@@ -34,6 +34,68 @@ function sanitize(obj: any): any {
     return res;
   }
   return obj;
+}
+
+export interface EmployeeLite {
+  firstName: string;
+  lastName: string;
+  id: string;
+  position?: string | null;
+}
+
+export interface EmployeeEventLite {
+  title: string;
+  eventDate: string | Date;
+  amount?: string | null;
+}
+
+export function buildEmployeeReport(data: { employee: EmployeeLite; events: EmployeeEventLite[] }): TDocumentDefinitions {
+  const { employee, events } = data;
+  return {
+    info: { title: `${employee.firstName} ${employee.lastName} Report` },
+    content: [
+      { text: `${employee.firstName} ${employee.lastName}`, style: 'header' },
+      employee.position ? { text: employee.position } : '',
+      { text: `ID: ${employee.id}`, margin: [0, 0, 0, 10] },
+      { text: 'Events', style: 'subheader' },
+      {
+        table: {
+          headerRows: 1,
+          widths: ['*', 'auto'],
+          body: [
+            ['Title', 'Date'],
+            ...events.map(e => [e.title, new Date(e.eventDate).toISOString().split('T')[0]]),
+          ],
+        },
+      },
+    ],
+    styles: {
+      header: { fontSize: 18, bold: true },
+      subheader: { fontSize: 14, bold: true, margin: [0, 10, 0, 5] },
+    },
+  };
+}
+
+export function buildEmployeeHistoryReport(employees: EmployeeLite[]): TDocumentDefinitions {
+  return {
+    info: { title: 'Employee History Report' },
+    content: [
+      { text: 'Employee History Report', style: 'header' },
+      {
+        table: {
+          headerRows: 1,
+          widths: ['*', 'auto'],
+          body: [
+            ['Name', 'ID'],
+            ...employees.map(e => [`${e.firstName} ${e.lastName}`, e.id]),
+          ],
+        },
+      },
+    ],
+    styles: {
+      header: { fontSize: 18, bold: true },
+    },
+  };
 }
 
 export function openPdf(docDefinition: TDocumentDefinitions) {
