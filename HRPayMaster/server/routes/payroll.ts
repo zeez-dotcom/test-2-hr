@@ -86,6 +86,9 @@ payrollRouter.post("/generate", async (req, res, next) => {
     // Define period range
     const start = new Date(startDate);
     const end = new Date(endDate);
+    // Calculate number of days in this payroll period
+    const workingDays =
+      Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
     // Calculate totals
     let grossAmount = 0;
@@ -108,15 +111,14 @@ payrollRouter.post("/generate", async (req, res, next) => {
         return total + Math.ceil((vacEnd.getTime() - vacStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
       }, 0);
 
-      // Use employee's standard working days (default 26 if not set)
-      const employeeWorkingDays = employee.standardWorkingDays || 26;
-
       // Calculate actual working days for this employee
-      const actualWorkingDays = Math.max(0, employeeWorkingDays - vacationDays);
+      const actualWorkingDays = Math.max(0, workingDays - vacationDays);
 
-      // Calculate pro-rated salary based on employee's standard working days
-      const baseSalary = employee.status === "active" ?
-        (monthlySalary * actualWorkingDays / employeeWorkingDays) : 0;
+      // Calculate pro-rated salary based on working days in the period
+      const baseSalary =
+        employee.status === "active"
+          ? (monthlySalary * actualWorkingDays) / workingDays
+          : 0;
 
       // Calculate loan deductions for this employee
       const employeeLoans = loans.filter(l =>
@@ -207,7 +209,7 @@ payrollRouter.post("/generate", async (req, res, next) => {
         grossPay: grossPay.toString(),
         baseSalary: baseSalary.toString(),
         bonusAmount: bonusAmount.toString(),
-        workingDays: employeeWorkingDays,
+        workingDays,
         actualWorkingDays: actualWorkingDays,
         vacationDays: vacationDays,
         taxDeduction: taxDeduction.toString(),
