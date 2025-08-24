@@ -6,7 +6,12 @@ test('sanitizeImageSrc accepts valid data URL', () => {
   expect(sanitizeImageSrc(valid)).toBe(valid);
 });
 
-test('sanitizeImageSrc rejects malformed data URL', () => {
+test('sanitizeImageSrc rejects non-image data URL', () => {
   const invalid = 'data:text/plain;base64,AAAA';
+  expect(sanitizeImageSrc(invalid)).toBe('');
+});
+
+test('sanitizeImageSrc rejects data URL missing base64', () => {
+  const invalid = 'data:image/png;,AAAA';
   expect(sanitizeImageSrc(invalid)).toBe('');
 });
