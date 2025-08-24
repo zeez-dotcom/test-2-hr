@@ -20,6 +20,7 @@ import Documents from "@/pages/documents";
 import Assets from "@/pages/assets";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
+import Chatbot from "@/components/chatbot";
 
 function Router() {
   const { data: user, isLoading } = useQuery({
@@ -54,6 +55,7 @@ function Router() {
         <Route path="/cars" component={Cars} />
         <Route path="/notifications" component={Notifications} />
         <Route path="/documents" component={Documents} />
+        <Route path="/chat" component={Chatbot} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
