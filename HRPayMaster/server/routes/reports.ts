@@ -5,31 +5,30 @@ import { z } from "zod";
 
 export const reportsRouter = Router();
 
+const reportQuerySchema = z
+  .object({
+    startDate: z
+      .string()
+      .refine((d) => !isNaN(Date.parse(d)), { message: "Invalid startDate" }),
+    endDate: z
+      .string()
+      .refine((d) => !isNaN(Date.parse(d)), { message: "Invalid endDate" }),
+    groupBy: z.enum(["month", "year"]).optional().default("month"),
+  })
+  .refine(
+    ({ startDate, endDate }) => new Date(startDate) <= new Date(endDate),
+    {
+      message: "startDate must be before or equal to endDate",
+      path: ["endDate"],
+    }
+  );
+
 // Employee and company report routes
 
 // Employee report route
 reportsRouter.get("/api/reports/employees/:id", async (req, res, next) => {
-  const querySchema = z
-    .object({
-      startDate: z
-        .string()
-        .refine((d) => !isNaN(Date.parse(d)), { message: "Invalid startDate" }),
-      endDate: z
-        .string()
-        .refine((d) => !isNaN(Date.parse(d)), { message: "Invalid endDate" }),
-      groupBy: z.enum(["month", "year"]).optional().default("month"),
-    })
-    .refine(
-      ({ startDate, endDate }) =>
-        new Date(startDate) <= new Date(endDate),
-      {
-        message: "startDate must be before or equal to endDate",
-        path: ["endDate"],
-      }
-    );
-
   try {
-    const { startDate, endDate, groupBy } = querySchema.parse(req.query);
+    const { startDate, endDate, groupBy } = reportQuerySchema.parse(req.query);
     const report = await storage.getEmployeeReport(req.params.id, {
       startDate,
       endDate,
@@ -93,27 +92,8 @@ reportsRouter.get("/api/reports/employees/:id", async (req, res, next) => {
 
 // Company payroll summary
 reportsRouter.get("/api/reports/payroll", async (req, res, next) => {
-  const querySchema = z
-    .object({
-      startDate: z
-        .string()
-        .refine((d) => !isNaN(Date.parse(d)), { message: "Invalid startDate" }),
-      endDate: z
-        .string()
-        .refine((d) => !isNaN(Date.parse(d)), { message: "Invalid endDate" }),
-      groupBy: z.enum(["month", "year"]).optional().default("month"),
-    })
-    .refine(
-      ({ startDate, endDate }) =>
-        new Date(startDate) <= new Date(endDate),
-      {
-        message: "startDate must be before or equal to endDate",
-        path: ["endDate"],
-      }
-    );
-
   try {
-    const { startDate, endDate, groupBy } = querySchema.parse(req.query);
+    const { startDate, endDate, groupBy } = reportQuerySchema.parse(req.query);
     const report = await storage.getCompanyPayrollSummary({
       startDate,
       endDate,
