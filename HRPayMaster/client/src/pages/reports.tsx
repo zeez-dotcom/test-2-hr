@@ -8,8 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { 
-  FileText, 
+import {
+  FileText,
   Download, 
   Calendar as CalendarIcon,
   User,
@@ -34,6 +34,10 @@ import type {
   EmployeeEvent,
   PayrollRun,
 } from "@shared/schema";
+// Types for company-level reports
+type PayrollSummary = { period: string; totals: { grossPay: number; netPay: number } };
+type LoanBalance = { employeeId: string; balance: number };
+type AssetUsage = { assetId: string; name: string; assignments: number };
 import { openPdf, buildEmployeeReport, buildEmployeeHistoryReport } from "@/lib/pdf";
 
 export function sanitizeImageSrc(src?: string | null): string {
@@ -67,15 +71,15 @@ export default function Reports() {
     queryKey: ["/api/payroll"],
   });
 
-  const { data: payrollSummary, error: payrollSummaryError } = useQuery<any[]>({
+  const { data: payrollSummary, error: payrollSummaryError } = useQuery<PayrollSummary[]>({
     queryKey: ["/api/reports/payroll"],
   });
 
-  const { data: loanBalances, error: loanBalancesError } = useQuery<any[]>({
+  const { data: loanBalances, error: loanBalancesError } = useQuery<LoanBalance[]>({
     queryKey: ["/api/reports/loan-balances"],
   });
 
-  const { data: assetUsage, error: assetUsageError } = useQuery<any[]>({
+  const { data: assetUsage, error: assetUsageError } = useQuery<AssetUsage[]>({
     queryKey: ["/api/reports/asset-usage"],
   });
 

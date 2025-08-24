@@ -5,6 +5,8 @@ import { z } from "zod";
 
 export const reportsRouter = Router();
 
+// Employee and company report routes
+
 // Employee report route
 reportsRouter.get("/api/reports/employees/:id", async (req, res, next) => {
   const querySchema = z
