@@ -584,7 +584,11 @@ export default function Reports() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <pre className="text-sm">{JSON.stringify(payrollSummary, null, 2)}</pre>
+              {payrollSummary ? (
+                <pre className="text-sm">{JSON.stringify(payrollSummary, null, 2)}</pre>
+              ) : (
+                <p className="text-sm text-muted-foreground">No payroll data available</p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -598,7 +602,11 @@ export default function Reports() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <pre className="text-sm">{JSON.stringify(loanBalances, null, 2)}</pre>
+              {loanBalances ? (
+                <pre className="text-sm">{JSON.stringify(loanBalances, null, 2)}</pre>
+              ) : (
+                <p className="text-sm text-muted-foreground">No loan data available</p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -612,7 +620,11 @@ export default function Reports() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <pre className="text-sm">{JSON.stringify(assetUsage, null, 2)}</pre>
+              {assetUsage ? (
+                <pre className="text-sm">{JSON.stringify(assetUsage, null, 2)}</pre>
+              ) : (
+                <p className="text-sm text-muted-foreground">No asset usage data available</p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
