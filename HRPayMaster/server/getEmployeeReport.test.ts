@@ -58,7 +58,7 @@ describe('getEmployeeReport', () => {
   });
 });
 
-// Stubs for future company-level report tests
+// Stubs for future company-level report tests to be fleshed out
 describe('getCompanyPayrollSummary', () => {
   it.todo('returns aggregated payroll data');
 });

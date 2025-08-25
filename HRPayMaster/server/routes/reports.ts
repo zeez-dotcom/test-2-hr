@@ -90,7 +90,9 @@ reportsRouter.get("/api/reports/employees/:id", async (req, res, next) => {
   }
 });
 
-// Company payroll summary
+// Company-level report routes
+
+// Payroll summary
 reportsRouter.get("/api/reports/payroll", async (req, res, next) => {
   try {
     const { startDate, endDate, groupBy } = reportQuerySchema.parse(req.query);
