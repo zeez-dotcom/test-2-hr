@@ -485,6 +485,7 @@ export const insertSickLeaveTrackingSchema = createInsertSchema(sickLeaveTrackin
 });
 
 // Types
+export type User = typeof users.$inferSelect;
 export type Department = typeof departments.$inferSelect;
 export type InsertDepartment = z.infer<typeof insertDepartmentSchema>;
 

@@ -21,9 +21,10 @@ import Assets from "@/pages/assets";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import Chatbot from "@/components/chatbot";
+import type { User } from "@shared/schema";
 
 function Router() {
-  const { data: user, isLoading } = useQuery({
+  const { data: user, isLoading } = useQuery<User | null>({
     queryKey: ["/api/me"],
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
