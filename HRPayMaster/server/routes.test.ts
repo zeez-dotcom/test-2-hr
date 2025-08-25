@@ -31,6 +31,19 @@ vi.mock('./storage', () => {
   };
 });
 
+vi.mock('./db', () => {
+  return {
+    db: {
+      query: {
+        payrollRuns: {
+          findFirst: vi.fn(),
+        },
+      },
+    },
+  };
+});
+
+import { db } from './db';
 import { registerRoutes } from './routes';
 import { storage } from './storage';
 
@@ -879,19 +892,17 @@ describe('payroll routes', () => {
   });
 
   it('POST /api/payroll/generate returns 409 when period overlaps existing run', async () => {
-    const existing = [
-      {
-        id: 'run1',
-        period: 'Jan 2024',
-        startDate: '2024-01-01',
-        endDate: '2024-01-31',
-        grossAmount: '0',
-        totalDeductions: '0',
-        netAmount: '0',
-        status: 'completed',
-      },
-    ];
-    (storage.getPayrollRuns as any).mockResolvedValue(existing);
+    const existing = {
+      id: 'run1',
+      period: 'Jan 2024',
+      startDate: new Date('2024-01-01'),
+      endDate: new Date('2024-01-31'),
+      grossAmount: '0',
+      totalDeductions: '0',
+      netAmount: '0',
+      status: 'completed',
+    };
+    (db.query.payrollRuns.findFirst as any).mockResolvedValue(existing);
 
     const res = await request(app)
       .post('/api/payroll/generate')

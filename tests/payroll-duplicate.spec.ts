@@ -1,66 +1,51 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import express from 'express';
-import request from 'supertest';
-import { registerRoutes } from '../HRPayMaster/server/routes';
-import { errorHandler } from '../HRPayMaster/server/errorHandler';
-import { storage } from '../HRPayMaster/server/storage';
+import { test, expect } from '@playwright/test';
+import express from '../HRPayMaster/node_modules/express';
+import request from '../HRPayMaster/node_modules/supertest';
 
-process.env.DATABASE_URL = 'postgres://localhost/test';
+test('returns 409 when generating overlapping payroll run', async () => {
+  process.env.DATABASE_URL = 'postgres://localhost/test';
 
-vi.mock('../HRPayMaster/server/storage', () => {
-  return {
-    storage: {
-      getPayrollRuns: vi.fn(),
-      getEmployees: vi.fn(),
-      getLoans: vi.fn(),
-      getVacationRequests: vi.fn(),
-      getEmployeeEvents: vi.fn(),
-      createNotification: vi.fn(),
-    },
-  };
-});
+  const { registerRoutes } = await import('../HRPayMaster/server/routes');
+  const { errorHandler } = await import('../HRPayMaster/server/errorHandler');
+  const { storage } = await import('../HRPayMaster/server/storage');
+  const { db } = await import('../HRPayMaster/server/db');
 
-function createApp() {
   const app = express();
   app.use(express.json({ limit: '1mb' }));
   app.use((req, _res, next) => {
     // @ts-ignore
     req.isAuthenticated = () => true;
+    // @ts-ignore
+    req.user = { role: 'admin' };
     next();
   });
-  return app;
-}
 
-describe('payroll duplicate prevention', () => {
-  let app: express.Express;
+  await registerRoutes(app);
+  app.use(errorHandler);
 
-  beforeEach(async () => {
-    app = createApp();
-    await registerRoutes(app);
-    app.use(errorHandler);
-    vi.clearAllMocks();
-  });
+  const existing = {
+    id: 'run1',
+    period: 'Jan 2024',
+    startDate: new Date('2024-01-01'),
+    endDate: new Date('2024-01-31'),
+    grossAmount: '0',
+    totalDeductions: '0',
+    netAmount: '0',
+    status: 'completed',
+  };
+  db.query.payrollRuns.findFirst = async () => existing as any;
 
-  it('returns 409 when generating overlapping payroll run', async () => {
-    const existing = [{
-      id: 'run1',
-      period: 'Jan 2024',
-      startDate: '2024-01-01',
-      endDate: '2024-01-31',
-      grossAmount: '0',
-      totalDeductions: '0',
-      netAmount: '0',
-      status: 'completed',
-    }];
-    (storage.getPayrollRuns as any).mockResolvedValue(existing);
+  let employeesCalled = false;
+  storage.getEmployees = async () => {
+    employeesCalled = true;
+    return [] as any;
+  };
 
-    const res = await request(app)
-      .post('/api/payroll/generate')
-      .send({ period: 'Feb 2024', startDate: '2024-01-15', endDate: '2024-01-20' });
+  const res = await request(app)
+    .post('/api/payroll/generate')
+    .send({ period: 'Feb 2024', startDate: '2024-01-15', endDate: '2024-01-20' });
 
-    expect(res.status).toBe(409);
-    expect(res.body.error.message).toBe('Payroll run already exists for this period');
-    expect(storage.getEmployees).not.toHaveBeenCalled();
-  });
+  expect(res.status).toBe(409);
+  expect(res.body.error.message).toBe('Payroll run already exists for this period');
+  expect(employeesCalled).toBe(false);
 });
-
