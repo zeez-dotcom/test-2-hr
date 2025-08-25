@@ -14,6 +14,17 @@ describe('pdf utility', () => {
     expect(Buffer.from(buffer).toString('base64')).toMatchSnapshot();
   });
 
+  it('sanitizes nested structures', async () => {
+    const buffer = await pdfBuffer({
+      content: [
+        { text: '<img src=x onerror=alert(1)>' },
+        ['<script>alert(1)</script>']
+      ],
+      info: { title: '<b>Nested</b>', creationDate: new Date(0) }
+    });
+    expect(Buffer.from(buffer).toString('base64')).toMatchSnapshot();
+  });
+
   it('creates employee report', async () => {
     const def = buildEmployeeReport({
       employee: { firstName: '<b>Alice</b>', lastName: 'Smith', id: '1' },
