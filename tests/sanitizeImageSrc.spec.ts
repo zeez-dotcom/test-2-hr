@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { sanitizeImageSrc } from '../HRPayMaster/client/src/pages/reports';
+import { sanitizeImageSrc } from '../HRPayMaster/client/src/lib/sanitizeImageSrc';
 
 test('sanitizeImageSrc accepts valid data URL', () => {
   const valid = 'data:image/png;base64,AAAA';
