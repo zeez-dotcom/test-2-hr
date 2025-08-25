@@ -57,9 +57,13 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
       return next(new HttpError(400, "Period, start date, and end date are required"));
     }
 
+    // Parse dates once for reuse below
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
     // Prevent duplicate payroll runs for overlapping periods
-    const newStart = new Date(startDate).toISOString().split("T")[0];
-    const newEnd = new Date(endDate).toISOString().split("T")[0];
+    const newStart = start.toISOString().split("T")[0];
+    const newEnd = end.toISOString().split("T")[0];
     const existingRun = await db.query.payrollRuns.findFirst({
       where: (runs, { lte, gte, and }) =>
         and(lte(runs.startDate, newEnd), gte(runs.endDate, newStart)),
@@ -81,10 +85,6 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
     const loans = await storage.getLoans();
     const vacationRequests = await storage.getVacationRequests();
     const employeeEvents = await storage.getEmployeeEvents();
-
-    // Define period range
-    const start = new Date(startDate);
-    const end = new Date(endDate);
     // Calculate number of days in this payroll period
     const workingDays =
       Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
