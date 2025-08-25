@@ -18,5 +18,10 @@
   "devDependencies": {
     "@playwright/test": "^1.55.0",
     "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "i18next": "^25.4.2",
+    "pdfmake": "^0.2.20",
+    "react-i18next": "^15.7.2"
   }
 }
