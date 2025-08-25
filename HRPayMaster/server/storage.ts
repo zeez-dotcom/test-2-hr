@@ -1324,7 +1324,8 @@ export class DatabaseStorage implements IStorage {
       .from(assetAssignments)
       .innerJoin(assets, eq(assetAssignments.assetId, assets.id))
       .where(eq(assetAssignments.status, "active"))
-      .groupBy(assets.id);
+      // group by both id and name to satisfy SQL grouping rules
+      .groupBy(assets.id, assets.name);
 
     return rows.map(r => ({
       assetId: r.assetId,

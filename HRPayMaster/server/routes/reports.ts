@@ -149,4 +149,6 @@ reportsRouter.get("/api/reports/asset-usage", async (_req, res, next) => {
   }
 });
 
+// allow both named and default imports of this router
+export default reportsRouter;
 

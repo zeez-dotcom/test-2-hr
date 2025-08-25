@@ -26,6 +26,8 @@ vi.mock('./storage', () => {
       createEmployeeEvent: vi.fn(),
       getEmployeeReport: vi.fn(),
       getCompanyPayrollSummary: vi.fn(),
+      getLoanBalances: vi.fn(),
+      getAssetUsage: vi.fn(),
     },
     DuplicateEmployeeCodeError,
   };
@@ -878,6 +880,48 @@ describe('employee routes', () => {
       'startDate must be before or equal to endDate'
     );
     expect(storage.getCompanyPayrollSummary).not.toHaveBeenCalled();
+  });
+
+  it('GET /api/reports/payroll returns payroll summary', async () => {
+    const summary = [
+      {
+        period: '2024-01',
+        payrollEntries: [
+          { grossPay: '100', netPay: '90' },
+          { grossPay: '50', netPay: '40' }
+        ]
+      }
+    ];
+    (storage.getCompanyPayrollSummary as any).mockResolvedValue(summary);
+
+    const res = await request(app)
+      .get('/api/reports/payroll')
+      .query({ startDate: '2024-01-01', endDate: '2024-12-31' });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([
+      { period: '2024-01', totals: { grossPay: 150, netPay: 130 } }
+    ]);
+  });
+
+  it('GET /api/reports/loan-balances returns balances', async () => {
+    const balances = [{ employeeId: 'e1', balance: 100 }];
+    (storage.getLoanBalances as any).mockResolvedValue(balances);
+
+    const res = await request(app).get('/api/reports/loan-balances');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(balances);
+  });
+
+  it('GET /api/reports/asset-usage returns usage', async () => {
+    const usage = [{ assetId: 'a1', name: 'Laptop', assignments: 2 }];
+    (storage.getAssetUsage as any).mockResolvedValue(usage);
+
+    const res = await request(app).get('/api/reports/asset-usage');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(usage);
   });
 });
 
