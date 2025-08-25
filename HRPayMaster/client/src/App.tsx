@@ -1,4 +1,4 @@
-import { Switch, Route, useLocation } from "wouter";
+import { Switch, Route, Link, useLocation } from "wouter";
 import { useEffect } from "react";
 import { useTranslation } from "@/lib/i18n";
 import { queryClient, getQueryFn } from "./lib/queryClient";
@@ -43,6 +43,10 @@ function Router() {
 
   return (
     <Layout user={user}>
+      {/* Navigation entry for Chatbot */}
+      <Link href="/chat" className="sr-only">
+        Chatbot
+      </Link>
       <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/employees" component={Employees} />
@@ -56,7 +60,9 @@ function Router() {
         <Route path="/cars" component={Cars} />
         <Route path="/notifications" component={Notifications} />
         <Route path="/documents" component={Documents} />
-        <Route path="/chat" component={Chatbot} />
+        <Route path="/chat">
+          <Chatbot />
+        </Route>
         <Route component={NotFound} />
       </Switch>
     </Layout>
