@@ -73,6 +73,7 @@ export default function Reports() {
     queryKey: ["/api/payroll"],
   });
 
+  // Fetch company-level report data
   const { data: payrollSummary, error: payrollSummaryError } = useQuery<PayrollSummary[]>({
     queryKey: ["/api/reports/payroll"],
   });
