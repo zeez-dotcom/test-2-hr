@@ -58,16 +58,14 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
     }
 
     // Prevent duplicate payroll runs for overlapping periods
-    const existingRuns = await storage.getPayrollRuns();
     const newStart = new Date(startDate);
     const newEnd = new Date(endDate);
-    const hasOverlap = existingRuns.some(run => {
-      const runStart = new Date(run.startDate);
-      const runEnd = new Date(run.endDate);
-      return runStart <= newEnd && runEnd >= newStart;
+    const existingRun = await db.query.payrollRuns.findFirst({
+      where: (runs, { lte, gte, and }) =>
+        and(lte(runs.startDate, newEnd), gte(runs.endDate, newStart)),
     });
 
-    if (hasOverlap) {
+    if (existingRun) {
       return next(new HttpError(409, "Payroll run already exists for this period"));
     }
 
