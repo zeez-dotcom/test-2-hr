@@ -20,10 +20,7 @@ import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import Sidebar from "./sidebar";
 import { Button } from "@/components/ui/button";
-
-interface User {
-  role: string;
-}
+import type { User } from "@shared/schema";
 
 interface LayoutProps {
   children: React.ReactNode;
