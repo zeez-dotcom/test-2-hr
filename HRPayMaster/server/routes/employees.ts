@@ -964,7 +964,8 @@ const upload = multer({ storage: multer.memoryStorage() });
     try {
       const assignment = insertAssetAssignmentSchema.parse(req.body);
       const newAssignment = await assetService.createAssignment(assignment);
-      await assetService.updateAsset(assignment.assetId, { status: "assigned" });
+      // ensure the asset reflects its new assignment
+      await assetService.updateAsset(newAssignment.assetId, { status: "assigned" });
       const detailed = await assetService.getAssignment(newAssignment.id);
       if (detailed?.asset?.type === "car") {
         const addedBy = await getAddedBy(req);
@@ -1249,7 +1250,8 @@ const upload = multer({ storage: multer.memoryStorage() });
         assetId: req.body.carId,
       });
       const newAssignment = await assetService.createAssignment(assignment);
-      await assetService.updateAsset(assignment.assetId, { status: "assigned" });
+      // ensure the asset reflects its new assignment
+      await assetService.updateAsset(newAssignment.assetId, { status: "assigned" });
       const detailed = await assetService.getAssignment(newAssignment.id);
       if (detailed) {
         const addedBy = await getAddedBy(req);
