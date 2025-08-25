@@ -15,3 +15,8 @@ test('sanitizeImageSrc rejects data URL missing base64', () => {
   const invalid = 'data:image/png;,AAAA';
   expect(sanitizeImageSrc(invalid)).toBe('');
 });
+
+test('sanitizeImageSrc rejects uppercase data URL', () => {
+  const invalid = 'DATA:IMAGE/PNG;BASE64,AAAA';
+  expect(sanitizeImageSrc(invalid)).toBe('');
+});
