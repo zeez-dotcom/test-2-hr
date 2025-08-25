@@ -114,12 +114,10 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
       const actualWorkingDays = Math.max(0, workingDays - vacationDays);
 
       // Calculate pro-rated salary based on working days in the period
-      // Derive a daily rate from the working days to make the
-      // calculation clearer and ensure the workingDays value is
-      // directly used in salary computation.
-      const dailyRate = monthlySalary / workingDays;
       const baseSalary =
-        employee.status === "active" ? dailyRate * actualWorkingDays : 0;
+        employee.status === "active"
+          ? (monthlySalary * actualWorkingDays) / workingDays
+          : 0;
 
       // Calculate loan deductions for this employee
       const employeeLoans = loans.filter(l =>
