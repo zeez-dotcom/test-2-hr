@@ -267,7 +267,7 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
 
         return newRun;
       } catch (error) {
-        tx.rollback();
+        await tx.rollback();
         throw error;
       }
     });
