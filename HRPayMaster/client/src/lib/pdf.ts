@@ -1,6 +1,7 @@
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
 import type { TDocumentDefinitions } from 'pdfmake/interfaces';
+import { sanitizeImageSrc } from './sanitizeImageSrc';
 
 pdfMake.vfs = pdfFonts as any;
 
@@ -41,6 +42,7 @@ export interface EmployeeLite {
   lastName: string;
   id: string;
   position?: string | null;
+  profileImage?: string | null;
 }
 
 export interface EmployeeEventLite {
@@ -57,27 +59,33 @@ export function buildEmployeeReport(
   const lastName = sanitizeString(employee.lastName);
   const position = employee.position ? sanitizeString(employee.position) : '';
   const id = sanitizeString(employee.id);
+  const image = employee.profileImage ? sanitizeImageSrc(employee.profileImage) : undefined;
+  const content: any[] = [];
+  if (image) {
+    content.push({ image, width: 100, margin: [0, 0, 0, 10] });
+  }
+  content.push(
+    { text: `${firstName} ${lastName}`, style: 'header' },
+    position ? { text: position } : '',
+    { text: `ID: ${id}`, margin: [0, 0, 0, 10] },
+    { text: 'Events', style: 'subheader' },
+    {
+      table: {
+        headerRows: 1,
+        widths: ['*', 'auto'],
+        body: [
+          ['Title', 'Date'],
+          ...events.map(e => [
+            sanitizeString(e.title),
+            new Date(e.eventDate).toISOString().split('T')[0]
+          ]),
+        ],
+      },
+    }
+  );
   return {
     info: { title: `${firstName} ${lastName} Report` },
-    content: [
-      { text: `${firstName} ${lastName}`, style: 'header' },
-      position ? { text: position } : '',
-      { text: `ID: ${id}`, margin: [0, 0, 0, 10] },
-      { text: 'Events', style: 'subheader' },
-      {
-        table: {
-          headerRows: 1,
-          widths: ['*', 'auto'],
-          body: [
-            ['Title', 'Date'],
-            ...events.map(e => [
-              sanitizeString(e.title),
-              new Date(e.eventDate).toISOString().split('T')[0]
-            ]),
-          ],
-        },
-      },
-    ],
+    content,
     styles: {
       header: { fontSize: 18, bold: true },
       subheader: { fontSize: 14, bold: true, margin: [0, 10, 0, 5] },

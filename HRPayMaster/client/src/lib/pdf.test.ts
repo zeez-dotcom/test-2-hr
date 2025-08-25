@@ -35,6 +35,22 @@ describe('pdf utility', () => {
     expect(Buffer.from(buffer).toString('base64')).toMatchSnapshot();
   });
 
+  it('adds profile image when provided', () => {
+    const def = buildEmployeeReport({
+      employee: {
+        firstName: 'Alice',
+        lastName: 'Smith',
+        id: '1',
+        profileImage: 'data:image/png;base64,AAAA',
+      },
+      events: [],
+    });
+    expect(
+      Array.isArray(def.content) &&
+        def.content.some((c: any) => typeof c === 'object' && 'image' in c)
+    ).toBe(true);
+  });
+
   it('creates employee history report', async () => {
     const def = buildEmployeeHistoryReport([
       { firstName: '<b>Alice</b>', lastName: 'Smith', id: '1' },

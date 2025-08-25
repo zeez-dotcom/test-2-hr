@@ -41,6 +41,9 @@ type AssetUsage = { assetId: string; name: string; assignments: number };
 import { openPdf, buildEmployeeReport, buildEmployeeHistoryReport } from "@/lib/pdf";
 import { sanitizeImageSrc } from "@/lib/sanitizeImageSrc";
 
+// Accept any base64 encoded image MIME type
+const dataUrlPattern = /^data:image\/[^;]+;base64,/;
+
 export default function Reports() {
   const [selectedEmployee, setSelectedEmployee] = useState<string>("all");
   const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
@@ -150,12 +153,17 @@ export default function Reports() {
       return;
     }
     const employeeEvents = filteredEvents.filter(event => event.employeeId === employeeId);
+    const profileImage =
+      employee.profileImage && dataUrlPattern.test(employee.profileImage)
+        ? sanitizeImageSrc(employee.profileImage)
+        : undefined;
     const doc = buildEmployeeReport({
       employee: {
         firstName: employee.firstName || '',
         lastName: employee.lastName || '',
         id: employee.id,
         position: employee.position,
+        profileImage,
       },
       events: employeeEvents.map(e => ({ title: e.title, eventDate: e.eventDate })),
     });
@@ -439,11 +447,19 @@ export default function Reports() {
                     })
                     .map(employee => {
                       const employeeEventCount = filteredEvents.filter(event => event.employeeId === employee.id).length;
+                      const profileSrc =
+                        employee.profileImage && dataUrlPattern.test(employee.profileImage)
+                          ? sanitizeImageSrc(employee.profileImage)
+                          : '';
                       return (
                         <div key={employee.id} className="p-4 bg-gray-50 rounded-lg border">
                           <div className="flex items-center space-x-3 mb-3">
-                            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                              <User className="h-6 w-6 text-blue-600" />
+                            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center overflow-hidden">
+                              {profileSrc ? (
+                                <img src={profileSrc} alt={`${employee.firstName} ${employee.lastName}`} className="w-full h-full object-cover" />
+                              ) : (
+                                <User className="h-6 w-6 text-blue-600" />
+                              )}
                             </div>
                             <div className="flex-1">
                               <h4 className="font-semibold text-gray-900">
