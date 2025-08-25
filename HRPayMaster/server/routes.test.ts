@@ -866,6 +866,7 @@ describe('employee routes', () => {
     expect(res.body.error.details[0].message).toBe(
       'startDate must be before or equal to endDate'
     );
+    expect(res.body.error.details[0].path).toEqual(['endDate']);
     expect(storage.getEmployeeReport).not.toHaveBeenCalled();
   });
 
@@ -879,6 +880,7 @@ describe('employee routes', () => {
     expect(res.body.error.details[0].message).toBe(
       'startDate must be before or equal to endDate'
     );
+    expect(res.body.error.details[0].path).toEqual(['endDate']);
     expect(storage.getCompanyPayrollSummary).not.toHaveBeenCalled();
   });
 
