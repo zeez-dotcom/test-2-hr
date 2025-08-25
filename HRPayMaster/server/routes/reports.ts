@@ -15,13 +15,14 @@ const reportQuerySchema = z
       .refine((d) => !isNaN(Date.parse(d)), { message: "Invalid endDate" }),
     groupBy: z.enum(["month", "year"]).optional().default("month"),
   })
-  .refine(
-    ({ startDate, endDate }) => new Date(startDate) <= new Date(endDate),
-    {
-      message: "startDate must be before or equal to endDate",
-      path: ["endDate"],
-    }
-  );
+  .refine(({ startDate, endDate }) => {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    return start <= end;
+  }, {
+    message: "startDate must be before or equal to endDate",
+    path: ["endDate"],
+  });
 
 // Employee and company report routes
 

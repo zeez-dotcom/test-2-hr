@@ -848,6 +848,9 @@ describe('employee routes', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error.message).toBe('Invalid query parameters');
+    expect(res.body.error.details[0].message).toBe(
+      'startDate must be before or equal to endDate'
+    );
     expect(storage.getEmployeeReport).not.toHaveBeenCalled();
   });
 
@@ -858,6 +861,9 @@ describe('employee routes', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error.message).toBe('Invalid query parameters');
+    expect(res.body.error.details[0].message).toBe(
+      'startDate must be before or equal to endDate'
+    );
     expect(storage.getCompanyPayrollSummary).not.toHaveBeenCalled();
   });
 });
