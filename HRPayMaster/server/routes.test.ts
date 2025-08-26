@@ -856,6 +856,23 @@ describe('employee routes', () => {
     expect(res.body.error.message).toBe('Failed to fetch employee report');
   });
 
+  it('GET /api/reports/employees/:id applies default dates', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-06-15'));
+    (storage.getEmployeeReport as any).mockResolvedValue([]);
+
+    const res = await request(app).get('/api/reports/employees/1');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+    expect(storage.getEmployeeReport).toHaveBeenCalledWith('1', {
+      startDate: '2024-01-01',
+      endDate: '2024-06-15',
+      groupBy: 'month',
+    });
+    vi.useRealTimers();
+  });
+
   it('GET /api/reports/employees/:id returns 400 for invalid date range', async () => {
     const res = await request(app)
       .get('/api/reports/employees/1')
@@ -882,6 +899,40 @@ describe('employee routes', () => {
     );
     expect(res.body.error.details[0].path).toEqual(['endDate']);
     expect(storage.getCompanyPayrollSummary).not.toHaveBeenCalled();
+  });
+
+  it('GET /api/reports/payroll applies default dates', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-06-15'));
+    (storage.getCompanyPayrollSummary as any).mockResolvedValue([]);
+
+    const res = await request(app).get('/api/reports/payroll');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+    expect(storage.getCompanyPayrollSummary).toHaveBeenCalledWith({
+      startDate: '2024-01-01',
+      endDate: '2024-06-15',
+      groupBy: 'month',
+    });
+    vi.useRealTimers();
+  });
+
+  it('GET /api/reports/payroll returns 400 when endDate before default startDate', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-06-15'));
+
+    const res = await request(app)
+      .get('/api/reports/payroll')
+      .query({ endDate: '2023-12-31' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toBe('Invalid query parameters');
+    expect(res.body.error.details[0].message).toBe(
+      'startDate must be before or equal to endDate'
+    );
+    expect(storage.getCompanyPayrollSummary).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 
   it('GET /api/reports/payroll returns payroll summary', async () => {

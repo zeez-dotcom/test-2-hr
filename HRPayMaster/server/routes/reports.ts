@@ -5,13 +5,21 @@ import { z } from "zod";
 
 export const reportsRouter = Router();
 
+const defaultStartDate = () =>
+  new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
+const defaultEndDate = () => new Date().toISOString().split("T")[0];
+
 const reportQuerySchema = z
   .object({
     startDate: z
       .string()
+      .optional()
+      .default(defaultStartDate)
       .refine((d) => !isNaN(Date.parse(d)), { message: "Invalid startDate" }),
     endDate: z
       .string()
+      .optional()
+      .default(defaultEndDate)
       .refine((d) => !isNaN(Date.parse(d)), { message: "Invalid endDate" }),
     groupBy: z.enum(["month", "year"]).optional().default("month"),
   })
