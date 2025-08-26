@@ -38,6 +38,7 @@ import type {
 type PayrollSummary = { period: string; totals: { grossPay: number; netPay: number } };
 type LoanBalance = { employeeId: string; balance: number };
 type AssetUsage = { assetId: string; name: string; assignments: number };
+type SalaryTrend = { period: string; netPay: number; change: number };
 import { openPdf, buildEmployeeReport, buildEmployeeHistoryReport } from "@/lib/pdf";
 import { sanitizeImageSrc } from "@/lib/sanitizeImageSrc";
 
@@ -56,6 +57,7 @@ export default function Reports() {
   const [selectedWorkLocation, setSelectedWorkLocation] = useState<string>("all");
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>(initialRange);
   const [searchTerm, setSearchTerm] = useState("");
+  const [salaryReport, setSalaryReport] = useState<SalaryTrend[] | null>(null);
 
   const startDate = dateRange.from?.toISOString().split("T")[0] ?? "";
   const endDate = dateRange.to?.toISOString().split("T")[0] ?? "";
@@ -233,12 +235,26 @@ export default function Reports() {
       });
       return;
     }
-
-    // Add salary report generation logic here
-    toast({
-      title: "Feature Coming Soon",
-      description: "Salary trends report will be available in the next update",
-    });
+    try {
+      const sorted = [...payrollRuns].sort(
+        (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime(),
+      );
+      const trends: SalaryTrend[] = sorted.map((run, index) => {
+        const net = Number(run.netAmount);
+        const prev = sorted[index - 1];
+        const change = prev ? net - Number(prev.netAmount) : 0;
+        return { period: run.period, netPay: net, change };
+      });
+      setSalaryReport(trends);
+      toast({ title: "Success", description: "Salary report generated" });
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: "Error",
+        description: "Failed to generate salary report",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -588,15 +604,42 @@ export default function Reports() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-12">
-                <TrendingUp className="h-16 w-16 mx-auto mb-4 text-gray-400" />
-                <h3 className="text-lg font-semibold mb-2">Salary Reports Coming Soon</h3>
-                <p className="text-gray-600 mb-6">
-                  Advanced salary analytics, trends, and comparison reports will be available in the next update.
-                </p>
-                <Button onClick={generateSalaryReport} disabled>
-                  Generate Salary Report
-                </Button>
+              <div className="space-y-4">
+                <Button onClick={generateSalaryReport}>Generate Salary Report</Button>
+                {salaryReport ? (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead>
+                        <tr className="text-left">
+                          <th className="py-2 pr-4">Period</th>
+                          <th className="py-2 pr-4">Net Pay</th>
+                          <th className="py-2">Change</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {salaryReport.map(trend => (
+                          <tr key={trend.period} className="border-t">
+                            <td className="py-2 pr-4">{trend.period}</td>
+                            <td className="py-2 pr-4">{formatCurrency(trend.netPay)}</td>
+                            <td
+                              className={cn(
+                                "py-2",
+                                trend.change >= 0 ? "text-green-600" : "text-red-600",
+                              )}
+                            >
+                              {trend.change === 0 ? "-" : formatCurrency(trend.change)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-gray-500">
+                    <TrendingUp className="h-16 w-16 mx-auto mb-4 opacity-50" />
+                    <p>No salary report generated</p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
