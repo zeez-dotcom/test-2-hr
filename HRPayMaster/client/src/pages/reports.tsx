@@ -740,8 +740,27 @@ export default function Reports() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {payrollSummary ? (
-                <pre className="text-sm">{JSON.stringify(payrollSummary, null, 2)}</pre>
+              {payrollSummary && payrollSummary.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="text-left">
+                        <th className="py-2 pr-4">Period</th>
+                        <th className="py-2 pr-4">Gross Pay</th>
+                        <th className="py-2">Net Pay</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {payrollSummary.map(summary => (
+                        <tr key={summary.period} className="border-t">
+                          <td className="py-2 pr-4">{summary.period}</td>
+                          <td className="py-2 pr-4">{formatCurrency(summary.totals.grossPay)}</td>
+                          <td className="py-2">{formatCurrency(summary.totals.netPay)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               ) : (
                 <p className="text-sm text-muted-foreground">No payroll data available</p>
               )}
@@ -758,8 +777,31 @@ export default function Reports() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {loanBalances ? (
-                <pre className="text-sm">{JSON.stringify(loanBalances, null, 2)}</pre>
+              {loanBalances && loanBalances.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="text-left">
+                        <th className="py-2 pr-4">Employee</th>
+                        <th className="py-2">Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {loanBalances.map(balance => {
+                        const employee = employees?.find(emp => emp.id === balance.employeeId);
+                        const name = employee
+                          ? `${employee.firstName} ${employee.lastName}`
+                          : balance.employeeId;
+                        return (
+                          <tr key={balance.employeeId} className="border-t">
+                            <td className="py-2 pr-4">{name}</td>
+                            <td className="py-2">{formatCurrency(balance.balance)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               ) : (
                 <p className="text-sm text-muted-foreground">No loan data available</p>
               )}
@@ -776,8 +818,25 @@ export default function Reports() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {assetUsage ? (
-                <pre className="text-sm">{JSON.stringify(assetUsage, null, 2)}</pre>
+              {assetUsage && assetUsage.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="text-left">
+                        <th className="py-2 pr-4">Asset</th>
+                        <th className="py-2">Assignments</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {assetUsage.map(asset => (
+                        <tr key={asset.assetId} className="border-t">
+                          <td className="py-2 pr-4">{asset.name}</td>
+                          <td className="py-2">{asset.assignments}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               ) : (
                 <p className="text-sm text-muted-foreground">No asset usage data available</p>
               )}
