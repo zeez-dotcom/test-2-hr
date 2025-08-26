@@ -45,12 +45,20 @@ import { sanitizeImageSrc } from "@/lib/sanitizeImageSrc";
 const dataUrlPattern = /^data:image\/[^;]+;base64,/;
 
 export default function Reports() {
+  const currentYear = new Date().getFullYear();
+  const initialRange = {
+    from: new Date(currentYear, 0, 1),
+    to: new Date(currentYear, 11, 31),
+  };
   const [selectedEmployee, setSelectedEmployee] = useState<string>("all");
-  const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
+  const [selectedYear, setSelectedYear] = useState<string>(currentYear.toString());
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
   const [selectedWorkLocation, setSelectedWorkLocation] = useState<string>("all");
-  const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
+  const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>(initialRange);
   const [searchTerm, setSearchTerm] = useState("");
+
+  const startDate = dateRange.from?.toISOString().split("T")[0] ?? "";
+  const endDate = dateRange.to?.toISOString().split("T")[0] ?? "";
   
   const { toast } = useToast();
 
@@ -68,15 +76,39 @@ export default function Reports() {
 
   // Fetch company-level report data
   const { data: payrollSummary, error: payrollSummaryError } = useQuery<PayrollSummary[]>({
-    queryKey: ["/api/reports/payroll"],
+    queryKey: ["/api/reports/payroll", startDate, endDate],
+    queryFn: async () => {
+      const res = await apiRequest(
+        "GET",
+        `/api/reports/payroll?startDate=${startDate}&endDate=${endDate}`,
+      );
+      return res.json();
+    },
+    enabled: Boolean(startDate && endDate),
   });
 
   const { data: loanBalances, error: loanBalancesError } = useQuery<LoanBalance[]>({
-    queryKey: ["/api/reports/loan-balances"],
+    queryKey: ["/api/reports/loan-balances", startDate, endDate],
+    queryFn: async () => {
+      const res = await apiRequest(
+        "GET",
+        `/api/reports/loan-balances?startDate=${startDate}&endDate=${endDate}`,
+      );
+      return res.json();
+    },
+    enabled: Boolean(startDate && endDate),
   });
 
   const { data: assetUsage, error: assetUsageError } = useQuery<AssetUsage[]>({
-    queryKey: ["/api/reports/asset-usage"],
+    queryKey: ["/api/reports/asset-usage", startDate, endDate],
+    queryFn: async () => {
+      const res = await apiRequest(
+        "GET",
+        `/api/reports/asset-usage?startDate=${startDate}&endDate=${endDate}`,
+      );
+      return res.json();
+    },
+    enabled: Boolean(startDate && endDate),
   });
 
   if (
@@ -91,7 +123,6 @@ export default function Reports() {
   }
 
   // Generate year options (last 5 years)
-  const currentYear = new Date().getFullYear();
   const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
     // Get unique work locations without using Set iteration
