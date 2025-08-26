@@ -10,7 +10,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   FileText,
-  Download, 
+  Download,
   Calendar as CalendarIcon,
   User,
   DollarSign,
@@ -26,6 +26,12 @@ import {
   Award,
   AlertTriangle,
 } from "lucide-react";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -256,6 +262,22 @@ export default function Reports() {
       });
     }
   };
+
+  // Prepare analytics data
+  const payrollChartData =
+    payrollRuns?.map(run => ({ period: run.period, net: Number(run.netAmount) })) ?? [];
+
+  const eventSummary = (employeeEvents || []).reduce<Record<string, { count: number; total: number }>>(
+    (acc, event) => {
+      const type = event.eventType || "other";
+      const amount = parseFloat(event.amount || "0");
+      if (!acc[type]) acc[type] = { count: 0, total: 0 };
+      acc[type].count += 1;
+      acc[type].total += isNaN(amount) ? 0 : amount;
+      return acc;
+    },
+    {},
+  );
 
   return (
     <div className="space-y-6">
@@ -649,18 +671,62 @@ export default function Reports() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <PieChart className="h-5 w-5" />
-                HR Analytics Dashboard
+                <BarChart3 className="h-5 w-5" />
+                Payroll Overview
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-12">
-                <BarChart3 className="h-16 w-16 mx-auto mb-4 text-gray-400" />
-                <h3 className="text-lg font-semibold mb-2">Analytics Dashboard Coming Soon</h3>
-                <p className="text-gray-600">
-                  Interactive charts, workforce analytics, and performance metrics will be available soon.
-                </p>
-              </div>
+              {payrollChartData.length > 0 ? (
+                <ChartContainer
+                  className="h-72"
+                  config={{ net: { label: "Net Pay", color: "hsl(217 91% 60%)" } }}
+                >
+                  <BarChart data={payrollChartData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="period" />
+                    <YAxis />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Bar dataKey="net" fill="var(--color-net)" />
+                  </BarChart>
+                </ChartContainer>
+              ) : (
+                <p className="text-sm text-muted-foreground">No payroll data available</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <PieChart className="h-5 w-5" />
+                Employee Events by Type
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {Object.keys(eventSummary).length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="text-left">
+                        <th className="py-2 pr-4">Event Type</th>
+                        <th className="py-2 pr-4">Count</th>
+                        <th className="py-2">Total Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(eventSummary).map(([type, data]) => (
+                        <tr key={type} className="border-t">
+                          <td className="py-2 pr-4 capitalize">{type}</td>
+                          <td className="py-2 pr-4">{data.count}</td>
+                          <td className="py-2">{formatCurrency(data.total)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No employee event data available</p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
