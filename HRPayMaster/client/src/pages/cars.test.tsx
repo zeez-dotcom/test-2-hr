@@ -164,23 +164,33 @@ describe('Cars page', () => {
     toast.mockReset();
 
     // assign car success
-    await mutationMocks[1].mutate({});
+    await mutationMocks[1].mutate({ carId: '1' });
+    expect(global.fetch).toHaveBeenCalledWith('/api/cars/1', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ status: 'assigned' }),
+    }));
     expect(toast).toHaveBeenCalledWith({ title: 'Car assigned successfully' });
+    global.fetch.mockClear();
     toast.mockReset();
     // assign car error
     mutationMocks[1].shouldError = true;
-    await mutationMocks[1].mutate({});
+    await mutationMocks[1].mutate({ carId: '1' });
     expect(toast).toHaveBeenCalledWith({ title: 'Failed to assign car', variant: 'destructive' });
     mutationMocks[1].shouldError = false;
     toast.mockReset();
 
     // update assignment success
-    await mutationMocks[2].mutate({});
+    await mutationMocks[2].mutate({ carId: '1' });
+    expect(global.fetch).toHaveBeenCalledWith('/api/cars/1', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ status: 'available' }),
+    }));
     expect(toast).toHaveBeenCalledWith({ title: 'Assignment updated successfully' });
+    global.fetch.mockClear();
     toast.mockReset();
     // update assignment error
     mutationMocks[2].shouldError = true;
-    await mutationMocks[2].mutate({});
+    await mutationMocks[2].mutate({ carId: '1' });
     expect(toast).toHaveBeenCalledWith({ title: 'Failed to update assignment', variant: 'destructive' });
     mutationMocks[2].shouldError = false;
     toast.mockReset();

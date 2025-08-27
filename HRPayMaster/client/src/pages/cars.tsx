@@ -62,7 +62,10 @@ export default function Cars() {
 
   const assignCarMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/car-assignments", data),
-    onSuccess: async () => {
+    onSuccess: async (_data, variables: any) => {
+      if (variables?.carId) {
+        await apiRequest("PUT", `/api/cars/${variables.carId}`, { status: "assigned" });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
       queryClient.invalidateQueries({ queryKey: ["/api/car-assignments"] });
       setIsAssignCarDialogOpen(false);
@@ -76,7 +79,10 @@ export default function Cars() {
   const updateAssignmentMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any; carId?: string }) =>
       apiRequest("PUT", `/api/car-assignments/${id}`, data),
-    onSuccess: async () => {
+    onSuccess: async (_data, variables: { carId?: string }) => {
+      if (variables?.carId) {
+        await apiRequest("PUT", `/api/cars/${variables.carId}`, { status: "available" });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
       queryClient.invalidateQueries({ queryKey: ["/api/car-assignments"] });
       toast({ title: "Assignment updated successfully" });
