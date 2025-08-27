@@ -27,6 +27,32 @@ describe('createAssetAssignment', () => {
     vi.resetAllMocks();
   });
 
+  it('creates a new assignment when no active assignment exists', async () => {
+    const newAssignment = {
+      assetId: 'asset1',
+      employeeId: 'emp1',
+      assignedDate: '2024-02-01',
+    };
+
+    findFirstMock.mockResolvedValueOnce(null);
+
+    const returningMock = vi.fn().mockResolvedValue([
+      { id: 'new', ...newAssignment, status: 'active' },
+    ]);
+    const valuesMock = vi.fn().mockReturnValue({ returning: returningMock });
+    insertMock.mockReturnValueOnce({ values: valuesMock });
+
+    const result = await storage.createAssetAssignment(newAssignment as any);
+
+    expect(findFirstMock).toHaveBeenCalled();
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(valuesMock).toHaveBeenCalledWith({
+      ...newAssignment,
+      status: 'active',
+    });
+    expect(result).toEqual({ id: 'new', ...newAssignment, status: 'active' });
+  });
+
   it('auto-completes existing assignment and creates a new one', async () => {
     const existing = {
       id: 'old',
