@@ -5,4 +5,4 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 INSERT INTO users (username, password_hash)
-VALUES ('admin', '$2b$12$mRlOQRUhpbgqpCkJd.yVhuydr.6XrFOyC.q6YIZM7KpB8NfSoorve');
+VALUES ('admin', '$2b$12$SCW3YxujUDpPiVkhhG63S.KUNolkgI0cjkfJPe52g0EKJD8rC5sGG');

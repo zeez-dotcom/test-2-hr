@@ -42,8 +42,8 @@
    - Requires the `DATABASE_URL` environment variable.
    - Run this step whenever you pull changes that modify the database schema.
    - This will create the `users` table and seed a default `admin` account
-     with username `admin`, email `admin@example.com`, and the password
-     `admin123` hashed via bcrypt.
+     with username `admin`, email `admin1@gmail.com`, and the password
+     `admin` hashed via bcrypt.
 
 5. **Start the application**
    - Development: `npm run dev`
