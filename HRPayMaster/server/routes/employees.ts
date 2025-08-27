@@ -965,7 +965,11 @@ const upload = multer({ storage: multer.memoryStorage() });
       const assignment = insertAssetAssignmentSchema.parse(req.body);
       const newAssignment = await assetService.createAssignment(assignment);
       // ensure the asset reflects its new assignment
-      await assetService.updateAsset(newAssignment.assetId, { status: "assigned" });
+      if (newAssignment?.assetId) {
+        await assetService.updateAsset(newAssignment.assetId, {
+          status: "assigned",
+        });
+      }
       const detailed = await assetService.getAssignment(newAssignment.id);
       if (detailed?.asset?.type === "car") {
         const addedBy = await getAddedBy(req);
@@ -1033,7 +1037,7 @@ const upload = multer({ storage: multer.memoryStorage() });
       if (!deleted) {
         return next(new HttpError(404, "Asset assignment not found"));
       }
-      if (existing) {
+      if (existing?.assetId) {
         await assetService.updateAsset(existing.assetId, { status: "available" });
       }
       if (existing?.asset?.type === "car") {
@@ -1251,7 +1255,11 @@ const upload = multer({ storage: multer.memoryStorage() });
       });
       const newAssignment = await assetService.createAssignment(assignment);
       // ensure the asset reflects its new assignment
-      await assetService.updateAsset(newAssignment.assetId, { status: "assigned" });
+      if (newAssignment?.assetId) {
+        await assetService.updateAsset(newAssignment.assetId, {
+          status: "assigned",
+        });
+      }
       const detailed = await assetService.getAssignment(newAssignment.id);
       if (detailed) {
         const addedBy = await getAddedBy(req);
@@ -1322,8 +1330,10 @@ const upload = multer({ storage: multer.memoryStorage() });
       if (!deleted) {
         return next(new HttpError(404, "Car assignment not found"));
       }
-      if (existing) {
+      if (existing?.assetId) {
         await assetService.updateAsset(existing.assetId, { status: "available" });
+      }
+      if (existing) {
         const addedBy = await getAddedBy(req);
         const event: InsertEmployeeEvent = {
           employeeId: existing.employeeId,
