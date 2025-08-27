@@ -865,17 +865,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAssetAssignment(assignment: InsertAssetAssignment): Promise<AssetAssignment> {
-    // Check for existing active assignment for this asset
-    const activeAssignment = await db.query.assetAssignments.findFirst({
+    // Ensure only one active assignment exists per asset
+    const existingActiveAssignment = await db.query.assetAssignments.findFirst({
       where: and(
         eq(assetAssignments.assetId, assignment.assetId),
         eq(assetAssignments.status, 'active'),
       ),
     });
 
-    if (activeAssignment) {
+    if (existingActiveAssignment) {
       // If the asset is already assigned to the same employee, reject
-      if (activeAssignment.employeeId === assignment.employeeId) {
+      if (existingActiveAssignment.employeeId === assignment.employeeId) {
         throw new Error('Asset already assigned to this employee');
       }
 
@@ -886,7 +886,7 @@ export class DatabaseStorage implements IStorage {
           status: 'completed',
           returnDate: assignment.assignedDate,
         })
-        .where(eq(assetAssignments.id, activeAssignment.id));
+        .where(eq(assetAssignments.id, existingActiveAssignment.id));
     }
 
     const [newAssignment] = await db
