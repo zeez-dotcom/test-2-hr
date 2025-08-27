@@ -104,6 +104,8 @@ export default function Assets() {
     return <div>Error loading assets</div>;
   }
 
+  const availableAssets = assets.filter(a => a.status === "available");
+
   const onSubmitAsset = (data: any) => createAsset.mutate(data);
   const onSubmitAssignment = (data: any) => assignAsset.mutate(data);
 
@@ -136,8 +138,10 @@ export default function Assets() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {assets.filter(a => a.status === "available").map(a => (
-                              <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                            {availableAssets.map(a => (
+                              <SelectItem key={a.id} value={a.id}>
+                                {a.name}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>

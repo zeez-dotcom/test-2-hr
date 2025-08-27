@@ -157,7 +157,9 @@ export default function Cars() {
     }
   };
 
-  const availableCars = cars.filter(car => car.status === "available");
+  const availableCars = cars.filter(
+    car => car.status === "available" && car.id && car.id.trim() !== ""
+  );
 
   return (
     <div className="space-y-6">
@@ -196,7 +198,7 @@ export default function Cars() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {availableCars.filter(car => car.id && car.id.trim() !== "").map((car) => (
+                            {availableCars.map(car => (
                               <SelectItem key={car.id} value={car.id}>
                                 {car.year} {car.make} {car.model} - {car.plateNumber}
                               </SelectItem>
