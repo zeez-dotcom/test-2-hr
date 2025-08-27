@@ -18,10 +18,10 @@ interface User {
 const ADMIN_USER: User = {
   id: "1",
   username: "admin",
-  email: "admin@example.com",
+  email: "admin1@gmail.com",
   role: "admin",
 };
-const ADMIN_PASSWORD = "admin123";
+const ADMIN_PASSWORD = "admin";
 
 passport.use(
   new LocalStrategy((username, password, done) => {

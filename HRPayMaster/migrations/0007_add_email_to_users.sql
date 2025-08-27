@@ -1,7 +1,7 @@
 ALTER TABLE users ADD COLUMN email text;
 
 INSERT INTO users (username, email, password_hash)
-VALUES ('admin', 'admin@example.com', '$2a$12$qLcSW/ZwDYl1SsOB390oLuhrpCgkg.8acLSx2PtZ15StoRb310jHC')
+VALUES ('admin', 'admin1@gmail.com', '$2b$12$SCW3YxujUDpPiVkhhG63S.KUNolkgI0cjkfJPe52g0EKJD8rC5sGG')
 ON CONFLICT (username) DO UPDATE
   SET email = EXCLUDED.email,
       password_hash = EXCLUDED.password_hash;
