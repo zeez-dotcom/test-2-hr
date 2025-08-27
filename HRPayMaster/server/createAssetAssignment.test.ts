@@ -57,6 +57,7 @@ describe('createAssetAssignment', () => {
 
     const result = await storage.createAssetAssignment(newAssignment as any);
 
+    expect(findFirstMock).toHaveBeenCalled();
     expect(setMock).toHaveBeenCalledWith({
       status: 'completed',
       returnDate: newAssignment.assignedDate,
@@ -93,6 +94,7 @@ describe('createAssetAssignment', () => {
       storage.createAssetAssignment(newAssignment as any),
     ).rejects.toThrow('Asset already assigned to this employee');
 
+    expect(findFirstMock).toHaveBeenCalled();
     expect(updateMock).not.toHaveBeenCalled();
     expect(insertMock).not.toHaveBeenCalled();
   });
