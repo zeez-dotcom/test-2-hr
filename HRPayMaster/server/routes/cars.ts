@@ -31,16 +31,38 @@ carsRouter.get("/:id", async (req, res, next) => {
 
 carsRouter.post(
   "/",
-  upload.single("registrationDocumentImage"),
+  upload.any(),
   async (req, res, next) => {
     try {
-      const carInput: Record<string, unknown> = { ...(req.body ?? {}) };
+      console.log("content-type", req.headers["content-type"]);
+      console.log("body", req.body);
+      console.log("files", req.files);
 
-      if (req.file) {
-        carInput.registrationDocumentImage = req.file.buffer.toString("base64");
+      const normalizedBody: Record<string, any> = { ...(req.body ?? {}) };
+
+      // Rename legacy field if provided
+      if (normalizedBody.licensePlate && !normalizedBody.plateNumber) {
+        normalizedBody.plateNumber = normalizedBody.licensePlate;
+        delete normalizedBody.licensePlate;
       }
 
-      const car: InsertCar = insertCarSchema.parse(carInput);
+      // Convert numeric strings to numbers
+      for (const field of ["year", "mileage", "purchasePrice"]) {
+        if (typeof normalizedBody[field] === "string" && normalizedBody[field] !== "") {
+          const num = Number(normalizedBody[field]);
+          if (!Number.isNaN(num)) {
+            normalizedBody[field] = num;
+          }
+        }
+      }
+
+      const files = req.files as Express.Multer.File[] | undefined;
+      const regDoc = files?.find(f => f.fieldname === "registrationDocumentImage");
+      if (regDoc) {
+        normalizedBody.registrationDocumentImage = regDoc.buffer.toString("base64");
+      }
+
+      const car: InsertCar = insertCarSchema.parse(normalizedBody);
       const newCar = await storage.createCar(car);
       res.status(201).json(newCar);
     } catch (error) {
