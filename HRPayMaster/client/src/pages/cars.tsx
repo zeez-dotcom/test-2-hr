@@ -76,10 +76,10 @@ export default function Cars() {
     }
   });
 
-  const updateAssignmentMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any; carId?: string }) =>
+  const updateAssignmentMutation = useMutation<Response, Error, { id: string; data: any; carId?: string }>({
+    mutationFn: ({ id, data }) =>
       apiRequest("PUT", `/api/car-assignments/${id}`, data),
-    onSuccess: async (_data, variables: { carId?: string }) => {
+    onSuccess: async (_data, variables) => {
       if (variables?.carId) {
         await apiRequest("PUT", `/api/cars/${variables.carId}`, { status: "available" });
       }
