@@ -106,21 +106,17 @@ export default function Cars() {
     }
   });
 
-  const carSchema = insertCarSchema
-    .extend({
-      registrationOwner: z.string().min(1, "Registration owner is required"),
-      registrationDocumentImage: z
-        .any()
-        .refine(
-          file => file instanceof File || typeof file === "string",
-          "Registration document image is required",
-        ),
-      registrationExpiry: z.string().min(1, "Registration expiry is required"),
-    })
-    .omit({ plateNumber: true })
-    .extend({
-      licensePlate: z.string().min(1, "License plate is required"),
-    });
+  const carSchema = insertCarSchema.extend({
+    plateNumber: z.string().min(1, "Plate number is required"),
+    registrationOwner: z.string().min(1, "Registration owner is required"),
+    registrationDocumentImage: z
+      .any()
+      .refine(
+        file => file instanceof File || typeof file === "string",
+        "Registration document image is required",
+      ),
+    registrationExpiry: z.string().min(1, "Registration expiry is required"),
+  });
 
   const carForm = useForm<z.infer<typeof carSchema>>({
     resolver: zodResolver(carSchema),
@@ -128,7 +124,7 @@ export default function Cars() {
       make: "",
       model: "",
       year: new Date().getFullYear(),
-      licensePlate: "",
+      plateNumber: "",
       status: "available",
       mileage: 0,
       registrationOwner: "",
@@ -154,24 +150,14 @@ export default function Cars() {
 
   const onSubmitCar = (data: z.infer<typeof carSchema>) => {
     const formData = new FormData();
-
-    // Map client fields to server-side names explicitly to ensure alignment
-    formData.append("make", data.make);
-    formData.append("model", data.model);
-    formData.append("year", String(data.year));
-    formData.append("plateNumber", data.licensePlate);
-    formData.append("status", data.status);
-    formData.append("mileage", String(data.mileage));
-
-    if (data.registrationOwner) {
-      formData.append("registrationOwner", data.registrationOwner);
-    }
-    if (data.registrationExpiry) {
-      formData.append("registrationExpiry", data.registrationExpiry);
-    }
-    if (data.registrationDocumentImage instanceof File) {
-      formData.append("registrationDocumentImage", data.registrationDocumentImage);
-    }
+    Object.entries(data).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        formData.append(
+          key,
+          value instanceof File ? value : String(value)
+        );
+      }
+    });
 
     createCarMutation.mutate(formData);
   };
@@ -392,10 +378,10 @@ export default function Cars() {
 
                     <FormField
                       control={carForm.control}
-                      name="licensePlate"
+                      name="plateNumber"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>License Plate</FormLabel>
+                          <FormLabel>Plate Number</FormLabel>
                           <FormControl>
                             <Input placeholder="ABC-123" {...field} />
                           </FormControl>
