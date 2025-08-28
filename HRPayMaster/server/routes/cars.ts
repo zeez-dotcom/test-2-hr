@@ -59,7 +59,7 @@ carsRouter.post(
       const files = req.files as Express.Multer.File[] | undefined;
       const regDoc = files?.find(f => f.fieldname === "registrationDocumentImage");
       if (regDoc) {
-        normalizedBody.registrationDocumentImage = regDoc.buffer.toString("base64");
+        normalizedBody.registrationDocumentImage = `data:${regDoc.mimetype};base64,${regDoc.buffer.toString("base64")}`;
       }
 
       const car: InsertCar = insertCarSchema.parse(normalizedBody);
@@ -74,9 +74,23 @@ carsRouter.post(
   }
 );
 
-carsRouter.put("/:id", async (req, res, next) => {
+carsRouter.put("/:id", upload.any(), async (req, res, next) => {
   try {
-    const updates: Partial<InsertCar> = insertCarSchema.partial().parse(req.body);
+    const normalizedBody: Record<string, any> = { ...(req.body ?? {}) };
+
+    const files = req.files as Express.Multer.File[] | undefined;
+    const regDoc = files?.find(f => f.fieldname === "registrationDocumentImage");
+    if (regDoc) {
+      normalizedBody.registrationDocumentImage = `data:${regDoc.mimetype};base64,${regDoc.buffer.toString("base64")}`;
+    } else if (
+      typeof normalizedBody.registrationDocumentImage === "string" &&
+      normalizedBody.registrationDocumentImage !== "" &&
+      !normalizedBody.registrationDocumentImage.startsWith("data:")
+    ) {
+      normalizedBody.registrationDocumentImage = `data:image/*;base64,${normalizedBody.registrationDocumentImage}`;
+    }
+
+    const updates: Partial<InsertCar> = insertCarSchema.partial().parse(normalizedBody);
     const updatedCar = await storage.updateCar(req.params.id, updates);
     if (!updatedCar) {
       return next(new HttpError(404, "Car not found"));
