@@ -157,12 +157,22 @@ describe('Cars page', () => {
     expect(screen.getByText('2024 Toyota Corolla')).toBeInTheDocument();
 
     // create car success
-    await mutationMocks[0].mutate({});
+    await mutationMocks[0].mutate({
+      make: 'Toyota',
+      model: 'Corolla',
+      year: '2024',
+      plateNumber: 'ABC123'
+    });
     expect(toast).toHaveBeenCalledWith({ title: 'Car added successfully' });
     toast.mockReset();
     // create car error
     mutationMocks[0].shouldError = true;
-    await mutationMocks[0].mutate({});
+    await mutationMocks[0].mutate({
+      make: 'Toyota',
+      model: 'Corolla',
+      year: '2024',
+      plateNumber: 'ABC123'
+    });
     expect(toast).toHaveBeenCalledWith({ title: 'Failed to add car', variant: 'destructive' });
     mutationMocks[0].shouldError = false;
     toast.mockReset();
