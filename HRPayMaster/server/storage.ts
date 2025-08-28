@@ -987,9 +987,32 @@ export class DatabaseStorage implements IStorage {
   async getCarAssignments(): Promise<CarAssignmentWithDetails[]> {
     const assignments = await db.query.carAssignments.findMany({
       with: {
-        car: true,
-        employee: true,
-        assigner: true,
+        car: {
+          columns: {
+            id: true,
+            make: true,
+            model: true,
+            year: true,
+            plateNumber: true,
+            registrationExpiry: true,
+          },
+        },
+        employee: {
+          columns: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+            drivingLicenseNumber: true,
+          },
+        },
+        assigner: {
+          columns: {
+            id: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
       },
       orderBy: desc(carAssignments.createdAt),
     });
@@ -1005,9 +1028,32 @@ export class DatabaseStorage implements IStorage {
     const assignment = await db.query.carAssignments.findFirst({
       where: eq(carAssignments.id, id),
       with: {
-        car: true,
-        employee: true,
-        assigner: true,
+        car: {
+          columns: {
+            id: true,
+            make: true,
+            model: true,
+            year: true,
+            plateNumber: true,
+            registrationExpiry: true,
+          },
+        },
+        employee: {
+          columns: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+            drivingLicenseNumber: true,
+          },
+        },
+        assigner: {
+          columns: {
+            id: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
       },
     });
     if (!assignment) return undefined;
