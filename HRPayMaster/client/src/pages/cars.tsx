@@ -77,9 +77,9 @@ export default function Cars() {
   });
 
   const updateAssignmentMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any; carId?: string }) =>
+    mutationFn: ({ id, data, }: { id: string; data: any; carId?: string }) =>
       apiRequest("PUT", `/api/car-assignments/${id}`, data),
-    onSuccess: async (_data, variables: { carId?: string }) => {
+    onSuccess: async (_data, variables) => {
       if (variables?.carId) {
         await apiRequest("PUT", `/api/cars/${variables.carId}`, { status: "available" });
       }
@@ -108,7 +108,7 @@ export default function Cars() {
     defaultValues: {
       make: "",
       model: "",
-      year: new Date().getFullYear().toString(),
+      year: new Date().getFullYear(),
       licensePlate: "",
       status: "available",
       mileage: 0

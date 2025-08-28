@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
@@ -170,7 +170,7 @@ describe('Cars page', () => {
       body: JSON.stringify({ status: 'assigned' }),
     }));
     expect(toast).toHaveBeenCalledWith({ title: 'Car assigned successfully' });
-    global.fetch.mockClear();
+    (global.fetch as Mock).mockClear();
     toast.mockReset();
     // assign car error
     mutationMocks[1].shouldError = true;
@@ -186,7 +186,7 @@ describe('Cars page', () => {
       body: JSON.stringify({ status: 'available' }),
     }));
     expect(toast).toHaveBeenCalledWith({ title: 'Assignment updated successfully' });
-    global.fetch.mockClear();
+    (global.fetch as Mock).mockClear();
     toast.mockReset();
     // update assignment error
     mutationMocks[2].shouldError = true;
