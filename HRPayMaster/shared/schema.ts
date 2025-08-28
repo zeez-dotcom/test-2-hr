@@ -172,6 +172,8 @@ export const cars = pgTable("cars", {
   serial: text("serial"),
   company: text("company"),
   registrationBookName: text("registration_book_name"),
+  registrationOwner: text("registration_owner"),
+  registrationDocumentImage: text("registration_document_image"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -436,6 +438,16 @@ export const insertCarSchema = createInsertSchema(cars)
     year: z.preprocess(parseNumber, z.number()),
     mileage: z.preprocess(parseNumber, z.number()).optional(),
     purchasePrice: z.preprocess(parseNumber, z.number()).optional(),
+    registrationOwner: z
+      .preprocess(v => {
+        const val = emptyToUndef(v);
+        return val === undefined ? undefined : String(val);
+      }, z.string().optional()),
+    registrationDocumentImage: z
+      .preprocess(v => {
+        const val = emptyToUndef(v);
+        return val === undefined ? undefined : String(val);
+      }, z.string().optional()),
   });
 
 export const insertCarAssignmentSchema = createInsertSchema(carAssignments).omit({

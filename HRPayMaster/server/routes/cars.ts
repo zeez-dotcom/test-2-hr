@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { HttpError } from "../errorHandler";
 import { storage } from "../storage";
-import { insertCarSchema } from "@shared/schema";
+import { insertCarSchema, type InsertCar } from "@shared/schema";
 import { z } from "zod";
 
 export const carsRouter = Router();
@@ -29,7 +29,7 @@ carsRouter.get("/:id", async (req, res, next) => {
 
 carsRouter.post("/", async (req, res, next) => {
   try {
-    const car = insertCarSchema.parse(req.body);
+    const car: InsertCar = insertCarSchema.parse(req.body);
     const newCar = await storage.createCar(car);
     res.status(201).json(newCar);
   } catch (error) {
@@ -42,7 +42,9 @@ carsRouter.post("/", async (req, res, next) => {
 
 carsRouter.put("/:id", async (req, res, next) => {
   try {
-    const updates = insertCarSchema.partial().parse(req.body);
+    const updates: Partial<InsertCar> = insertCarSchema
+      .partial()
+      .parse(req.body);
     const updatedCar = await storage.updateCar(req.params.id, updates);
     if (!updatedCar) {
       return next(new HttpError(404, "Car not found"));
