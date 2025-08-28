@@ -1225,11 +1225,11 @@ const upload = multer({ storage: multer.memoryStorage() });
     }
   );
 
-  // Car assignment routes (using asset service)
+  // Car assignment routes
   employeesRouter.get("/api/car-assignments", async (req, res, next) => {
     try {
-      const assignments = await assetService.getAssignments();
-      res.json(assignments.filter(a => a.asset?.type === "car"));
+      const assignments = await storage.getCarAssignments();
+      res.json(assignments);
     } catch (error) {
       next(new HttpError(500, "Failed to fetch car assignments"));
     }
@@ -1237,8 +1237,8 @@ const upload = multer({ storage: multer.memoryStorage() });
 
   employeesRouter.get("/api/car-assignments/:id", async (req, res, next) => {
     try {
-      const assignment = await assetService.getAssignment(req.params.id);
-      if (!assignment || assignment.asset?.type !== "car") {
+      const assignment = await storage.getCarAssignment(req.params.id);
+      if (!assignment) {
         return next(new HttpError(404, "Car assignment not found"));
       }
       res.json(assignment);
@@ -1269,25 +1269,22 @@ const upload = multer({ storage: multer.memoryStorage() });
 
   employeesRouter.post("/api/car-assignments", async (req, res, next) => {
     try {
-      const assignment = insertAssetAssignmentSchema.parse({
-        ...req.body,
-        assetId: req.body.carId,
-      });
-      const newAssignment = await assetService.createAssignment(assignment);
-      // ensure the asset reflects its new assignment
-      if (newAssignment?.assetId) {
-        await assetService.updateAsset(newAssignment.assetId, {
+      const assignment = insertCarAssignmentSchema.parse(req.body);
+      const newAssignment = await storage.createCarAssignment(assignment);
+      // ensure the car reflects its new assignment
+      if (newAssignment?.carId) {
+        await storage.updateCar(newAssignment.carId, {
           status: "assigned",
         });
       }
-      const detailed = await assetService.getAssignment(newAssignment.id);
+      const detailed = await storage.getCarAssignment(newAssignment.id);
       if (detailed) {
         const addedBy = await getAddedBy(req);
         const event: InsertEmployeeEvent = {
           employeeId: detailed.employeeId,
           eventType: "fleet_assignment",
-          title: `Assigned vehicle ${detailed.asset?.name ?? ""}`.trim(),
-          description: `Assigned vehicle ${detailed.asset?.name ?? ""} to ${detailed.employee?.firstName ?? ""} ${detailed.employee?.lastName ?? ""}`.trim(),
+          title: `Assigned vehicle ${detailed.car?.make ?? ""} ${detailed.car?.model ?? ""}`.trim(),
+          description: `Assigned vehicle ${detailed.car?.make ?? ""} ${detailed.car?.model ?? ""} to ${detailed.employee?.firstName ?? ""} ${detailed.employee?.lastName ?? ""}`.trim(),
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
@@ -1306,27 +1303,24 @@ const upload = multer({ storage: multer.memoryStorage() });
 
   employeesRouter.put("/api/car-assignments/:id", async (req, res, next) => {
     try {
-      const updates = insertAssetAssignmentSchema.partial().parse({
-        ...req.body,
-        assetId: req.body.carId,
-      });
-      const updated = await assetService.updateAssignment(req.params.id, updates);
+      const updates = insertCarAssignmentSchema.partial().parse(req.body);
+      const updated = await storage.updateCarAssignment(req.params.id, updates);
       if (!updated) {
         return next(new HttpError(404, "Car assignment not found"));
       }
       if (updates.status) {
-        await assetService.updateAsset(updated.assetId, {
+        await storage.updateCar(updated.carId, {
           status: updates.status === "completed" ? "available" : "assigned",
         });
       }
-      const detailed = await assetService.getAssignment(req.params.id);
+      const detailed = await storage.getCarAssignment(req.params.id);
       if (detailed) {
         const addedBy = await getAddedBy(req);
         const event: InsertEmployeeEvent = {
           employeeId: detailed.employeeId,
           eventType: "fleet_update",
-          title: `Updated assignment for vehicle ${detailed.asset?.name ?? ""}`.trim(),
-          description: `Updated vehicle ${detailed.asset?.name ?? ""} assignment for ${detailed.employee?.firstName ?? ""} ${detailed.employee?.lastName ?? ""}`.trim(),
+          title: `Updated assignment for vehicle ${detailed.car?.make ?? ""} ${detailed.car?.model ?? ""}`.trim(),
+          description: `Updated vehicle ${detailed.car?.make ?? ""} ${detailed.car?.model ?? ""} assignment for ${detailed.employee?.firstName ?? ""} ${detailed.employee?.lastName ?? ""}`.trim(),
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
@@ -1345,21 +1339,21 @@ const upload = multer({ storage: multer.memoryStorage() });
 
   employeesRouter.delete("/api/car-assignments/:id", async (req, res, next) => {
     try {
-      const existing = await assetService.getAssignment(req.params.id);
-      const deleted = await assetService.deleteAssignment(req.params.id);
+      const existing = await storage.getCarAssignment(req.params.id);
+      const deleted = await storage.deleteCarAssignment(req.params.id);
       if (!deleted) {
         return next(new HttpError(404, "Car assignment not found"));
       }
-      if (existing?.assetId) {
-        await assetService.updateAsset(existing.assetId, { status: "available" });
+      if (existing?.carId) {
+        await storage.updateCar(existing.carId, { status: "available" });
       }
       if (existing) {
         const addedBy = await getAddedBy(req);
         const event: InsertEmployeeEvent = {
           employeeId: existing.employeeId,
           eventType: "fleet_removal",
-          title: `Removed vehicle ${existing.asset?.name ?? ""} assignment`.trim(),
-          description: `Removed vehicle ${existing.asset?.name ?? ""} from ${existing.employee?.firstName ?? ""} ${existing.employee?.lastName ?? ""}`.trim(),
+          title: `Removed vehicle ${existing.car?.make ?? ""} ${existing.car?.model ?? ""} assignment`.trim(),
+          description: `Removed vehicle ${existing.car?.make ?? ""} ${existing.car?.model ?? ""} from ${existing.employee?.firstName ?? ""} ${existing.employee?.lastName ?? ""}`.trim(),
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
