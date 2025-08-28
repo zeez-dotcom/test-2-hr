@@ -427,10 +427,16 @@ export const insertLoanSchema = createInsertSchema(loans).omit({
   createdAt: true,
 });
 
-export const insertCarSchema = createInsertSchema(cars).omit({
-  id: true,
-  createdAt: true,
-});
+export const insertCarSchema = createInsertSchema(cars)
+  .omit({
+    id: true,
+    createdAt: true,
+  })
+  .extend({
+    year: z.preprocess(parseNumber, z.number()),
+    mileage: z.preprocess(parseNumber, z.number()).optional(),
+    purchasePrice: z.preprocess(parseNumber, z.number()).optional(),
+  });
 
 export const insertCarAssignmentSchema = createInsertSchema(carAssignments).omit({
   id: true,

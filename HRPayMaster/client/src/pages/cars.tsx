@@ -108,7 +108,7 @@ export default function Cars() {
     defaultValues: {
       make: "",
       model: "",
-      year: new Date().getFullYear().toString(),
+      year: new Date().getFullYear(),
       licensePlate: "",
       status: "available",
       mileage: 0

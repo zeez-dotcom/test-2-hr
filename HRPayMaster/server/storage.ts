@@ -958,10 +958,7 @@ export class DatabaseStorage implements IStorage {
       .insert(cars)
       .values({
         ...car,
-        serial: car.serial,
-        company: car.company,
-        registrationBookName: car.registrationBookName,
-        notes: car.notes,
+        purchasePrice: car.purchasePrice?.toString(),
         status: car.status || "available",
         mileage: car.mileage || 0,
       })
@@ -974,10 +971,7 @@ export class DatabaseStorage implements IStorage {
       .update(cars)
       .set({
         ...car,
-        serial: car.serial,
-        company: car.company,
-        registrationBookName: car.registrationBookName,
-        notes: car.notes,
+        purchasePrice: car.purchasePrice?.toString(),
       })
       .where(eq(cars.id, id))
       .returning();

@@ -170,7 +170,7 @@ describe('Cars page', () => {
       body: JSON.stringify({ status: 'assigned' }),
     }));
     expect(toast).toHaveBeenCalledWith({ title: 'Car assigned successfully' });
-    (fetch as Mock).mockClear();
+    (global.fetch as Mock).mockClear();
     toast.mockReset();
     // assign car error
     mutationMocks[1].shouldError = true;
@@ -186,7 +186,7 @@ describe('Cars page', () => {
       body: JSON.stringify({ status: 'available' }),
     }));
     expect(toast).toHaveBeenCalledWith({ title: 'Assignment updated successfully' });
-    (fetch as Mock).mockClear();
+    (global.fetch as Mock).mockClear();
     toast.mockReset();
     // update assignment error
     mutationMocks[2].shouldError = true;
@@ -290,4 +290,3 @@ describe('Car import', () => {
     );
   });
 });
-
