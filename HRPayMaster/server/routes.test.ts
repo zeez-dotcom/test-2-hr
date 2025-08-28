@@ -1048,12 +1048,14 @@ describe('car routes', () => {
   });
 
   it('POST /api/cars accepts multipart/form-data', async () => {
+    const fileBuffer = Buffer.from('file-data');
     const created = {
       id: '1',
       make: 'Toyota',
       model: 'Corolla',
       year: 2020,
       plateNumber: 'ABC123',
+      registrationDocumentImage: fileBuffer.toString('base64'),
     };
     (storage.createCar as any).mockResolvedValue(created);
 
@@ -1062,7 +1064,8 @@ describe('car routes', () => {
       .field('make', 'Toyota')
       .field('model', 'Corolla')
       .field('year', '2020')
-      .field('plateNumber', 'ABC123');
+      .field('plateNumber', 'ABC123')
+      .attach('registrationDocumentImage', fileBuffer, 'doc.png');
 
     expect(res.status).toBe(201);
     expect(res.body).toEqual(created);
@@ -1071,6 +1074,7 @@ describe('car routes', () => {
       model: 'Corolla',
       year: 2020,
       plateNumber: 'ABC123',
+      registrationDocumentImage: fileBuffer.toString('base64'),
     });
   });
 
@@ -1079,7 +1083,7 @@ describe('car routes', () => {
       .post('/api/cars');
 
     expect(res.status).toBe(400);
-    expect(res.body.error.message).toBe('Missing required fields');
+    expect(res.body.error.message).toBe('Invalid car data');
   });
 });
 
