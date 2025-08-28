@@ -20,6 +20,13 @@ export function errorHandler(err: any, _req: Request, res: Response, _next: Next
 
   const body: any = { error: { message } };
 
+  if (isZodError) {
+    body.error.fields = err.errors.map((issue: any) => ({
+      path: issue.path.join("."),
+      message: issue.message,
+    }));
+  }
+
   if (process.env.NODE_ENV !== "production") {
     body.error.status = status;
     if (details) {
@@ -31,7 +38,7 @@ export function errorHandler(err: any, _req: Request, res: Response, _next: Next
   }
 
   if (details) {
-    console.error("Error details:", details);
+    console.error("Error details:", JSON.stringify(details, null, 2));
   }
   console.error(err);
 
