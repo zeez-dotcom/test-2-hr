@@ -169,6 +169,8 @@ export const cars = pgTable("cars", {
   purchasePrice: numeric("purchase_price", { precision: 12, scale: 2 }),
   insuranceExpiry: date("insurance_expiry"),
   registrationExpiry: date("registration_expiry"),
+  registrationOwner: text("registration_owner"),
+  registrationDocumentImage: text("registration_document_image"),
   serial: text("serial"),
   company: text("company"),
   registrationBookName: text("registration_book_name"),
