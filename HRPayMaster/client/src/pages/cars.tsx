@@ -153,20 +153,26 @@ export default function Cars() {
   }
 
   const onSubmitCar = (data: z.infer<typeof carSchema>) => {
-    const payload: Record<string, any> = {
-      ...data,
-      plateNumber: data.licensePlate,
-    };
-    delete payload.licensePlate;
     const formData = new FormData();
-    Object.entries(payload).forEach(([key, value]) => {
-      if (value === undefined || value === null) return;
-      if (key === "registrationDocumentImage" && value instanceof File) {
-        formData.append(key, value);
-      } else {
-        formData.append(key, value instanceof Date ? value.toISOString() : String(value));
-      }
-    });
+
+    // Map client fields to server-side names explicitly to ensure alignment
+    formData.append("make", data.make);
+    formData.append("model", data.model);
+    formData.append("year", String(data.year));
+    formData.append("plateNumber", data.licensePlate);
+    formData.append("status", data.status);
+    formData.append("mileage", String(data.mileage));
+
+    if (data.registrationOwner) {
+      formData.append("registrationOwner", data.registrationOwner);
+    }
+    if (data.registrationExpiry) {
+      formData.append("registrationExpiry", data.registrationExpiry);
+    }
+    if (data.registrationDocumentImage instanceof File) {
+      formData.append("registrationDocumentImage", data.registrationDocumentImage);
+    }
+
     createCarMutation.mutate(formData);
   };
 
