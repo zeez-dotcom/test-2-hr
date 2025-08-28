@@ -1247,6 +1247,26 @@ const upload = multer({ storage: multer.memoryStorage() });
     }
   });
 
+  employeesRouter.get(
+    "/api/car-assignments/:id/document",
+    async (req, res, next) => {
+      try {
+        const assignment = await storage.getCarAssignment(req.params.id);
+        if (!assignment || !assignment.car || !assignment.employee) {
+          return next(new HttpError(404, "Car assignment not found"));
+        }
+        const formatDate = (d?: string | null) =>
+          d ? new Date(d).toISOString().split("T")[0] : "N/A";
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Car Assignment</title><style>body{font-family:sans-serif;padding:20px;}h1{text-align:center;}section{margin-bottom:20px;}strong{display:inline-block;width:200px;}a{color:#2563eb;text-decoration:underline;}</style></head><body><h1>Car Assignment</h1><section><strong>Employee:</strong>${assignment.employee.firstName} ${assignment.employee.lastName}<br/><strong>Phone:</strong>${assignment.employee.phone ?? "N/A"}<br/><strong>Driving License:</strong>${assignment.employee.drivingLicenseNumber ?? "N/A"}</section><section><strong>Car:</strong>${assignment.car.year} ${assignment.car.make} ${assignment.car.model}<br/><strong>Plate Number:</strong>${assignment.car.plateNumber}<br/><strong>Registration Owner:</strong>${assignment.car.registrationOwner ?? "N/A"}<br/><strong>Registration Document:</strong>${assignment.car.registrationDocumentImage ? `<a href="${assignment.car.registrationDocumentImage}">View</a>` : "N/A"}</section><section><strong>Assignment Period:</strong>${formatDate(assignment.assignedDate)} - ${assignment.returnDate ? formatDate(assignment.returnDate) : "Ongoing"}</section><script>window.print&&window.print()</script></body></html>`;
+        res.setHeader("Content-Type", "text/html").send(html);
+      } catch (error) {
+        next(
+          new HttpError(500, "Failed to generate car assignment document"),
+        );
+      }
+    },
+  );
+
   employeesRouter.post("/api/car-assignments", async (req, res, next) => {
     try {
       const assignment = insertAssetAssignmentSchema.parse({

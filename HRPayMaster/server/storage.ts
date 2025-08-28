@@ -995,6 +995,8 @@ export class DatabaseStorage implements IStorage {
             year: true,
             plateNumber: true,
             registrationExpiry: true,
+            registrationOwner: true,
+            registrationDocumentImage: true,
           },
         },
         employee: {
@@ -1036,6 +1038,8 @@ export class DatabaseStorage implements IStorage {
             year: true,
             plateNumber: true,
             registrationExpiry: true,
+            registrationOwner: true,
+            registrationDocumentImage: true,
           },
         },
         employee: {
