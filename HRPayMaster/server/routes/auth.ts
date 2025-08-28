@@ -46,7 +46,7 @@ export const requireRole = (roles: string[]) => (
   next(new HttpError(403, "Forbidden"));
 };
 
-authRouter.get("/api/me", (req, res) => {
+authRouter.get("/api/me", ensureAuth, (req, res) => {
   res.json(req.user);
 });
 

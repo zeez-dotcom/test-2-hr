@@ -63,6 +63,32 @@ function createApp() {
   return app;
 }
 
+function createUnauthenticatedApp() {
+  const app = express();
+  app.use(express.json({ limit: '1mb' }));
+  app.use((req, _res, next) => {
+    // @ts-ignore
+    req.isAuthenticated = () => false;
+    next();
+  });
+  return app;
+}
+
+describe('auth routes', () => {
+  let app: express.Express;
+
+  beforeEach(async () => {
+    app = createUnauthenticatedApp();
+    await registerRoutes(app);
+    app.use(errorHandler);
+  });
+
+  it('GET /api/me returns 401 when not authenticated', async () => {
+    const res = await request(app).get('/api/me');
+    expect(res.status).toBe(401);
+  });
+});
+
 describe('employee routes', () => {
   let app: express.Express;
 
