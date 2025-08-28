@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { z } from "zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -19,6 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import CarImport from "@/components/cars/car-import";
 
 import { insertCarSchema, insertCarAssignmentSchema, type CarWithAssignment, type CarAssignmentWithDetails, type InsertCarAssignment } from "@shared/schema";
+import { sanitizeImageSrc } from "@/lib/sanitizeImageSrc";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
 
@@ -26,6 +28,7 @@ export default function Cars() {
   const [isCreateCarDialogOpen, setIsCreateCarDialogOpen] = useState(false);
   const [isAssignCarDialogOpen, setIsAssignCarDialogOpen] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [registrationPreview, setRegistrationPreview] = useState<string | null>(null);
   const { toast } = useToast();
 
   const {
@@ -103,16 +106,35 @@ export default function Cars() {
     }
   });
 
-  const carForm = useForm({
-    resolver: zodResolver(insertCarSchema),
+  const carSchema = insertCarSchema
+    .extend({
+      registrationOwner: z.string().min(1, "Registration owner is required"),
+      registrationDocumentImage: z
+        .any()
+        .refine(
+          file => file instanceof File || typeof file === "string",
+          "Registration document image is required",
+        ),
+      registrationExpiry: z.string().min(1, "Registration expiry is required"),
+    })
+    .omit({ plateNumber: true })
+    .extend({
+      licensePlate: z.string().min(1, "License plate is required"),
+    });
+
+  const carForm = useForm<z.infer<typeof carSchema>>({
+    resolver: zodResolver(carSchema),
     defaultValues: {
       make: "",
       model: "",
       year: new Date().getFullYear(),
       licensePlate: "",
       status: "available",
-      mileage: 0
-    }
+      mileage: 0,
+      registrationOwner: "",
+      registrationExpiry: "",
+      registrationDocumentImage: undefined,
+    },
   });
 
   const assignmentForm = useForm<InsertCarAssignment>({
@@ -130,8 +152,22 @@ export default function Cars() {
     return <div>Error loading cars</div>;
   }
 
-  const onSubmitCar = (data: any) => {
-    createCarMutation.mutate(data);
+  const onSubmitCar = (data: z.infer<typeof carSchema>) => {
+    const payload: Record<string, any> = {
+      ...data,
+      plateNumber: data.licensePlate,
+    };
+    delete payload.licensePlate;
+    const formData = new FormData();
+    Object.entries(payload).forEach(([key, value]) => {
+      if (value === undefined || value === null) return;
+      if (key === "registrationDocumentImage" && value instanceof File) {
+        formData.append(key, value);
+      } else {
+        formData.append(key, value instanceof Date ? value.toISOString() : String(value));
+      }
+    });
+    createCarMutation.mutate(formData);
   };
 
   const onSubmitAssignment = (data: any) => {
@@ -373,6 +409,63 @@ export default function Cars() {
                     )}
                   />
 
+                  <FormField
+                    control={carForm.control}
+                    name="registrationOwner"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Registration Owner</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Owner name" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={carForm.control}
+                    name="registrationExpiry"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Registration Expiry</FormLabel>
+                        <FormControl>
+                          <Input type="date" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={carForm.control}
+                    name="registrationDocumentImage"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Registration Document</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="file"
+                            accept="image/*"
+                            onChange={e => {
+                              const file = e.target.files?.[0];
+                              field.onChange(file);
+                              setRegistrationPreview(file ? URL.createObjectURL(file) : null);
+                            }}
+                          />
+                        </FormControl>
+                        {(registrationPreview || typeof field.value === "string") && (
+                          <img
+                            src={sanitizeImageSrc(registrationPreview || (field.value as string))}
+                            alt="Registration document preview"
+                            className="h-32 mt-2 rounded-md object-cover"
+                          />
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
                   <DialogFooter>
                     <Button type="submit" disabled={createCarMutation.isPending}>
                       {createCarMutation.isPending ? "Adding..." : "Add Car"}
@@ -465,6 +558,21 @@ export default function Cars() {
                           <span className="text-sm text-muted-foreground">Mileage</span>
                           <span className="text-sm font-medium">{car.mileage?.toLocaleString()} miles</span>
                         </div>
+                        {car.registrationOwner && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-muted-foreground">Owner</span>
+                            <span className="text-sm font-medium">{car.registrationOwner}</span>
+                          </div>
+                        )}
+                        {car.registrationDocumentImage && (
+                          <div className="mt-2">
+                            <img
+                              src={sanitizeImageSrc(car.registrationDocumentImage)}
+                              alt="Registration document"
+                              className="h-32 w-full object-cover rounded-md"
+                            />
+                          </div>
+                        )}
                         {car.currentAssignment && (
                           <div className="pt-2 border-t">
                             <div className="flex justify-between items-center">
