@@ -29,34 +29,32 @@ carsRouter.get("/:id", async (req, res, next) => {
   }
 });
 
-carsRouter.post("/", upload.none(), async (req, res, next) => {
-  try {
-    // Guard against missing or unparsed request bodies before validation
-    const { make, model, year, plateNumber } = req.body ?? {};
-    if (!make || !model || !year || !plateNumber) {
-      return next(new HttpError(400, "Missing required fields"));
+carsRouter.post(
+  "/",
+  upload.single("registrationDocumentImage"),
+  async (req, res, next) => {
+    try {
+      const carInput: Record<string, unknown> = { ...(req.body ?? {}) };
+
+      if (req.file) {
+        carInput.registrationDocumentImage = req.file.buffer.toString("base64");
+      }
+
+      const car: InsertCar = insertCarSchema.parse(carInput);
+      const newCar = await storage.createCar(car);
+      res.status(201).json(newCar);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return next(new HttpError(400, "Invalid car data", error.errors));
+      }
+      next(new HttpError(500, "Failed to create car"));
     }
-    const car: InsertCar = insertCarSchema.parse({
-      make,
-      model,
-      year,
-      plateNumber,
-    });
-    const newCar = await storage.createCar(car);
-    res.status(201).json(newCar);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return next(new HttpError(400, "Invalid car data", error.errors));
-    }
-    next(new HttpError(500, "Failed to create car"));
   }
-});
+);
 
 carsRouter.put("/:id", async (req, res, next) => {
   try {
-    const updates: Partial<InsertCar> = insertCarSchema
-      .partial()
-      .parse(req.body);
+    const updates: Partial<InsertCar> = insertCarSchema.partial().parse(req.body);
     const updatedCar = await storage.updateCar(req.params.id, updates);
     if (!updatedCar) {
       return next(new HttpError(404, "Car not found"));
@@ -81,4 +79,3 @@ carsRouter.delete("/:id", async (req, res, next) => {
     next(new HttpError(500, "Failed to delete car"));
   }
 });
-
