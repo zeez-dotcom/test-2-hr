@@ -31,7 +31,8 @@ carsRouter.get("/:id", async (req, res, next) => {
 
 carsRouter.post("/", upload.none(), async (req, res, next) => {
   try {
-    const { make, model, year, plateNumber } = req.body;
+    // Guard against missing or unparsed request bodies before validation
+    const { make, model, year, plateNumber } = req.body ?? {};
     if (!make || !model || !year || !plateNumber) {
       return next(new HttpError(400, "Missing required fields"));
     }
