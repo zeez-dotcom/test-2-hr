@@ -37,6 +37,10 @@ vi.mock('@/hooks/use-toast', () => ({
   toast,
 }));
 
+vi.mock('@/lib/pdf', () => ({
+  openPdf: vi.fn(),
+}));
+
 vi.mock('@/components/ui/button', () => ({
   Button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
 }));

@@ -4,7 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
-import { Car, Users, Plus, Trash2, Edit, CheckCircle, XCircle, AlertTriangle, Upload } from "lucide-react";
+import { Car, Users, Plus, Trash2, Edit, CheckCircle, XCircle, AlertTriangle, Upload, FileText } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +23,8 @@ import { insertCarSchema, insertCarAssignmentSchema, type CarWithAssignment, typ
 import { sanitizeImageSrc } from "@/lib/sanitizeImageSrc";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
+import { openPdf } from "@/lib/pdf";
+import type { TDocumentDefinitions } from "pdfmake/interfaces";
 
 export default function Cars() {
   const [isCreateCarDialogOpen, setIsCreateCarDialogOpen] = useState(false);
@@ -184,6 +186,25 @@ export default function Cars() {
       },
       carId: assignment?.carId
     });
+  };
+
+  const viewAssignmentDocument = (assignment: CarAssignmentWithDetails) => {
+    const doc: TDocumentDefinitions = {
+      info: { title: "Car Assignment" },
+      content: [
+        { text: "Car Assignment", style: "header" },
+        { text: `Employee: ${assignment.employee?.firstName ?? ""} ${assignment.employee?.lastName ?? ""}` },
+        { text: `Phone: ${assignment.employee?.phone ?? "N/A"}` },
+        { text: `Driving License: ${assignment.employee?.drivingLicenseNumber ?? "N/A"}` },
+        { text: `Car: ${assignment.car?.year ?? ""} ${assignment.car?.make ?? ""} ${assignment.car?.model ?? ""}` },
+        { text: `Registration Number: ${assignment.car?.plateNumber ?? "N/A"}` },
+        { text: `Registration Expiry: ${assignment.car?.registrationExpiry ? format(new Date(assignment.car.registrationExpiry), "MMM d, yyyy") : "N/A"}` },
+        { text: `Assignment Start: ${format(new Date(assignment.assignedDate), "MMM d, yyyy")}` },
+        { text: `Assignment End: ${assignment.returnDate ? format(new Date(assignment.returnDate), "MMM d, yyyy") : "Ongoing"}` },
+      ],
+      styles: { header: { fontSize: 18, bold: true, margin: [0, 0, 0, 10] } },
+    };
+    openPdf(doc);
   };
 
   const getStatusBadge = (status: string) => {
@@ -638,19 +659,40 @@ export default function Cars() {
                               </CardDescription>
                             </div>
                           </div>
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => handleReturnCar(assignment.id)}
-                            disabled={updateAssignmentMutation.isPending}
-                          >
-                            <XCircle className="w-3 h-3 mr-1" />
-                            Return Car
-                          </Button>
+                          <div className="flex items-center space-x-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => viewAssignmentDocument(assignment)}
+                            >
+                              <FileText className="w-3 h-3 mr-1" />
+                              View Document
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleReturnCar(assignment.id)}
+                              disabled={updateAssignmentMutation.isPending}
+                            >
+                              <XCircle className="w-3 h-3 mr-1" />
+                              Return Car
+                            </Button>
+                          </div>
                         </div>
                       </CardHeader>
                       <CardContent>
                         <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="text-muted-foreground">Employee</span>
+                            <p className="font-medium">{assignment.employee?.firstName} {assignment.employee?.lastName}</p>
+                            <p>{assignment.employee?.phone}</p>
+                            <p>License: {assignment.employee?.drivingLicenseNumber}</p>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Car Registration</span>
+                            <p className="font-medium">{assignment.car?.plateNumber}</p>
+                            <p>Expiry: {assignment.car?.registrationExpiry ? format(new Date(assignment.car.registrationExpiry), "MMM d, yyyy") : "N/A"}</p>
+                          </div>
                           <div>
                             <span className="text-muted-foreground">Assigned Date</span>
                             <p className="font-medium">{format(new Date(assignment.assignedDate), "MMM d, yyyy")}</p>
