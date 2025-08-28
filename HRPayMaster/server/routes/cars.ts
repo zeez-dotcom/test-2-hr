@@ -1,9 +1,11 @@
 import { Router } from "express";
+import multer from "multer";
 import { HttpError } from "../errorHandler";
 import { storage } from "../storage";
 import { insertCarSchema, type InsertCar } from "@shared/schema";
 import { z } from "zod";
 
+const upload = multer();
 export const carsRouter = Router();
 
 carsRouter.get("/", async (req, res, next) => {
@@ -27,9 +29,18 @@ carsRouter.get("/:id", async (req, res, next) => {
   }
 });
 
-carsRouter.post("/", async (req, res, next) => {
+carsRouter.post("/", upload.none(), async (req, res, next) => {
   try {
-    const car: InsertCar = insertCarSchema.parse(req.body);
+    const { make, model, year, plateNumber } = req.body;
+    if (!make || !model || !year || !plateNumber) {
+      return next(new HttpError(400, "Missing required fields"));
+    }
+    const car: InsertCar = insertCarSchema.parse({
+      make,
+      model,
+      year,
+      plateNumber,
+    });
     const newCar = await storage.createCar(car);
     res.status(201).json(newCar);
   } catch (error) {

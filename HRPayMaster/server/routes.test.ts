@@ -1037,3 +1037,49 @@ describe('payroll routes', () => {
   });
 });
 
+describe('car routes', () => {
+  let app: express.Express;
+
+  beforeEach(async () => {
+    app = createApp();
+    await registerRoutes(app);
+    app.use(errorHandler);
+    vi.clearAllMocks();
+  });
+
+  it('POST /api/cars accepts multipart/form-data', async () => {
+    const created = {
+      id: '1',
+      make: 'Toyota',
+      model: 'Corolla',
+      year: 2020,
+      plateNumber: 'ABC123',
+    };
+    (storage.createCar as any).mockResolvedValue(created);
+
+    const res = await request(app)
+      .post('/api/cars')
+      .field('make', 'Toyota')
+      .field('model', 'Corolla')
+      .field('year', '2020')
+      .field('plateNumber', 'ABC123');
+
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual(created);
+    expect(storage.createCar).toHaveBeenCalledWith({
+      make: 'Toyota',
+      model: 'Corolla',
+      year: 2020,
+      plateNumber: 'ABC123',
+    });
+  });
+
+  it('POST /api/cars returns 400 for missing fields', async () => {
+    const res = await request(app)
+      .post('/api/cars')
+      .field('make', 'Toyota');
+
+    expect(res.status).toBe(400);
+  });
+});
+
