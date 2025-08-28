@@ -169,13 +169,11 @@ export const cars = pgTable("cars", {
   purchasePrice: numeric("purchase_price", { precision: 12, scale: 2 }),
   insuranceExpiry: date("insurance_expiry"),
   registrationExpiry: date("registration_expiry"),
-  registrationOwner: text("registration_owner"),
-  registrationDocumentImage: text("registration_document_image"),
+  registrationOwner: text("registration_owner"), // Owner name as listed on the registration document
+  registrationDocumentImage: text("registration_document_image"), // Image or scan of the registration document
   serial: text("serial"),
   company: text("company"),
   registrationBookName: text("registration_book_name"),
-  registrationOwner: text("registration_owner"),
-  registrationDocumentImage: text("registration_document_image"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -444,12 +442,12 @@ export const insertCarSchema = createInsertSchema(cars)
       .preprocess(v => {
         const val = emptyToUndef(v);
         return val === undefined ? undefined : String(val);
-      }, z.string().optional()),
+      }, z.string().optional()), // Owner name as on the registration document
     registrationDocumentImage: z
       .preprocess(v => {
         const val = emptyToUndef(v);
         return val === undefined ? undefined : String(val);
-      }, z.string().optional()),
+      }, z.string().optional()), // Image or scan of the registration document
   });
 
 export const insertCarAssignmentSchema = createInsertSchema(carAssignments).omit({
