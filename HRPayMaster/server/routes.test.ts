@@ -1049,13 +1049,14 @@ describe('car routes', () => {
 
   it('POST /api/cars accepts multipart/form-data', async () => {
     const fileBuffer = Buffer.from('file-data');
+    const dataUrl = `data:image/png;base64,${fileBuffer.toString('base64')}`;
     const created = {
       id: '1',
       make: 'Toyota',
       model: 'Corolla',
       year: 2020,
       plateNumber: 'ABC123',
-      registrationDocumentImage: fileBuffer.toString('base64'),
+      registrationDocumentImage: dataUrl,
     };
     (storage.createCar as any).mockResolvedValue(created);
 
@@ -1074,7 +1075,7 @@ describe('car routes', () => {
       model: 'Corolla',
       year: 2020,
       plateNumber: 'ABC123',
-      registrationDocumentImage: fileBuffer.toString('base64'),
+      registrationDocumentImage: dataUrl,
     });
   });
 
