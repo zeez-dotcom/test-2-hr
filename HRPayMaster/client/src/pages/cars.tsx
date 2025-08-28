@@ -23,8 +23,6 @@ import { insertCarSchema, insertCarAssignmentSchema, type CarWithAssignment, typ
 import { sanitizeImageSrc } from "@/lib/sanitizeImageSrc";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
-import { openPdf } from "@/lib/pdf";
-import type { TDocumentDefinitions } from "pdfmake/interfaces";
 
 export default function Cars() {
   const [isCreateCarDialogOpen, setIsCreateCarDialogOpen] = useState(false);
@@ -189,22 +187,7 @@ export default function Cars() {
   };
 
   const viewAssignmentDocument = (assignment: CarAssignmentWithDetails) => {
-    const doc: TDocumentDefinitions = {
-      info: { title: "Car Assignment" },
-      content: [
-        { text: "Car Assignment", style: "header" },
-        { text: `Employee: ${assignment.employee?.firstName ?? ""} ${assignment.employee?.lastName ?? ""}` },
-        { text: `Phone: ${assignment.employee?.phone ?? "N/A"}` },
-        { text: `Driving License: ${assignment.employee?.drivingLicenseNumber ?? "N/A"}` },
-        { text: `Car: ${assignment.car?.year ?? ""} ${assignment.car?.make ?? ""} ${assignment.car?.model ?? ""}` },
-        { text: `Registration Number: ${assignment.car?.plateNumber ?? "N/A"}` },
-        { text: `Registration Expiry: ${assignment.car?.registrationExpiry ? format(new Date(assignment.car.registrationExpiry), "MMM d, yyyy") : "N/A"}` },
-        { text: `Assignment Start: ${format(new Date(assignment.assignedDate), "MMM d, yyyy")}` },
-        { text: `Assignment End: ${assignment.returnDate ? format(new Date(assignment.returnDate), "MMM d, yyyy") : "Ongoing"}` },
-      ],
-      styles: { header: { fontSize: 18, bold: true, margin: [0, 0, 0, 10] } },
-    };
-    openPdf(doc);
+    window.open(`/api/car-assignments/${assignment.id}/document`, "_blank");
   };
 
   const getStatusBadge = (status: string) => {
