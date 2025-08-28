@@ -1076,10 +1076,10 @@ describe('car routes', () => {
 
   it('POST /api/cars returns 400 for missing fields', async () => {
     const res = await request(app)
-      .post('/api/cars')
-      .field('make', 'Toyota');
+      .post('/api/cars');
 
     expect(res.status).toBe(400);
+    expect(res.body.error.message).toBe('Missing required fields');
   });
 });
 
