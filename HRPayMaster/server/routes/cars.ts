@@ -29,18 +29,13 @@ carsRouter.get("/:id", async (req, res, next) => {
   }
 });
 
-carsRouter.post("/", upload.none(), async (req, res, next) => {
+carsRouter.post("/", upload.single("registrationDocumentImage"), async (req, res, next) => {
   try {
-    const { make, model, year, plateNumber } = req.body;
-    if (!make || !model || !year || !plateNumber) {
-      return next(new HttpError(400, "Missing required fields"));
+    const carInput: Record<string, unknown> = { ...req.body };
+    if (req.file) {
+      carInput.registrationDocumentImage = req.file.buffer.toString("base64");
     }
-    const car: InsertCar = insertCarSchema.parse({
-      make,
-      model,
-      year,
-      plateNumber,
-    });
+    const car: InsertCar = insertCarSchema.parse(carInput);
     const newCar = await storage.createCar(car);
     res.status(201).json(newCar);
   } catch (error) {
