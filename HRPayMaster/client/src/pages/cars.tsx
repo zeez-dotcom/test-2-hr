@@ -28,6 +28,8 @@ export default function Cars() {
   const [isCreateCarDialogOpen, setIsCreateCarDialogOpen] = useState(false);
   const [isAssignCarDialogOpen, setIsAssignCarDialogOpen] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [isEditCarDialogOpen, setIsEditCarDialogOpen] = useState(false);
+  const [editingCar, setEditingCar] = useState<CarWithAssignment | null>(null);
   const [registrationPreview, setRegistrationPreview] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -106,6 +108,19 @@ export default function Cars() {
     }
   });
 
+  const updateCarMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) =>
+      apiRequest("PUT", `/api/cars/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
+      setIsEditCarDialogOpen(false);
+      toast({ title: "Car updated successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update car", variant: "destructive" });
+    }
+  });
+
   const carSchema = insertCarSchema.extend({
     plateNumber: z.string().min(1, "Plate number is required"),
     registrationOwner: z.string().min(1, "Registration owner is required"),
@@ -164,6 +179,39 @@ export default function Cars() {
 
   const onSubmitAssignment = (data: any) => {
     assignCarMutation.mutate(data);
+  };
+
+  const handleEditCar = (car: CarWithAssignment) => {
+    setEditingCar(car);
+    carForm.reset({
+      make: car.make || "",
+      model: car.model || "",
+      year: Number(car.year) || new Date().getFullYear(),
+      plateNumber: car.plateNumber || "",
+      status: car.status || "available",
+      mileage: car.mileage || 0,
+      registrationOwner: car.registrationOwner || "",
+      registrationExpiry: car.registrationExpiry
+        ? car.registrationExpiry.split('T')[0]
+        : "",
+      registrationDocumentImage: car.registrationDocumentImage || undefined,
+    });
+    setRegistrationPreview(null);
+    setIsEditCarDialogOpen(true);
+  };
+
+  const onSubmitEditCar = (data: z.infer<typeof carSchema>) => {
+    if (!editingCar) return;
+    const formData = new FormData();
+    Object.entries(data).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        formData.append(
+          key,
+          value instanceof File ? value : String(value)
+        );
+      }
+    });
+    updateCarMutation.mutate({ id: editingCar.id, data: formData });
   };
 
   const handleReturnCar = (assignmentId: string) => {
@@ -315,7 +363,14 @@ export default function Cars() {
             </DialogContent>
           </Dialog>
 
-          <Dialog open={isCreateCarDialogOpen} onOpenChange={setIsCreateCarDialogOpen}>
+          <Dialog
+            open={isCreateCarDialogOpen}
+            onOpenChange={(open) => {
+              setIsCreateCarDialogOpen(open);
+              carForm.reset();
+              setRegistrationPreview(null);
+            }}
+          >
             <DialogTrigger asChild>
               <Button>
                 <Plus className="w-4 h-4 mr-2" />
@@ -479,16 +534,176 @@ export default function Cars() {
                 Import
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
-              <DialogHeader>
-                <DialogTitle>Import Vehicles</DialogTitle>
-                <DialogDescription>
-                  Upload a spreadsheet to add or update vehicles.
-                </DialogDescription>
-              </DialogHeader>
-              <CarImport />
-            </DialogContent>
-          </Dialog>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Import Vehicles</DialogTitle>
+              <DialogDescription>
+                Upload a spreadsheet to add or update vehicles.
+              </DialogDescription>
+            </DialogHeader>
+            <CarImport />
+          </DialogContent>
+        </Dialog>
+        <Dialog
+          open={isEditCarDialogOpen}
+          onOpenChange={(open) => {
+            setIsEditCarDialogOpen(open);
+            if (!open) {
+              setEditingCar(null);
+              carForm.reset();
+              setRegistrationPreview(null);
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Edit Vehicle</DialogTitle>
+              <DialogDescription>
+                Update vehicle details.
+              </DialogDescription>
+            </DialogHeader>
+            <Form {...carForm}>
+              <form onSubmit={carForm.handleSubmit(onSubmitEditCar)} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={carForm.control}
+                    name="make"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Make</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Toyota" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={carForm.control}
+                    name="model"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Model</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Camry" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={carForm.control}
+                    name="year"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Year</FormLabel>
+                        <FormControl>
+                          <Input type="number" placeholder="2024" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={carForm.control}
+                    name="plateNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Plate Number</FormLabel>
+                        <FormControl>
+                          <Input placeholder="ABC-123" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={carForm.control}
+                  name="mileage"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Current Mileage</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="25000" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={carForm.control}
+                  name="registrationOwner"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Registration Owner</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Owner name" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={carForm.control}
+                  name="registrationExpiry"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Registration Expiry</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={carForm.control}
+                  name="registrationDocumentImage"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Registration Document</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          onChange={e => {
+                            const file = e.target.files?.[0];
+                            field.onChange(file);
+                            setRegistrationPreview(file ? URL.createObjectURL(file) : null);
+                          }}
+                        />
+                      </FormControl>
+                      {(registrationPreview || typeof field.value === "string") && (
+                        <img
+                          src={sanitizeImageSrc(registrationPreview || (field.value as string))}
+                          alt="Registration document preview"
+                          className="h-32 mt-2 rounded-md object-cover"
+                        />
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <DialogFooter>
+                  <Button type="submit" disabled={updateCarMutation.isPending}>
+                    {updateCarMutation.isPending ? "Saving..." : "Save Changes"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
         </div>
       </div>
 
@@ -527,20 +742,29 @@ export default function Cars() {
                   <Card key={car.id}>
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
+                      <div className="flex items-center space-x-2">
                           <Car className="w-4 h-4" />
                           <CardTitle className="text-lg">
                             {car.year} {car.make} {car.model}
                           </CardTitle>
                         </div>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => deleteCarMutation.mutate(car.id)}
-                          disabled={deleteCarMutation.isPending}
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
+                        <div className="flex items-center space-x-2">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleEditCar(car)}
+                          >
+                            <Edit className="w-3 h-3" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => deleteCarMutation.mutate(car.id)}
+                            disabled={deleteCarMutation.isPending}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
                       </div>
                       <CardDescription>{car.plateNumber}</CardDescription>
                     </CardHeader>
