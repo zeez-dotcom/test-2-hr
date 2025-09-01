@@ -217,6 +217,17 @@ describe('Cars page', () => {
     mutationMocks[3].shouldError = true;
     await mutationMocks[3].mutate('1');
     expect(toast).toHaveBeenCalledWith({ title: 'Failed to delete car', variant: 'destructive' });
+    mutationMocks[3].shouldError = false;
+    toast.mockReset();
+
+    // update car success
+    await mutationMocks[4].mutate({ id: '1' });
+    expect(toast).toHaveBeenCalledWith({ title: 'Car updated successfully' });
+    toast.mockReset();
+    // update car error
+    mutationMocks[4].shouldError = true;
+    await mutationMocks[4].mutate({ id: '1' });
+    expect(toast).toHaveBeenCalledWith({ title: 'Failed to update car', variant: 'destructive' });
   });
 });
 
