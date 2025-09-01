@@ -7,8 +7,13 @@ describe('sanitizeImageSrc', () => {
     expect(sanitizeImageSrc(url)).toBe(url);
   });
 
-  it('rejects invalid data URL', () => {
+  it('allows non-image data URL', () => {
     const url = 'data:text/plain;base64,AAAA';
+    expect(sanitizeImageSrc(url)).toBe(url);
+  });
+
+  it('rejects non-data non-http URL', () => {
+    const url = 'javascript:alert(1)';
     expect(sanitizeImageSrc(url)).toBe('');
   });
 });

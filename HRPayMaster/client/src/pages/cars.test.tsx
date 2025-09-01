@@ -229,6 +229,35 @@ describe('Cars page', () => {
     await mutationMocks[4].mutate({ id: '1' });
     expect(toast).toHaveBeenCalledWith({ title: 'Failed to update car', variant: 'destructive' });
   });
+
+  it('renders registration document image when provided', () => {
+    const cars = [
+      {
+        id: '1',
+        make: 'Toyota',
+        model: 'Corolla',
+        year: '2024',
+        plateNumber: 'ABC123',
+        status: 'available',
+        mileage: 1000,
+        currentAssignment: null,
+        registrationDocumentImage: 'data:image/png;base64,AAAA',
+      },
+    ];
+    queryClient.setQueryData(['/api/cars'], cars);
+    queryClient.setQueryData(['/api/car-assignments'], []);
+    queryClient.setQueryData(['/api/employees'], []);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Cars />
+      </QueryClientProvider>
+    );
+
+    const img = screen.getByAltText('Registration document');
+    expect(img).toBeInTheDocument();
+    expect(img).toHaveAttribute('src', cars[0].registrationDocumentImage);
+  });
 });
 
 describe('Car import', () => {
