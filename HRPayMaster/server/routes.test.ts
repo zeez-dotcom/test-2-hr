@@ -736,9 +736,16 @@ describe('employee routes', () => {
     expect(res.body).toEqual(mockLoans);
   });
 
-  it('GET /api/cars returns cars list', async () => {
+  it('GET /api/cars returns cars list including registration document', async () => {
     const mockCars = [
-      { id: '1', make: 'Toyota', model: 'Corolla', year: 2020, status: 'available' }
+      {
+        id: '1',
+        make: 'Toyota',
+        model: 'Corolla',
+        year: 2020,
+        status: 'available',
+        registrationDocumentImage: 'data:image/png;base64,AAAA',
+      },
     ];
     (storage.getCars as any).mockResolvedValue(mockCars);
 
