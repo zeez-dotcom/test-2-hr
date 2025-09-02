@@ -86,12 +86,12 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
         id: entryId,
         field,
         oldValue,
-        newValue: numericValue
+        newValue: numericValue,
       }]);
-      
+
       updatePayrollEntryMutation.mutate({
         entryId,
-        updates: { [field]: numericValue }
+        updates: { [field]: numericValue.toString() },
       });
     }
     

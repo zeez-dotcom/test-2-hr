@@ -108,9 +108,9 @@ export function BonusForm({
 
       const newBonus = currentBonus + data.amount;
       const updateData: any = {
-        bonusAmount: newBonus,
-        grossPay: currentGrossPay + data.amount,
-        netPay: currentNetPay + data.amount,
+        bonusAmount: newBonus.toString(),
+        grossPay: (currentGrossPay + data.amount).toString(),
+        netPay: (currentNetPay + data.amount).toString(),
         adjustmentReason: `${data.bonusType.replace('_', ' ')} bonus: ${data.reason}`,
       };
 

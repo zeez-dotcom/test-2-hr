@@ -414,9 +414,53 @@ export const insertPayrollRunSchema = createInsertSchema(payrollRuns).omit({
   createdAt: true,
 });
 
-export const insertPayrollEntrySchema = createInsertSchema(payrollEntries).omit({
-  id: true,
-});
+export const insertPayrollEntrySchema = createInsertSchema(payrollEntries)
+  .omit({
+    id: true,
+  })
+  .extend({
+    payrollRunId: z.preprocess(normalizeBigId, z.string()),
+    employeeId: z.preprocess(normalizeBigId, z.string()),
+    grossPay: z.preprocess(v => {
+      const n = parseNumber(v);
+      return n === undefined ? undefined : n.toString();
+    }, z.string()),
+    baseSalary: z.preprocess(v => {
+      const n = parseNumber(v);
+      return n === undefined ? undefined : n.toString();
+    }, z.string()),
+    bonusAmount: z.preprocess(v => {
+      const n = parseNumber(v);
+      return n === undefined ? undefined : n.toString();
+    }, z.string()),
+    workingDays: z.preprocess(parseNumber, z.number()),
+    actualWorkingDays: z.preprocess(parseNumber, z.number()),
+    vacationDays: z.preprocess(parseNumber, z.number()),
+    taxDeduction: z.preprocess(v => {
+      const n = parseNumber(v);
+      return n === undefined ? undefined : n.toString();
+    }, z.string()),
+    socialSecurityDeduction: z.preprocess(v => {
+      const n = parseNumber(v);
+      return n === undefined ? undefined : n.toString();
+    }, z.string()),
+    healthInsuranceDeduction: z.preprocess(v => {
+      const n = parseNumber(v);
+      return n === undefined ? undefined : n.toString();
+    }, z.string()),
+    loanDeduction: z.preprocess(v => {
+      const n = parseNumber(v);
+      return n === undefined ? undefined : n.toString();
+    }, z.string()),
+    otherDeductions: z.preprocess(v => {
+      const n = parseNumber(v);
+      return n === undefined ? undefined : n.toString();
+    }, z.string()),
+    netPay: z.preprocess(v => {
+      const n = parseNumber(v);
+      return n === undefined ? undefined : n.toString();
+    }, z.string()),
+  });
 
 export const insertVacationRequestSchema = createInsertSchema(vacationRequests).omit({
   id: true,
