@@ -34,12 +34,8 @@ loansRouter.post("/", async (req, res, next) => {
     if (parsedAmount !== undefined) {
       req.body.amount = parsedAmount.toString();
     }
-    if (req.body.remainingAmount === undefined) {
-      req.body.remainingAmount = req.body.amount;
-    }
-    if (req.body.status === undefined) {
-      req.body.status = "pending";
-    }
+    req.body.remainingAmount ??= req.body.amount;
+    req.body.status ??= "pending";
     const loan = insertLoanSchema.parse(req.body);
     const newLoan = await storage.createLoan(loan);
     res.status(201).json(newLoan);

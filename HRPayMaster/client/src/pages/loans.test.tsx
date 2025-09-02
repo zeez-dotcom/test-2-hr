@@ -18,7 +18,12 @@ vi.mock('@tanstack/react-query', async () => {
         isPending: false,
         mutate: (vars: any) => {
           if (mock.shouldError) {
-            options.onError?.('error', vars, null);
+            const err = {
+              response: {
+                json: () => ({ error: { fields: [{ message: 'Invalid loan data' }] } })
+              }
+            };
+            options.onError?.(err, vars, null);
           } else {
             options.onSuccess?.('success', vars, null);
           }
@@ -93,7 +98,7 @@ beforeEach(() => {
 });
 
 describe('Loans page', () => {
-  it('renders loans and handles create/update/delete with error handling', () => {
+  it('renders loans and handles create/update/delete with error handling', async () => {
     const loans = [
       {
         id: '1',
@@ -124,7 +129,8 @@ describe('Loans page', () => {
     // create error
     mutationMocks[0].shouldError = true;
     mutationMocks[0].mutate({});
-    expect(toast).toHaveBeenCalledWith({ title: 'Failed to create loan', variant: 'destructive' });
+    await Promise.resolve();
+    expect(toast).toHaveBeenCalledWith({ title: 'Invalid loan data', variant: 'destructive' });
     mutationMocks[0].shouldError = false;
     toast.mockReset();
 
