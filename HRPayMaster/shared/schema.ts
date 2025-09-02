@@ -424,10 +424,35 @@ export const insertVacationRequestSchema = createInsertSchema(vacationRequests).
   updatedAt: true,
 });
 
-export const insertLoanSchema = createInsertSchema(loans).omit({
-  id: true,
-  createdAt: true,
-});
+export const insertLoanSchema = createInsertSchema(loans)
+  .omit({
+    id: true,
+    createdAt: true,
+  })
+  .partial({
+    status: true,
+    interestRate: true,
+    endDate: true,
+    reason: true,
+    approvedBy: true,
+  })
+  .extend({
+    amount: z.preprocess(parseNumber, z.number()),
+    remainingAmount: z.preprocess(parseNumber, z.number()),
+    monthlyDeduction: z.preprocess(parseNumber, z.number()),
+    interestRate: z.preprocess(parseNumber, z.number().optional()),
+    startDate: z.preprocess(parseDate, z.string()),
+    endDate: z.preprocess(v => {
+      const val = parseDate(v);
+      return val === null ? undefined : val;
+    }, z.string().optional()),
+    status: z.preprocess(v => emptyToUndef(v), z.string().optional()),
+    reason: z.preprocess(v => {
+      const val = emptyToUndef(v);
+      return val === undefined ? undefined : String(val);
+    }, z.string().optional()),
+    approvedBy: z.preprocess(v => emptyToUndef(v), z.string().optional()),
+  });
 
 export const insertCarSchema = createInsertSchema(cars)
   .omit({
