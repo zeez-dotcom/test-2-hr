@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { PayrollRun, User } from "@shared/schema";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
-import { useSearch } from "wouter";
+import { useSearch, useLocation } from "wouter";
 
 interface PayrollGenerateRequest {
   period: string;
@@ -44,7 +44,14 @@ export default function Payroll() {
   }, [searchParams]);
 
   const user = queryClient.getQueryData<User>(["/api/me"]);
+  const [, navigate] = useLocation();
   const canGenerate = user?.role === "admin" || user?.role === "hr";
+
+  useEffect(() => {
+    if (!user) {
+      navigate("/login");
+    }
+  }, [user, navigate]);
 
   const {
     data: payrollRuns,
@@ -75,38 +82,23 @@ export default function Payroll() {
       if (status === 401 || status === 403) {
         toast({
           title: "Error",
-          description: "Please log in with an admin or HR account.",
+          description: "Please log in as an admin or HR user",
           variant: "destructive",
         });
         return;
       }
 
-      const statusMessages: Record<number, string> = {
-        400: "Invalid payroll data. Please check the form and try again.",
-        409: "Payroll for this period already exists.",
-        500: "An unexpected server error occurred. Please try again later.",
-      };
+      let description = "Failed to generate payroll";
 
-      let description = statusMessages[status as number] || "Failed to generate payroll";
-
-      if (!statusMessages[status as number]) {
-        try {
-          const data = await err.response?.json();
-          if (data?.error?.message || data?.message) {
-            description = data.error?.message ?? data.message;
-          }
-        } catch (_) {
-          if (err instanceof Error) {
-            try {
-              const parsed = JSON.parse(err.message.replace(/^\d+:\s*/, ""));
-              description = parsed.error?.message ?? parsed.message ?? description;
-            } catch {
-              // ignore JSON parse errors
-            }
-          }
+      try {
+        const data = await err.response?.json();
+        if (data?.error?.message || data?.message) {
+          description = data.error?.message ?? data.message;
         }
-
-        console.error("Unexpected error generating payroll:", err);
+      } catch {
+        if (err instanceof Error && err.message) {
+          description = err.message;
+        }
       }
 
       toast({
@@ -137,14 +129,6 @@ export default function Payroll() {
       });
     },
   });
-
-  if (!canGenerate) {
-    return (
-      <div>
-        <p>You do not have permission to access payroll.</p>
-      </div>
-    );
-  }
 
   if (error) {
     return (
@@ -232,6 +216,11 @@ export default function Payroll() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Payroll</h1>
         <p className="text-muted-foreground">Manage employee payroll and compensation</p>
+        {!canGenerate && (
+          <p className="text-sm text-muted-foreground mt-2">
+            You do not have permission to generate payroll.
+          </p>
+        )}
       </div>
             {/* Payroll Stats */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
