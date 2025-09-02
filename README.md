@@ -32,3 +32,6 @@ npm run dev --prefix HRPayMaster
 
 Alternatively, run `cd HRPayMaster && npm run dev`.
 
+> **Note**
+> Error responses include detailed messages and stack traces only when `NODE_ENV` is not set to `"production"`. The development script above already sets `NODE_ENV=development`; ensure your environment uses a non-production value to see error details during development.
+
