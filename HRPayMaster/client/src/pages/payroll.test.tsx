@@ -108,15 +108,15 @@ describe('Payroll page', () => {
 
     // generate payroll 401 error
     mutationMocks[0].shouldError = true;
-    mutationMocks[0].error = { status: 401 };
+    mutationMocks[0].error = { response: { status: 401 } } as any;
     await mutationMocks[0].mutate({});
-    expect(toast).toHaveBeenCalledWith({ title: 'Error', description: 'Please log in to continue', variant: 'destructive' });
+    expect(toast).toHaveBeenCalledWith({ title: 'Error', description: 'Please log in with an admin or HR account.', variant: 'destructive' });
     toast.mockReset();
 
     // generate payroll 403 error
-    mutationMocks[0].error = { status: 403 };
+    mutationMocks[0].error = { response: { status: 403 } } as any;
     await mutationMocks[0].mutate({});
-    expect(toast).toHaveBeenCalledWith({ title: 'Error', description: 'You do not have permission to generate payroll', variant: 'destructive' });
+    expect(toast).toHaveBeenCalledWith({ title: 'Error', description: 'Please log in with an admin or HR account.', variant: 'destructive' });
     toast.mockReset();
 
     // generate payroll server error message
