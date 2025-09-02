@@ -152,7 +152,7 @@ export const loans = pgTable("loans", {
   interestRate: numeric("interest_rate", { precision: 5, scale: 2 }).default("0"),
   startDate: date("start_date").notNull(),
   endDate: date("end_date"),
-  status: text("status").notNull().default("active"), // active, completed, cancelled
+  status: text("status").notNull().default("pending"), // pending, active, completed, cancelled
   reason: text("reason"),
   approvedBy: varchar("approved_by").references(() => employees.id),
   createdAt: timestamp("created_at").defaultNow(),

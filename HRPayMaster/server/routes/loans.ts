@@ -12,6 +12,7 @@ loansRouter.get("/", async (req, res, next) => {
     const loans = await storage.getLoans();
     res.json(loans);
   } catch (error) {
+    console.error("Failed to fetch loans:", error);
     next(new HttpError(500, "Failed to fetch loans"));
   }
 });
@@ -24,6 +25,7 @@ loansRouter.get("/:id", async (req, res, next) => {
     }
     res.json(loan);
   } catch (error) {
+    console.error("Failed to fetch loan:", error);
     next(new HttpError(500, "Failed to fetch loan"));
   }
 });
@@ -43,6 +45,7 @@ loansRouter.post("/", async (req, res, next) => {
     if (error instanceof z.ZodError) {
       return next(new HttpError(400, "Invalid loan data", error.errors));
     }
+    console.error("Failed to create loan:", error);
     next(new HttpError(500, "Failed to create loan"));
   }
 });
@@ -59,6 +62,7 @@ loansRouter.put("/:id", async (req, res, next) => {
     if (error instanceof z.ZodError) {
       return next(new HttpError(400, "Invalid loan data", error.errors));
     }
+    console.error("Failed to update loan:", error);
     next(new HttpError(500, "Failed to update loan"));
   }
 });
@@ -71,6 +75,7 @@ loansRouter.delete("/:id", async (req, res, next) => {
     }
     res.status(204).send();
   } catch (error) {
+    console.error("Failed to delete loan:", error);
     next(new HttpError(500, "Failed to delete loan"));
   }
 });

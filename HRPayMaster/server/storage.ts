@@ -770,7 +770,7 @@ export class DatabaseStorage implements IStorage {
       .insert(loans)
       .values({
         ...loan,
-        status: loan.status || "active",
+        status: loan.status || "pending",
         interestRate: loan.interestRate || "0",
       })
       .returning();
