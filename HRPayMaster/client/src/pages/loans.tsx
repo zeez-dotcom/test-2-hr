@@ -42,8 +42,20 @@ export default function Loans() {
       setIsCreateDialogOpen(false);
       toast({ title: "Loan created successfully" });
     },
-    onError: () => {
-      toast({ title: "Failed to create loan", variant: "destructive" });
+    onError: async (err: any) => {
+      let message = "Failed to create loan";
+      try {
+        const data = await err.response?.json();
+        message =
+          data?.error?.fields?.[0]?.message ||
+          data?.error?.details?.[0]?.message ||
+          data?.error?.message ||
+          err.message ||
+          message;
+      } catch {
+        message = err?.message || message;
+      }
+      toast({ title: message, variant: "destructive" });
     }
   });
 
@@ -80,7 +92,8 @@ export default function Loans() {
       status: "pending",
       interestRate: "0",
       reason: ""
-    }
+    },
+    mode: "onChange"
   });
 
   if (loansError || employeesError) {
@@ -151,9 +164,11 @@ export default function Loans() {
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <input type="hidden" value="pending" {...form.register("status")} />
                 <FormField
                   control={form.control}
                   name="employeeId"
+                  rules={{ required: true }}
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Employee</FormLabel>
@@ -180,11 +195,12 @@ export default function Loans() {
                   <FormField
                     control={form.control}
                     name="amount"
+                    rules={{ required: true }}
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Loan Amount</FormLabel>
                         <FormControl>
-                          <Input type="number" placeholder="5000" {...field} />
+                          <Input type="number" placeholder="5000" required {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -194,11 +210,12 @@ export default function Loans() {
                   <FormField
                     control={form.control}
                     name="monthlyDeduction"
+                    rules={{ required: true }}
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Monthly Deduction</FormLabel>
                         <FormControl>
-                          <Input type="number" placeholder="500" {...field} />
+                          <Input type="number" placeholder="500" required {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -210,11 +227,12 @@ export default function Loans() {
                   <FormField
                     control={form.control}
                     name="startDate"
+                    rules={{ required: true }}
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Start Date</FormLabel>
                         <FormControl>
-                          <Input type="date" {...field} value={field.value || ""} />
+                          <Input type="date" required {...field} value={field.value || ""} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -255,7 +273,7 @@ export default function Loans() {
                 />
 
                 <DialogFooter>
-                  <Button type="submit" disabled={createMutation.isPending}>
+                  <Button type="submit" disabled={createMutation.isPending || !form.formState.isValid}>
                     {createMutation.isPending ? "Creating..." : "Create Loan"}
                   </Button>
                 </DialogFooter>
