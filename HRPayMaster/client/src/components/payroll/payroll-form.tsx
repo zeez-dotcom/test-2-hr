@@ -19,9 +19,10 @@ type FormData = z.infer<typeof formSchema>;
 interface PayrollFormProps {
   onSubmit: (data: FormData) => void;
   isSubmitting: boolean;
+  canGenerate: boolean;
 }
 
-export default function PayrollForm({ onSubmit, isSubmitting }: PayrollFormProps) {
+export default function PayrollForm({ onSubmit, isSubmitting, canGenerate }: PayrollFormProps) {
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -29,6 +30,7 @@ export default function PayrollForm({ onSubmit, isSubmitting }: PayrollFormProps
       startDate: "",
       endDate: "",
     },
+    mode: "onChange",
   });
 
   // Helper to generate period suggestions
@@ -121,7 +123,11 @@ export default function PayrollForm({ onSubmit, isSubmitting }: PayrollFormProps
         </div>
         
         <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
-          <Button type="submit" disabled={isSubmitting} className="bg-success text-white hover:bg-green-700">
+          <Button
+            type="submit"
+            disabled={isSubmitting || !canGenerate || !form.formState.isValid}
+            className="bg-success text-white hover:bg-green-700"
+          >
             {isSubmitting ? "Generating..." : "Generate Payroll"}
           </Button>
         </div>

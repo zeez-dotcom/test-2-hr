@@ -68,21 +68,32 @@ export default function Payroll() {
         return;
       }
 
-      let description = "Failed to generate payroll";
-      try {
-        const data = await err.response?.json();
-        if (data?.error?.message || data?.message) {
-          description = data.error?.message ?? data.message;
-        }
-      } catch (_) {
-        if (err instanceof Error) {
-          try {
-            const parsed = JSON.parse(err.message.replace(/^\d+:\s*/, ""));
-            description = parsed.error?.message ?? parsed.message ?? description;
-          } catch {
-            // ignore JSON parse errors
+      const statusMessages: Record<number, string> = {
+        400: "Invalid payroll data. Please check the form and try again.",
+        409: "Payroll for this period already exists.",
+        500: "An unexpected server error occurred. Please try again later.",
+      };
+
+      let description = statusMessages[status as number] || "Failed to generate payroll";
+
+      if (!statusMessages[status as number]) {
+        try {
+          const data = await err.response?.json();
+          if (data?.error?.message || data?.message) {
+            description = data.error?.message ?? data.message;
+          }
+        } catch (_) {
+          if (err instanceof Error) {
+            try {
+              const parsed = JSON.parse(err.message.replace(/^\d+:\s*/, ""));
+              description = parsed.error?.message ?? parsed.message ?? description;
+            } catch {
+              // ignore JSON parse errors
+            }
           }
         }
+
+        console.error("Unexpected error generating payroll:", err);
       }
 
       toast({
@@ -285,6 +296,7 @@ export default function Payroll() {
                       <PayrollForm
                         onSubmit={handleGeneratePayroll}
                         isSubmitting={generatePayrollMutation.isPending}
+                        canGenerate={canGenerate}
                       />
                     </DialogContent>
                   </Dialog>
@@ -314,6 +326,7 @@ export default function Payroll() {
                           <PayrollForm
                             onSubmit={handleGeneratePayroll}
                             isSubmitting={generatePayrollMutation.isPending}
+                            canGenerate={canGenerate}
                           />
                         </DialogContent>
                       </Dialog>
