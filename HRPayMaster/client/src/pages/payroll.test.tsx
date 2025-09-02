@@ -110,13 +110,13 @@ describe('Payroll page', () => {
     mutationMocks[0].shouldError = true;
     mutationMocks[0].error = { response: { status: 401 } } as any;
     await mutationMocks[0].mutate({});
-    expect(toast).toHaveBeenCalledWith({ title: 'Error', description: 'Please log in with an admin or HR account.', variant: 'destructive' });
+    expect(toast).toHaveBeenCalledWith({ title: 'Error', description: 'Please log in as an admin or HR user', variant: 'destructive' });
     toast.mockReset();
 
     // generate payroll 403 error
     mutationMocks[0].error = { response: { status: 403 } } as any;
     await mutationMocks[0].mutate({});
-    expect(toast).toHaveBeenCalledWith({ title: 'Error', description: 'Please log in with an admin or HR account.', variant: 'destructive' });
+    expect(toast).toHaveBeenCalledWith({ title: 'Error', description: 'Please log in as an admin or HR user', variant: 'destructive' });
     toast.mockReset();
 
     // generate payroll server error message

@@ -88,6 +88,23 @@ export default function Payroll() {
         return;
       }
 
+      if (status === 409) {
+        let description = "Payroll run already exists for this period";
+        try {
+          const data = await err.response?.json();
+          if (data?.error?.message || data?.message) {
+            description = data.error?.message ?? data.message;
+          }
+        } catch {}
+
+        toast({
+          title: "Error",
+          description,
+          variant: "destructive",
+        });
+        return;
+      }
+
       let description = "Failed to generate payroll";
 
       try {
@@ -140,6 +157,15 @@ export default function Payroll() {
   }
 
   const handleGeneratePayroll = (data: PayrollGenerateRequest) => {
+    const exists = payrollRuns?.some((run) => run.period === data.period);
+    if (exists) {
+      toast({
+        title: "Error",
+        description: "Payroll run already exists for this period",
+        variant: "destructive",
+      });
+      return;
+    }
     generatePayrollMutation.mutate(data);
   };
 
