@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 
 import PayrollForm from "@/components/payroll/payroll-form";
@@ -14,11 +14,17 @@ import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { PayrollRun, User } from "@shared/schema";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
+import { useSearch } from "wouter";
 
 interface PayrollGenerateRequest {
   period: string;
   startDate: string;
   endDate: string;
+}
+
+function useSearchParams() {
+  const search = useSearch();
+  return useMemo(() => new URLSearchParams(search), [search]);
 }
 
 export default function Payroll() {
@@ -29,6 +35,13 @@ export default function Payroll() {
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [payrollToDelete, setPayrollToDelete] = useState<string | null>(null);
   const { toast } = useToast();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    if (searchParams.get("generate") === "1") {
+      setIsGenerateDialogOpen(true);
+    }
+  }, [searchParams]);
 
   const user = queryClient.getQueryData<User>(["/api/me"]);
   const canGenerate = user?.role === "admin" || user?.role === "hr";
