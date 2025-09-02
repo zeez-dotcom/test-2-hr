@@ -79,7 +79,7 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
       const numericValue = parseFloat(value) || 0;
       updatePayrollEntryMutation.mutate({
         entryId,
-        updates: { [field]: numericValue }
+        updates: { [field]: numericValue.toString() },
       });
     }
     

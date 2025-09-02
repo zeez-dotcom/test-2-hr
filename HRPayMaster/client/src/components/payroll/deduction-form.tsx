@@ -111,20 +111,20 @@ export function DeductionForm({
       // Map deduction type to the appropriate field
       switch (data.deductionType) {
         case "tax":
-          updateData.taxDeduction = data.amount;
+          updateData.taxDeduction = data.amount.toString();
           break;
         case "social_security":
-          updateData.socialSecurityDeduction = data.amount;
+          updateData.socialSecurityDeduction = data.amount.toString();
           break;
         case "health_insurance":
-          updateData.healthInsuranceDeduction = data.amount;
+          updateData.healthInsuranceDeduction = data.amount.toString();
           break;
         case "loan":
-          updateData.loanDeduction = data.amount;
+          updateData.loanDeduction = data.amount.toString();
           break;
         case "penalty":
         case "other":
-          updateData.otherDeductions = currentDeductions + data.amount;
+          updateData.otherDeductions = (currentDeductions + data.amount).toString();
           break;
       }
 
