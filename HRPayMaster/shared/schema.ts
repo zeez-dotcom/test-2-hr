@@ -443,7 +443,7 @@ export const insertLoanSchema = createInsertSchema(loans)
   .extend({
     employeeId: z.preprocess(normalizeBigId, z.string()),
     amount: z.preprocess(parseNumberToString, z.string()),
-    remainingAmount: z.preprocess(parseNumberToString, z.string()),
+    remainingAmount: z.preprocess(parseNumberToString, z.string().optional()),
     monthlyDeduction: z.preprocess(parseNumberToString, z.string()),
     interestRate: z.preprocess(parseNumberToString, z.string().optional()),
     startDate: z.preprocess(parseDate, z.string()),
