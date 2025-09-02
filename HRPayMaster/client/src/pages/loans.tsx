@@ -71,7 +71,7 @@ export default function Loans() {
   });
 
   const form = useForm({
-    resolver: zodResolver(insertLoanSchema),
+    resolver: zodResolver(insertLoanSchema.omit({ remainingAmount: true })),
     defaultValues: {
       employeeId: "",
       amount: "",
