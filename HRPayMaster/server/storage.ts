@@ -151,14 +151,17 @@ export interface IStorage {
   updatePayrollEntry(id: string, payrollEntry: Partial<InsertPayrollEntry>): Promise<PayrollEntry | undefined>;
 
   // Vacation request methods
-  getVacationRequests(): Promise<VacationRequestWithEmployee[]>;
+  getVacationRequests(
+    start?: Date,
+    end?: Date,
+  ): Promise<VacationRequestWithEmployee[]>;
   getVacationRequest(id: string): Promise<VacationRequestWithEmployee | undefined>;
   createVacationRequest(vacationRequest: InsertVacationRequest): Promise<VacationRequest>;
   updateVacationRequest(id: string, vacationRequest: Partial<InsertVacationRequest>): Promise<VacationRequest | undefined>;
   deleteVacationRequest(id: string): Promise<boolean>;
 
   // Loan methods
-  getLoans(): Promise<LoanWithEmployee[]>;
+  getLoans(start?: Date, end?: Date): Promise<LoanWithEmployee[]>;
   getLoan(id: string): Promise<LoanWithEmployee | undefined>;
   createLoan(loan: InsertLoan): Promise<Loan>;
   updateLoan(id: string, loan: Partial<InsertLoan>): Promise<Loan | undefined>;
@@ -206,7 +209,10 @@ export interface IStorage {
   updateEmailAlert(id: string, alert: Partial<InsertEmailAlert>): Promise<EmailAlert | undefined>;
 
   // Employee event methods
-  getEmployeeEvents(): Promise<(EmployeeEvent & { employee: Employee })[]>;
+  getEmployeeEvents(
+    start?: Date,
+    end?: Date,
+  ): Promise<(EmployeeEvent & { employee: Employee })[]>;
   getEmployeeEvent(id: string): Promise<EmployeeEvent | undefined>;
   createEmployeeEvent(event: InsertEmployeeEvent): Promise<EmployeeEvent>;
   updateEmployeeEvent(id: string, event: Partial<InsertEmployeeEvent>): Promise<EmployeeEvent | undefined>;
@@ -647,12 +653,24 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Vacation request methods
-  async getVacationRequests(): Promise<VacationRequestWithEmployee[]> {
+  async getVacationRequests(
+    start?: Date,
+    end?: Date,
+  ): Promise<VacationRequestWithEmployee[]> {
+    const where =
+      start && end
+        ? and(
+            lte(vacationRequests.startDate, end),
+            gte(vacationRequests.endDate, start),
+          )
+        : undefined;
+
     const requests = await db.query.vacationRequests.findMany({
       with: {
         employee: true,
         approver: true,
       },
+      where,
       orderBy: desc(vacationRequests.createdAt),
     });
     return requests.map(req => ({
@@ -707,12 +725,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Loan methods
-  async getLoans(): Promise<LoanWithEmployee[]> {
+  async getLoans(start?: Date, end?: Date): Promise<LoanWithEmployee[]> {
+    const where =
+      start && end
+        ? and(
+            lte(loans.startDate, end),
+            sql`(${loans.endDate} IS NULL OR ${loans.endDate} >= ${start})`,
+          )
+        : undefined;
+
     const loanList = await db.query.loans.findMany({
       with: {
         employee: true,
         approver: true,
       },
+      where,
       orderBy: desc(loans.createdAt),
     });
     return loanList.map(loan => ({
@@ -1175,11 +1202,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Employee event methods
-  async getEmployeeEvents(): Promise<(EmployeeEvent & { employee: Employee })[]> {
+  async getEmployeeEvents(
+    start?: Date,
+    end?: Date,
+  ): Promise<(EmployeeEvent & { employee: Employee })[]> {
+    const where =
+      start && end
+        ? and(
+            gte(employeeEvents.eventDate, start),
+            lte(employeeEvents.eventDate, end),
+          )
+        : undefined;
+
     const events = await db.query.employeeEvents.findMany({
       with: {
         employee: true,
       },
+      where,
       orderBy: desc(employeeEvents.createdAt),
     });
     return events;

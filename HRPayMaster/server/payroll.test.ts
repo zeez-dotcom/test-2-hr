@@ -80,13 +80,69 @@ describe('payroll generate', () => {
     vi.mocked(storage.getEmployees).mockResolvedValue([
       { id: 'e1', salary: '3000', status: 'active' },
     ] as any);
-    vi.mocked(storage.getLoans).mockResolvedValue([
-      { employeeId: 'e1', status: 'active', remainingAmount: '500', monthlyDeduction: '100' },
+
+    const loanData = [
+      {
+        employeeId: 'e1',
+        status: 'active',
+        remainingAmount: '500',
+        monthlyDeduction: '100',
+        startDate: '2024-01-01',
+        endDate: '2024-06-01',
+      },
+      {
+        employeeId: 'e1',
+        status: 'active',
+        remainingAmount: '300',
+        monthlyDeduction: '50',
+        startDate: '2024-02-01',
+        endDate: '2024-05-01',
+      },
+    ] as any;
+    vi.mocked(storage.getLoans).mockImplementation(async (start, end) =>
+      loanData.filter(
+        l =>
+          !start ||
+          !end ||
+          (new Date(l.startDate) <= end &&
+            (!l.endDate || new Date(l.endDate) >= start)),
+      ),
+    );
+
+    vi.mocked(storage.getVacationRequests).mockImplementation(async () => [
+      {
+        employeeId: 'e1',
+        status: 'approved',
+        startDate: '2024-01-05',
+        endDate: '2024-01-06',
+      },
     ] as any);
-    vi.mocked(storage.getVacationRequests).mockResolvedValue([
-      { employeeId: 'e1', status: 'approved', startDate: '2024-01-05', endDate: '2024-01-06' },
-    ] as any);
-    vi.mocked(storage.getEmployeeEvents).mockResolvedValue([] as any);
+
+    const eventData = [
+      {
+        employeeId: 'e1',
+        eventDate: '2024-01-10',
+        eventType: 'bonus',
+        affectsPayroll: true,
+        status: 'active',
+        amount: '200',
+      },
+      {
+        employeeId: 'e1',
+        eventDate: '2024-02-10',
+        eventType: 'bonus',
+        affectsPayroll: true,
+        status: 'active',
+        amount: '300',
+      },
+    ] as any;
+    vi.mocked(storage.getEmployeeEvents).mockImplementation(async (start, end) =>
+      eventData.filter(
+        e =>
+          !start || !end ||
+          (new Date(e.eventDate) >= start && new Date(e.eventDate) <= end),
+      ),
+    );
 
     const insert = vi.fn().mockImplementation(() => ({
       values: vi.fn().mockImplementation((vals) => ({ returning: vi.fn().mockResolvedValue([{ id: 'run1', ...vals }]) })),
@@ -100,9 +156,21 @@ describe('payroll generate', () => {
       .send({ period: 'Jan', startDate: '2024-01-01', endDate: '2024-01-30' });
 
     expect(res.status).toBe(201);
-    expect(res.body.grossAmount).toBe('2800');
+    expect(res.body.grossAmount).toBe('3000');
     expect(res.body.totalDeductions).toBe('100');
-    expect(res.body.netAmount).toBe('2700');
+    expect(res.body.netAmount).toBe('2900');
+    expect(storage.getLoans).toHaveBeenCalledWith(
+      new Date('2024-01-01'),
+      new Date('2024-01-30'),
+    );
+    expect(storage.getVacationRequests).toHaveBeenCalledWith(
+      new Date('2024-01-01'),
+      new Date('2024-01-30'),
+    );
+    expect(storage.getEmployeeEvents).toHaveBeenCalledWith(
+      new Date('2024-01-01'),
+      new Date('2024-01-30'),
+    );
     expect(storage.createNotification).toHaveBeenCalledTimes(2);
     expect(storage.createNotification).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'vacation_approved' }),
