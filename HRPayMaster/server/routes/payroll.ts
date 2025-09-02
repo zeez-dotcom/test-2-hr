@@ -84,9 +84,9 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
     }
 
     // Get loans, vacation requests, and employee events for the period
-    const loans = await storage.getLoans();
-    const vacationRequests = await storage.getVacationRequests();
-    const employeeEvents = await storage.getEmployeeEvents();
+    const loans = await storage.getLoans(start, end);
+    const vacationRequests = await storage.getVacationRequests(start, end);
+    const employeeEvents = await storage.getEmployeeEvents(start, end);
     // Calculate number of days in this payroll period
     const workingDays =
       Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
