@@ -3,6 +3,7 @@ import { HttpError } from "../errorHandler";
 import { storage } from "../storage";
 import { insertLoanSchema } from "@shared/schema";
 import { z } from "zod";
+import { parseNumber } from "../utils/normalize";
 
 export const loansRouter = Router();
 
@@ -29,6 +30,10 @@ loansRouter.get("/:id", async (req, res, next) => {
 
 loansRouter.post("/", async (req, res, next) => {
   try {
+    const parsedAmount = parseNumber(req.body.amount);
+    if (parsedAmount !== undefined) {
+      req.body.amount = parsedAmount.toString();
+    }
     if (req.body.remainingAmount === undefined) {
       req.body.remainingAmount = req.body.amount;
     }
