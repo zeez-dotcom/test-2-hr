@@ -11,10 +11,6 @@ import {
 } from "../server/utils/normalize";
 
 const parseDate = (v: unknown) => parseDateToISO(v).value;
-const parseNumberToString = (v: unknown) => {
-  const n = parseNumber(v);
-  return n === undefined ? undefined : n.toString();
-};
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -433,19 +429,12 @@ export const insertLoanSchema = createInsertSchema(loans)
     id: true,
     createdAt: true,
   })
-  .partial({
-    status: true,
-    interestRate: true,
-    endDate: true,
-    reason: true,
-    approvedBy: true,
-  })
   .extend({
     employeeId: z.preprocess(normalizeBigId, z.string()),
-    amount: z.preprocess(parseNumberToString, z.string()),
-    remainingAmount: z.preprocess(parseNumberToString, z.string().optional()),
-    monthlyDeduction: z.preprocess(parseNumberToString, z.string()),
-    interestRate: z.preprocess(parseNumberToString, z.string().optional()),
+    amount: z.preprocess(parseNumber, z.number()),
+    remainingAmount: z.preprocess(parseNumber, z.number().optional()),
+    monthlyDeduction: z.preprocess(parseNumber, z.number()),
+    interestRate: z.preprocess(parseNumber, z.number().optional()),
     startDate: z.preprocess(parseDate, z.string()),
     endDate: z.preprocess(v => {
       const val = parseDate(v);

@@ -95,6 +95,10 @@ export default function Loans() {
     },
     mode: "onChange"
   });
+  form.register("employeeId", { required: true });
+  form.register("amount", { required: true });
+  form.register("monthlyDeduction", { required: true });
+  form.register("startDate", { required: true });
 
   if (loansError || employeesError) {
     return <div>Error loading loans</div>;
