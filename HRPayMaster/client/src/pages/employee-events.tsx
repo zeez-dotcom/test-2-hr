@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, Calendar as CalendarIcon, TrendingUp, TrendingDown, Award, AlertTriangle, Clock, Trash2, User, FileText, Car, Info } from "lucide-react";
+import { Plus, Calendar as CalendarIcon, TrendingUp, TrendingDown, Award, AlertTriangle, Clock, Trash2, Edit, User, FileText, Car, Info } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
@@ -27,6 +27,7 @@ export default function EmployeeEvents() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [eventToDelete, setEventToDelete] = useState<string | null>(null);
+  const [eventToEdit, setEventToEdit] = useState<(EmployeeEvent & { employee?: Employee }) | null>(null);
   const { toast } = useToast();
 
   const {
@@ -105,6 +106,29 @@ export default function EmployeeEvents() {
     },
   });
   
+  const updateEventMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: InsertEmployeeEvent }) => {
+      await apiRequest("PUT", `/api/employee-events/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/employee-events"] });
+      setIsDialogOpen(false);
+      setEventToEdit(null);
+      form.reset();
+      toast({
+        title: "Success",
+        description: "Employee event updated successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update employee event",
+        variant: "destructive",
+      });
+    },
+  });
+
   if (eventsError || employeesError) {
     return <div>Error loading employee events</div>;
   }
@@ -158,7 +182,35 @@ export default function EmployeeEvents() {
   };
 
   const onSubmit = (data: InsertEmployeeEvent) => {
-    createEventMutation.mutate(data);
+    if (eventToEdit) {
+      updateEventMutation.mutate({ id: eventToEdit.id, data });
+    } else {
+      createEventMutation.mutate(data);
+    }
+  };
+
+  const handleEditEvent = (event: EmployeeEvent & { employee?: Employee }) => {
+    setEventToEdit(event);
+    form.reset({
+      employeeId: event.employeeId,
+      eventType: event.eventType as any,
+      title: event.title,
+      description: event.description,
+      amount: event.amount?.toString(),
+      eventDate: format(new Date(event.eventDate), 'yyyy-MM-dd'),
+      documentUrl: event.documentUrl ?? '',
+      affectsPayroll: event.affectsPayroll,
+      status: event.status as any,
+    });
+    setIsDialogOpen(true);
+  };
+
+  const handleDialogOpenChange = (open: boolean) => {
+    setIsDialogOpen(open);
+    if (!open) {
+      setEventToEdit(null);
+      form.reset();
+    }
   };
 
   const handleDeleteEvent = (eventId: string) => {
@@ -212,16 +264,16 @@ export default function EmployeeEvents() {
           <h1 className="text-3xl font-bold tracking-tight">Employee Events</h1>
           <p className="text-muted-foreground">Record payroll adjustments and employee events</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
           <DialogTrigger asChild>
-            <Button>
+            <Button onClick={() => { setEventToEdit(null); form.reset(); }}>
               <Plus className="mr-2" size={16} />
               Add Event
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Record Employee Event</DialogTitle>
+              <DialogTitle>{eventToEdit ? "Edit Employee Event" : "Record Employee Event"}</DialogTitle>
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -397,19 +449,25 @@ export default function EmployeeEvents() {
                 />
 
                 <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    onClick={() => setIsDialogOpen(false)}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => handleDialogOpenChange(false)}
                   >
                     Cancel
                   </Button>
-                  <Button 
-                    type="submit" 
-                    disabled={createEventMutation.isPending}
+                  <Button
+                    type="submit"
+                    disabled={createEventMutation.isPending || updateEventMutation.isPending}
                     className="bg-success text-white hover:bg-success/90"
                   >
-                    {createEventMutation.isPending ? "Recording..." : "Record Event"}
+                    {eventToEdit
+                      ? updateEventMutation.isPending
+                        ? "Updating..."
+                        : "Update Event"
+                      : createEventMutation.isPending
+                        ? "Recording..."
+                        : "Record Event"}
                   </Button>
                 </div>
               </form>
@@ -524,6 +582,14 @@ export default function EmployeeEvents() {
                           </div>
                         </div>
                       )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEditEvent(event)}
+                        className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="sm"
