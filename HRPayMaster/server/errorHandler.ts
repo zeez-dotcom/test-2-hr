@@ -16,7 +16,9 @@ export function errorHandler(err: any, _req: Request, res: Response, _next: Next
   const isZodError = err instanceof ZodError;
   const status = isZodError ? 400 : err.status || err.statusCode || 500;
   const message = isZodError ? "Invalid request data" : err.message || "Internal Server Error";
-  const details = isZodError ? err.errors : err.details;
+  const details = isZodError
+    ? err.errors
+    : err.details ?? (err instanceof Error ? err : undefined);
 
   const body: any = { error: { message } };
 

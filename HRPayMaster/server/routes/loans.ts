@@ -40,8 +40,9 @@ loansRouter.post("/", async (req, res, next) => {
     if (error instanceof z.ZodError) {
       return next(new HttpError(400, "Invalid loan data", error.errors));
     }
-    console.error("Failed to create loan:", error);
-    next(new HttpError(500, "Failed to create loan", error));
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error("Failed to create loan:", err);
+    next(new HttpError(500, "Failed to create loan", err));
   }
 });
 

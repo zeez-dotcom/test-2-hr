@@ -764,6 +764,23 @@ describe('employee routes', () => {
     expect(res.body.remainingAmount).toBe(res.body.amount);
   });
 
+  it('POST /api/loans includes database error message on constraint violation', async () => {
+    const dbMessage = 'insert or update on table "loans" violates foreign key constraint';
+    (storage.createLoan as any).mockRejectedValue(dbMessage);
+
+    const res = await request(app).post('/api/loans').send({
+      employeeId: '1',
+      amount: '1000',
+      monthlyDeduction: '100',
+      startDate: '2024-01-01',
+      status: 'active',
+      interestRate: '0',
+    });
+
+    expect(res.status).toBe(500);
+    expect(res.body.error.details.message).toContain('violates foreign key constraint');
+  });
+
   it('GET /api/cars returns cars list including registration document', async () => {
     const mockCars = [
       {
