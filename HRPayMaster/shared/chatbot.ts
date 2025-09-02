@@ -7,6 +7,8 @@ export type ChatIntent =
   | "requestVacation"
   | "runPayroll"
   | "help"
+  | "loanStatus"
+  | "reportSummary"
   | "unknown";
 
 export interface ParsedIntent {
@@ -30,6 +32,14 @@ export function parseIntent(message: string): ParsedIntent {
 
   if (lower.includes("payroll")) {
     return { type: "runPayroll" };
+  }
+
+  if (lower.includes("loan")) {
+    return { type: "loanStatus" };
+  }
+
+  if (lower.includes("report") || lower.includes("summary")) {
+    return { type: "reportSummary" };
   }
 
   if (lower.includes("help")) {
