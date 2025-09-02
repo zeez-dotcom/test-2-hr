@@ -12,7 +12,7 @@ import { Calculator, DollarSign, FileText, Trash2, Eye, Edit } from "lucide-reac
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import type { PayrollRun } from "@shared/schema";
+import type { PayrollRun, User } from "@shared/schema";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
 
 interface PayrollGenerateRequest {
@@ -30,6 +30,9 @@ export default function Payroll() {
   const [payrollToDelete, setPayrollToDelete] = useState<string | null>(null);
   const { toast } = useToast();
 
+  const user = queryClient.getQueryData<User>(["/api/me"]);
+  const canGenerate = user?.role === "admin" || user?.role === "hr";
+
   const {
     data: payrollRuns,
     isLoading,
@@ -37,6 +40,7 @@ export default function Payroll() {
     refetch,
   } = useQuery<PayrollRun[]>({
     queryKey: ["/api/payroll"],
+    enabled: canGenerate,
   });
 
   const generatePayrollMutation = useMutation({
@@ -52,10 +56,26 @@ export default function Payroll() {
         description: "Payroll generated successfully",
       });
     },
-    onError: () => {
+    onError: (err: any) => {
+      let description = "Failed to generate payroll";
+      const status = err?.status;
+
+      if (status === 401) {
+        description = "Please log in to continue";
+      } else if (status === 403) {
+        description = "You do not have permission to generate payroll";
+      } else if (err instanceof Error) {
+        try {
+          const parsed = JSON.parse(err.message.replace(/^\d+:\s*/, ""));
+          description = parsed.error?.message ?? description;
+        } catch (_) {
+          // ignore JSON parse errors
+        }
+      }
+
       toast({
         title: "Error",
-        description: "Failed to generate payroll",
+        description,
         variant: "destructive",
       });
     },
@@ -81,6 +101,14 @@ export default function Payroll() {
       });
     },
   });
+
+  if (!canGenerate) {
+    return (
+      <div>
+        <p>You do not have permission to access payroll.</p>
+      </div>
+    );
+  }
 
   if (error) {
     return (

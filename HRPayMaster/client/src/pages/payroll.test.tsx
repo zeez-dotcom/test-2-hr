@@ -90,6 +90,7 @@ describe('Payroll page', () => {
       },
     ];
     queryClient.setQueryData(['/api/payroll'], payrollRuns);
+    queryClient.setQueryData(['/api/me'], { role: 'admin' });
 
     render(
       <QueryClientProvider client={queryClient}>
