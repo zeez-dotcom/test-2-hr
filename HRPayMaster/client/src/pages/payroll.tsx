@@ -56,20 +56,30 @@ export default function Payroll() {
         description: "Payroll generated successfully",
       });
     },
-    onError: (err: any) => {
+    onError: async (err: any) => {
       let description = "Failed to generate payroll";
-      const status = err?.status;
+      const status = err?.status ?? err?.response?.status;
 
       if (status === 401) {
         description = "Please log in to continue";
       } else if (status === 403) {
         description = "You do not have permission to generate payroll";
-      } else if (err instanceof Error) {
+      } else {
         try {
-          const parsed = JSON.parse(err.message.replace(/^\d+:\s*/, ""));
-          description = parsed.error?.message ?? description;
+          const data = await err.response?.json();
+          if (data?.error?.message || data?.message) {
+            description = data.error?.message ?? data.message;
+          }
         } catch (_) {
-          // ignore JSON parse errors
+          if (err instanceof Error) {
+            try {
+              const parsed = JSON.parse(err.message.replace(/^\d+:\s*/, ""));
+              description =
+                parsed.error?.message ?? parsed.message ?? description;
+            } catch {
+              // ignore JSON parse errors
+            }
+          }
         }
       }
 
