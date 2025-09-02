@@ -29,6 +29,9 @@ loansRouter.get("/:id", async (req, res, next) => {
 
 loansRouter.post("/", async (req, res, next) => {
   try {
+    if (req.body.remainingAmount === undefined) {
+      req.body.remainingAmount = req.body.amount;
+    }
     const loan = insertLoanSchema.parse(req.body);
     const newLoan = await storage.createLoan(loan);
     res.status(201).json(newLoan);

@@ -19,6 +19,7 @@ vi.mock('./storage', () => {
       createEmployeeCustomValue: vi.fn(),
       getPayrollRuns: vi.fn(),
       getLoans: vi.fn(),
+      createLoan: vi.fn(),
       getCars: vi.fn(),
       createCar: vi.fn(),
       updateCar: vi.fn(),
@@ -734,6 +735,33 @@ describe('employee routes', () => {
     const res = await request(app).get('/api/loans');
     expect(res.status).toBe(200);
     expect(res.body).toEqual(mockLoans);
+  });
+
+  it('POST /api/loans defaults remainingAmount to amount', async () => {
+    const payload = {
+      employeeId: '1',
+      amount: '1000',
+      monthlyDeduction: '100',
+      startDate: '2024-01-01',
+      status: 'active',
+      interestRate: '0',
+    };
+    const created = { id: '1', remainingAmount: '1000', ...payload };
+    (storage.createLoan as any).mockResolvedValue(created);
+
+    const res = await request(app).post('/api/loans').send({
+      employeeId: payload.employeeId,
+      amount: payload.amount,
+      monthlyDeduction: payload.monthlyDeduction,
+      startDate: payload.startDate,
+      status: payload.status,
+      interestRate: payload.interestRate,
+    });
+
+    expect(res.status).toBe(201);
+    const loanArg = (storage.createLoan as any).mock.calls[0][0];
+    expect(loanArg.remainingAmount).toBe(loanArg.amount);
+    expect(res.body.remainingAmount).toBe(res.body.amount);
   });
 
   it('GET /api/cars returns cars list including registration document', async () => {
