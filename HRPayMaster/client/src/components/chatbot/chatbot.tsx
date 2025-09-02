@@ -91,6 +91,45 @@ export function Chatbot() {
         setPending({ type: "runPayroll", data: {} });
         setMessages((m) => [...m, { from: "bot", text: "What is the payroll period name?" }]);
         break;
+      case "loanStatus":
+        try {
+          const res = await apiRequest(
+            "GET",
+            `/api/chatbot/loan-status/${selectedEmployee}`
+          );
+          const data = await res.json();
+          setMessages((m) => [
+            ...m,
+            { from: "bot", text: `Loan balance is ${data.balance}.` },
+          ]);
+        } catch {
+          setMessages((m) => [
+            ...m,
+            { from: "bot", text: "Could not fetch loan status." },
+          ]);
+        }
+        break;
+      case "reportSummary":
+        try {
+          const res = await apiRequest(
+            "GET",
+            `/api/chatbot/report-summary/${selectedEmployee}`
+          );
+          const data = await res.json();
+          setMessages((m) => [
+            ...m,
+            {
+              from: "bot",
+              text: `Bonuses: ${data.bonuses}, Deductions: ${data.deductions}, Net Pay: ${data.netPay}.`,
+            },
+          ]);
+        } catch {
+          setMessages((m) => [
+            ...m,
+            { from: "bot", text: "Could not fetch report summary." },
+          ]);
+        }
+        break;
       case "help":
         setMessages((m) => [
           ...m,
