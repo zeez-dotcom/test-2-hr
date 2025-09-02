@@ -57,28 +57,30 @@ export default function Payroll() {
       });
     },
     onError: async (err: any) => {
-      let description = "Failed to generate payroll";
-      const status = err?.status ?? err?.response?.status;
+      const status = err?.response?.status;
 
-      if (status === 401) {
-        description = "Please log in to continue";
-      } else if (status === 403) {
-        description = "You do not have permission to generate payroll";
-      } else {
-        try {
-          const data = await err.response?.json();
-          if (data?.error?.message || data?.message) {
-            description = data.error?.message ?? data.message;
-          }
-        } catch (_) {
-          if (err instanceof Error) {
-            try {
-              const parsed = JSON.parse(err.message.replace(/^\d+:\s*/, ""));
-              description =
-                parsed.error?.message ?? parsed.message ?? description;
-            } catch {
-              // ignore JSON parse errors
-            }
+      if (status === 401 || status === 403) {
+        toast({
+          title: "Error",
+          description: "Please log in with an admin or HR account.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      let description = "Failed to generate payroll";
+      try {
+        const data = await err.response?.json();
+        if (data?.error?.message || data?.message) {
+          description = data.error?.message ?? data.message;
+        }
+      } catch (_) {
+        if (err instanceof Error) {
+          try {
+            const parsed = JSON.parse(err.message.replace(/^\d+:\s*/, ""));
+            description = parsed.error?.message ?? parsed.message ?? description;
+          } catch {
+            // ignore JSON parse errors
           }
         }
       }
@@ -268,7 +270,10 @@ export default function Payroll() {
                   
                   <Dialog open={isGenerateDialogOpen} onOpenChange={setIsGenerateDialogOpen}>
                     <DialogTrigger asChild>
-                      <Button className="bg-success text-white hover:bg-green-700">
+                      <Button
+                        className="bg-success text-white hover:bg-green-700"
+                        disabled={!canGenerate}
+                      >
                         <Calculator className="mr-2" size={16} />
                         Generate Payroll
                       </Button>
@@ -294,7 +299,10 @@ export default function Payroll() {
                     <div className="mt-6">
                       <Dialog open={isGenerateDialogOpen} onOpenChange={setIsGenerateDialogOpen}>
                         <DialogTrigger asChild>
-                          <Button className="bg-success text-white hover:bg-green-700">
+                          <Button
+                            className="bg-success text-white hover:bg-green-700"
+                            disabled={!canGenerate}
+                          >
                             <Calculator className="mr-2" size={16} />
                             Generate Payroll
                           </Button>

@@ -14,6 +14,14 @@ for (const [name, viewport] of Object.entries(viewports)) {
 
     test.describe('Payroll generation', () => {
       test.beforeEach(async ({ page }) => {
+        await page.goto(`${baseURL}/login`);
+        await page.fill('input[name="username"]', 'admin');
+        await page.fill('input[name="password"]', 'admin');
+        await Promise.all([
+          page.waitForURL(`${baseURL}/`),
+          page.click('button[type="submit"]')
+        ]);
+
         await page.route('**/api/payroll', route => {
           if (route.request().method() === 'GET') {
             route.fulfill({ status: 200, body: JSON.stringify([]) });
