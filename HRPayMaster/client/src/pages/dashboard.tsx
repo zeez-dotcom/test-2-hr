@@ -12,7 +12,7 @@ import {
   User,
   Calculator
 } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import type { EmployeeWithDepartment, PayrollRun } from "@shared/schema";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
@@ -26,6 +26,7 @@ interface DashboardStats {
 
 export default function Dashboard() {
   const { t } = useTranslation();
+  const [, navigate] = useLocation();
   const {
     data: stats,
     isLoading: statsLoading,
@@ -217,12 +218,13 @@ export default function Dashboard() {
           <CardHeader className="pb-6 border-b border-gray-100">
             <div className="flex items-center justify-between">
               <CardTitle className="text-xl font-semibold text-gray-900">Payroll Overview</CardTitle>
-              <Link href="/payroll">
-                <Button className="bg-green-600 text-white hover:bg-green-700 shadow-sm">
-                  <Calculator className="mr-2" size={16} />
-                  Generate Payroll
-                </Button>
-              </Link>
+              <Button
+                onClick={() => navigate("/payroll?generate=1")}
+                className="bg-green-600 text-white hover:bg-green-700 shadow-sm"
+              >
+                <Calculator className="mr-2" size={16} />
+                Generate Payroll
+              </Button>
             </div>
           </CardHeader>
           <CardContent className="p-6">
