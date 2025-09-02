@@ -437,6 +437,7 @@ export const insertLoanSchema = createInsertSchema(loans)
     approvedBy: true,
   })
   .extend({
+    employeeId: z.preprocess(normalizeBigId, z.string()),
     amount: z.preprocess(parseNumber, z.number()),
     remainingAmount: z.preprocess(parseNumber, z.number()),
     monthlyDeduction: z.preprocess(parseNumber, z.number()),
@@ -451,7 +452,10 @@ export const insertLoanSchema = createInsertSchema(loans)
       const val = emptyToUndef(v);
       return val === undefined ? undefined : String(val);
     }, z.string().optional()),
-    approvedBy: z.preprocess(v => emptyToUndef(v), z.string().optional()),
+    approvedBy: z.preprocess(v => {
+      const val = emptyToUndef(v);
+      return val === undefined ? undefined : normalizeBigId(val);
+    }, z.string().optional()),
   });
 
 export const insertCarSchema = createInsertSchema(cars)
