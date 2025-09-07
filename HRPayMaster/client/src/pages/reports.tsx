@@ -35,6 +35,7 @@ import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { apiGet } from "@/lib/http";
+import { toLocalYMD } from "@/lib/date";
 import type {
   Employee,
   EmployeeEvent,
@@ -65,8 +66,8 @@ export default function Reports() {
   const [searchTerm, setSearchTerm] = useState("");
   const [salaryReport, setSalaryReport] = useState<SalaryTrend[] | null>(null);
 
-  const startDate = dateRange.from?.toISOString().split("T")[0] ?? "";
-  const endDate = dateRange.to?.toISOString().split("T")[0] ?? "";
+  const startDate = dateRange.from ? toLocalYMD(dateRange.from) : "";
+  const endDate = dateRange.to ? toLocalYMD(dateRange.to) : "";
   
   const { toast } = useToast();
 
