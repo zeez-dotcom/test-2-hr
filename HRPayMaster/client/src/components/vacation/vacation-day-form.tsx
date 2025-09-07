@@ -16,6 +16,7 @@ import ImageUpload from "@/components/ui/image-upload";
 import { Calendar, AlertTriangle, FileImage } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { SickLeaveTracking } from "@shared/schema";
+import { toastApiError } from "@/lib/toastError";
 
 const vacationFormSchema = z.object({
   days: z.number().min(1, "Days must be at least 1"),
@@ -73,7 +74,7 @@ export function VacationDayForm({
   const updatePayrollMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiPut(`/api/payroll/entries/${payrollEntryId}`, data);
-      if (!res.ok) throw new Error(res.error || "Failed to update vacation days");
+      if (!res.ok) throw res;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
@@ -84,23 +85,20 @@ export function VacationDayForm({
       onSuccess();
       onClose();
     },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update vacation days",
-        variant: "destructive",
-      });
+    onError: (err) => {
+      toastApiError(err as any, "Failed to update vacation days");
     },
   });
 
   const createVacationRequestMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiPost("/api/vacations", data);
-      if (!res.ok) throw new Error(res.error || "Failed to create vacation");
+      if (!res.ok) throw res;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vacations"] });
     },
+    onError: (err) => toastApiError(err as any, "Failed to create vacation"),
   });
 
   const onSubmit = async (data: VacationFormData) => {
@@ -156,11 +154,7 @@ export function VacationDayForm({
 
     } catch (error) {
       console.error("Error processing vacation request:", error);
-      toast({
-        title: "Error",
-        description: "Failed to process vacation request",
-        variant: "destructive",
-      });
+      toastApiError(error as any, "Failed to process vacation request");
     }
   };
 

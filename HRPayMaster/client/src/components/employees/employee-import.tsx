@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { apiUpload, apiGet } from "@/lib/http";
+import { toastApiError } from "@/lib/toastError";
 import { insertEmployeeSchema } from "@shared/schema";
 
 interface ImportError {
@@ -49,16 +50,20 @@ export default function EmployeeImport() {
     setIsSubmitting(true);
     try {
       const res = await apiUpload("/api/employees/import", formData);
+      if (!res.ok) {
+        toastApiError(res, "Upload failed");
+        return;
+      }
       const data = res.data;
       if (Array.isArray(data.headers)) {
         setHeaders(data.headers);
         setSelections({});
         setCustomFields({});
       } else {
-        toast({ title: "Error", description: "Could not detect headers", variant: "destructive" });
+        toastApiError({ ok: false, status: res.status, error: { message: "Could not detect headers" } }, "Could not detect headers");
       }
-    } catch {
-      toast({ title: "Error", description: "Upload failed", variant: "destructive" });
+    } catch (err) {
+      toastApiError(err, "Upload failed");
     } finally {
       setIsSubmitting(false);
     }
@@ -67,7 +72,10 @@ export default function EmployeeImport() {
   const downloadTemplate = async () => {
     try {
       const res = await apiGet("/api/employees/import/template");
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        toastApiError(res, "Failed to download template");
+        return;
+      }
       const blob = res.data as Blob;
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -77,8 +85,8 @@ export default function EmployeeImport() {
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
-    } catch {
-      toast({ title: "Error", description: "Failed to download template", variant: "destructive" });
+    } catch (err) {
+      toastApiError(err, "Failed to download template");
     }
   };
 
@@ -112,26 +120,26 @@ export default function EmployeeImport() {
     setIsSubmitting(true);
     try {
       const res = await apiUpload("/api/employees/import", formData);
-        const data = res.data;
-        if (res.ok) {
-          queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
-          toast({
-            title: "Import complete",
-            description: `${data.success || 0} imported, ${data.failed || 0} failed`,
-            variant: data.failed ? "destructive" : "default",
-          });
-          setFile(null);
-          setHeaders([]);
-          setSelections({});
-          setCustomFields({});
-          setResult(data);
-          window.scrollTo({ top: 0, behavior: "smooth" });
-        } else {
-          setResult(data);
-          toast({ title: "Error", description: data?.error?.message || "Import failed", variant: "destructive" });
-        }
-    } catch {
-      toast({ title: "Error", description: "Import failed", variant: "destructive" });
+      const data = res.data;
+      if (res.ok) {
+        queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+        toast({
+          title: "Import complete",
+          description: `${data.success || 0} imported, ${data.failed || 0} failed`,
+          variant: data.failed ? "destructive" : "default",
+        });
+        setFile(null);
+        setHeaders([]);
+        setSelections({});
+        setCustomFields({});
+        setResult(data);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        setResult(data);
+        toastApiError(res, "Import failed");
+      }
+    } catch (err) {
+      toastApiError(err, "Import failed");
     } finally {
       setIsSubmitting(false);
     }

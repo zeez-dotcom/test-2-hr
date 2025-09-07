@@ -19,6 +19,7 @@ import type { PayrollRunWithEntries, PayrollEntry } from "@shared/schema";
 import { VacationDayForm } from "@/components/vacation/vacation-day-form";
 import { DeductionForm } from "@/components/payroll/deduction-form";
 import { BonusForm } from "@/components/payroll/bonus-form";
+import { toastApiError } from "@/lib/toastError";
 
 interface PayrollEditViewProps {
   payrollId: string;
@@ -45,7 +46,7 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
   const updatePayrollEntryMutation = useMutation({
     mutationFn: async ({ entryId, updates }: { entryId: string; updates: Partial<PayrollEntry> }) => {
       const res = await apiPut(`/api/payroll/entries/${entryId}`, updates);
-      if (!res.ok) throw new Error(res.error || "Failed to update payroll entry");
+      if (!res.ok) throw res;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
@@ -54,12 +55,8 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
         description: "Payroll entry updated successfully",
       });
     },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to update payroll entry",
-        variant: "destructive",
-      });
+    onError: (err) => {
+      toastApiError(err as any, "Failed to update payroll entry");
     },
   });
 

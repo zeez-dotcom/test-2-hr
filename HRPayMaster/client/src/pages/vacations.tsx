@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { insertVacationRequestSchema, type VacationRequestWithEmployee } from "@shared/schema";
 import { queryClient } from "@/lib/queryClient";
 import { apiPost, apiPut, apiDelete } from "@/lib/http";
+import { toastApiError } from "@/lib/toastError";
 
 export default function Vacations() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -38,43 +39,43 @@ export default function Vacations() {
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiPost("/api/vacations", data);
-      if (!res.ok) throw new Error(res.error || "Failed to submit vacation request");
+      if (!res.ok) throw res;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vacations"] });
       setIsCreateDialogOpen(false);
       toast({ title: "Vacation request submitted successfully" });
     },
-    onError: () => {
-      toast({ title: "Failed to submit vacation request", variant: "destructive" });
+    onError: (err) => {
+      toastApiError(err as any, "Failed to submit vacation request");
     }
   });
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
       const res = await apiPut(`/api/vacations/${id}`, data);
-      if (!res.ok) throw new Error(res.error || "Failed to update vacation request");
+      if (!res.ok) throw res;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vacations"] });
       toast({ title: "Vacation request updated successfully" });
     },
-    onError: () => {
-      toast({ title: "Failed to update vacation request", variant: "destructive" });
+    onError: (err) => {
+      toastApiError(err as any, "Failed to update vacation request");
     }
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await apiDelete(`/api/vacations/${id}`);
-      if (!res.ok) throw new Error(res.error || "Failed to delete vacation request");
+      if (!res.ok) throw res;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vacations"] });
       toast({ title: "Vacation request deleted successfully" });
     },
-    onError: () => {
-      toast({ title: "Failed to delete vacation request", variant: "destructive" });
+    onError: (err) => {
+      toastApiError(err as any, "Failed to delete vacation request");
     }
   });
 

@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { queryClient } from "@/lib/queryClient";
 import { apiPost } from "@/lib/http";
 import { useToast } from "@/hooks/use-toast";
+import { toastApiError } from "@/lib/toastError";
 import type { Company, Department, InsertEmployee } from "@shared/schema";
 import { z } from "zod";
 
@@ -119,7 +120,7 @@ export default function EmployeeForm({
   const addCompanyMutation = useMutation({
     mutationFn: async (name: string) => {
       const res = await apiPost("/api/companies", { name });
-      if (!res.ok) throw new Error(res.error || "Failed to add company");
+      if (!res.ok) throw res;
       return res.data as Company;
     },
     onSuccess: (data: Company) => {
@@ -129,8 +130,8 @@ export default function EmployeeForm({
       setNewCompanyName("");
       toast({ title: "Company added" });
     },
-    onError: () => {
-      toast({ title: "Failed to add company", variant: "destructive" });
+    onError: (err) => {
+      toastApiError(err as any, "Failed to add company");
     },
   });
 

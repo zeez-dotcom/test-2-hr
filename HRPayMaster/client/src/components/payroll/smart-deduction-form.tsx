@@ -12,6 +12,7 @@ import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
 import { apiPut, apiPost } from "@/lib/http";
 import { Minus } from "lucide-react";
+import { toastApiError } from "@/lib/toastError";
 
 const deductionFormSchema = z.object({
   amount: z.number().min(0.01, "Amount must be greater than 0"),
@@ -51,7 +52,7 @@ export function SmartDeductionForm({
   const updatePayrollMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiPut(`/api/payroll/entries/${payrollEntryId}`, data);
-      if (!res.ok) throw new Error(res.error || "Failed to add deduction");
+      if (!res.ok) throw res;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
@@ -62,12 +63,8 @@ export function SmartDeductionForm({
       onSuccess();
       onClose();
     },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to add deduction",
-        variant: "destructive",
-      });
+    onError: (err) => {
+      toastApiError(err as any, "Failed to add deduction");
     },
   });
 
@@ -110,14 +107,11 @@ export function SmartDeductionForm({
 
     // Create event first, then update payroll
     try {
-      await apiPost("/api/employee-events", eventData);
+      const res = await apiPost("/api/employee-events", eventData);
+      if (!res.ok) throw res;
     } catch (error: any) {
       console.error("Failed to create employee event:", error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to create employee event",
-        variant: "destructive",
-      });
+      toastApiError(error as any, "Failed to create employee event");
     }
 
     await updatePayrollMutation.mutateAsync(updateData);

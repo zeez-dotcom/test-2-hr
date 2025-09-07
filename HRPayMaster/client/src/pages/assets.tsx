@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { apiPost } from "@/lib/http";
+import { toastApiError } from "@/lib/toastError";
 import { CheckCircle, Users, AlertTriangle } from "lucide-react";
 
 import {
@@ -49,20 +50,20 @@ export default function Assets() {
   const createAsset = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiPost("/api/assets", data);
-      if (!res.ok) throw new Error(res.error || "Failed to create asset");
+      if (!res.ok) throw res;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/assets"] });
       setIsCreateOpen(false);
       toast({ title: "Asset created" });
     },
-    onError: () => toast({ title: "Failed to create asset", variant: "destructive" }),
+    onError: (err) => toastApiError(err as any, "Failed to create asset"),
   });
 
   const assignAsset = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiPost("/api/asset-assignments", data);
-      if (!res.ok) throw new Error(res.error || "Failed to assign asset");
+      if (!res.ok) throw res;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/assets"] });
@@ -70,7 +71,7 @@ export default function Assets() {
       setIsAssignOpen(false);
       toast({ title: "Asset assigned" });
     },
-    onError: () => toast({ title: "Failed to assign asset", variant: "destructive" }),
+    onError: (err) => toastApiError(err as any, "Failed to assign asset"),
   });
 
   const assetForm = useForm({

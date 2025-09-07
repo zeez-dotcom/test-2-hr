@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiPut, apiPost } from "@/lib/http";
 import { Calendar, AlertTriangle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { toastApiError } from "@/lib/toastError";
 
 const vacationFormSchema = z.object({
   days: z.number().min(1, "Days must be at least 1"),
@@ -52,7 +53,7 @@ export function SmartVacationForm({
   const updatePayrollMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiPut(`/api/payroll/entries/${payrollEntryId}`, data);
-      if (!res.ok) throw new Error(res.error || "Failed to update vacation days");
+      if (!res.ok) throw res;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
@@ -63,12 +64,8 @@ export function SmartVacationForm({
       onSuccess();
       onClose();
     },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update vacation days",
-        variant: "destructive",
-      });
+    onError: (err) => {
+      toastApiError(err as any, "Failed to update vacation days");
     },
   });
 
@@ -96,9 +93,11 @@ export function SmartVacationForm({
 
     // Create event first, then update payroll
     try {
-      await apiPost("/api/employee-events", eventData);
+      const res = await apiPost("/api/employee-events", eventData);
+      if (!res.ok) throw res;
     } catch (error) {
       console.error("Failed to create employee event:", error);
+      toastApiError(error as any, "Failed to create employee event");
     }
 
     await updatePayrollMutation.mutateAsync(updateData);

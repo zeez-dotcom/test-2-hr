@@ -24,6 +24,7 @@ import type { PayrollEntry } from "@shared/schema";
 import { SmartVacationForm } from "@/components/payroll/smart-vacation-form";
 import { SmartDeductionForm } from "@/components/payroll/smart-deduction-form";
 import { apiPut } from "@/lib/http";
+import { toastApiError } from "@/lib/toastError";
 
 interface EnhancedPayrollTableProps {
   entries: any[];
@@ -48,7 +49,7 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
   const updatePayrollEntryMutation = useMutation({
     mutationFn: async ({ entryId, updates }: { entryId: string; updates: Partial<PayrollEntry> }) => {
       const res = await apiPut(`/api/payroll/entries/${entryId}`, updates);
-      if (!res.ok) throw new Error(res.error || "Failed to update payroll entry");
+      if (!res.ok) throw res;
       return res.data;
     },
     onSuccess: () => {
@@ -58,12 +59,8 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
         description: "Payroll entry updated successfully",
       });
     },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to update payroll entry",
-        variant: "destructive",
-      });
+    onError: (err) => {
+      toastApiError(err as any, "Failed to update payroll entry");
     },
   });
 
