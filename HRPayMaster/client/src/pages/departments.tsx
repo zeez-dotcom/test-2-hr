@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Building, Plus, Trash2, Edit, Users } from "lucide-react";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
+import { apiPost, apiPut, apiDelete } from "@/lib/http";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -57,7 +58,8 @@ export default function Departments() {
 
   const addDepartmentMutation = useMutation({
     mutationFn: async (department: InsertDepartment) => {
-      await apiRequest("POST", "/api/departments", department);
+      const res = await apiPost("/api/departments", department);
+      if (!res.ok) throw new Error(res.error || "Failed to add department");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/departments"] });
@@ -80,7 +82,8 @@ export default function Departments() {
 
   const updateDepartmentMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<InsertDepartment> }) => {
-      await apiRequest("PUT", `/api/departments/${id}`, data);
+      const res = await apiPut(`/api/departments/${id}`, data);
+      if (!res.ok) throw new Error(res.error || "Failed to update department");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/departments"] });
@@ -102,7 +105,8 @@ export default function Departments() {
 
   const deleteDepartmentMutation = useMutation({
     mutationFn: async (departmentId: string) => {
-      await apiRequest("DELETE", `/api/departments/${departmentId}`);
+      const res = await apiDelete(`/api/departments/${departmentId}`);
+      if (!res.ok) throw new Error(res.error || "Failed to delete department");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/departments"] });

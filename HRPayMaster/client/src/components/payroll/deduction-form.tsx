@@ -10,7 +10,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiPut, apiPost } from "@/lib/http";
 import ImageUpload from "@/components/ui/image-upload";
 import { Minus, FileImage } from "lucide-react";
 
@@ -59,8 +59,10 @@ export function DeductionForm({
   const watchedDeductionType = form.watch("deductionType");
 
   const updatePayrollMutation = useMutation({
-    mutationFn: (data: any) =>
-      apiRequest("PUT", `/api/payroll/entries/${payrollEntryId}`, data),
+    mutationFn: async (data: any) => {
+      const res = await apiPut(`/api/payroll/entries/${payrollEntryId}`, data);
+      if (!res.ok) throw new Error(res.error || "Failed to add deduction");
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
       toast({
@@ -80,7 +82,10 @@ export function DeductionForm({
   });
 
   const createEmployeeEventMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/employee-events", data),
+    mutationFn: async (data: any) => {
+      const res = await apiPost("/api/employee-events", data);
+      if (!res.ok) throw new Error(res.error || "Failed to record event");
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/employee-events"] });
     },

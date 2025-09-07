@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
+import { apiUpload, apiGet } from "@/lib/http";
 import { insertEmployeeSchema } from "@shared/schema";
 
 interface ImportError {
@@ -47,8 +48,8 @@ export default function EmployeeImport() {
     formData.append("file", file);
     setIsSubmitting(true);
     try {
-      const res = await apiRequest("POST", "/api/employees/import", formData);
-      const data = await res.json();
+      const res = await apiUpload("/api/employees/import", formData);
+      const data = res.data;
       if (Array.isArray(data.headers)) {
         setHeaders(data.headers);
         setSelections({});
@@ -65,8 +66,9 @@ export default function EmployeeImport() {
 
   const downloadTemplate = async () => {
     try {
-      const res = await apiRequest("GET", "/api/employees/import/template");
-      const blob = await res.blob();
+      const res = await apiGet("/api/employees/import/template");
+      if (!res.ok) throw new Error();
+      const blob = res.data as Blob;
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -109,8 +111,8 @@ export default function EmployeeImport() {
     formData.append("mapping", JSON.stringify(mapping));
     setIsSubmitting(true);
     try {
-      const res = await apiRequest("POST", "/api/employees/import", formData);
-        const data = await res.json();
+      const res = await apiUpload("/api/employees/import", formData);
+        const data = res.data;
         if (res.ok) {
           queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
           toast({
@@ -126,7 +128,7 @@ export default function EmployeeImport() {
           window.scrollTo({ top: 0, behavior: "smooth" });
         } else {
           setResult(data);
-          toast({ title: "Error", description: data.error?.message || "Import failed", variant: "destructive" });
+          toast({ title: "Error", description: data?.error?.message || "Import failed", variant: "destructive" });
         }
     } catch {
       toast({ title: "Error", description: "Import failed", variant: "destructive" });

@@ -34,7 +34,7 @@ import {
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiGet } from "@/lib/http";
 import type {
   Employee,
   EmployeeEvent,
@@ -86,11 +86,11 @@ export default function Reports() {
   const { data: payrollSummary, error: payrollSummaryError } = useQuery<PayrollSummary[]>({
     queryKey: ["/api/reports/payroll", startDate, endDate],
     queryFn: async () => {
-      const res = await apiRequest(
-        "GET",
+      const res = await apiGet(
         `/api/reports/payroll?startDate=${startDate}&endDate=${endDate}`,
       );
-      return res.json();
+      if (!res.ok) throw new Error(res.error || "Failed to fetch");
+      return res.data;
     },
     enabled: Boolean(startDate && endDate),
   });
@@ -98,11 +98,11 @@ export default function Reports() {
   const { data: loanBalances, error: loanBalancesError } = useQuery<LoanBalance[]>({
     queryKey: ["/api/reports/loan-balances", startDate, endDate],
     queryFn: async () => {
-      const res = await apiRequest(
-        "GET",
+      const res = await apiGet(
         `/api/reports/loan-balances?startDate=${startDate}&endDate=${endDate}`,
       );
-      return res.json();
+      if (!res.ok) throw new Error(res.error || "Failed to fetch");
+      return res.data;
     },
     enabled: Boolean(startDate && endDate),
   });
@@ -110,11 +110,11 @@ export default function Reports() {
   const { data: assetUsage, error: assetUsageError } = useQuery<AssetUsage[]>({
     queryKey: ["/api/reports/asset-usage", startDate, endDate],
     queryFn: async () => {
-      const res = await apiRequest(
-        "GET",
+      const res = await apiGet(
         `/api/reports/asset-usage?startDate=${startDate}&endDate=${endDate}`,
       );
-      return res.json();
+      if (!res.ok) throw new Error(res.error || "Failed to fetch");
+      return res.data;
     },
     enabled: Boolean(startDate && endDate),
   });

@@ -16,8 +16,8 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 
 import { insertLoanSchema, type LoanWithEmployee } from "@shared/schema";
-import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
+import { apiPost, apiPut, apiDelete } from "@/lib/http";
 
 export default function Loans() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -36,7 +36,10 @@ export default function Loans() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/loans", data),
+    mutationFn: async (data: any) => {
+      const res = await apiPost("/api/loans", data);
+      if (!res.ok) throw new Error(res.error || "Failed to create loan");
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/loans"] });
       setIsCreateDialogOpen(false);
@@ -60,8 +63,10 @@ export default function Loans() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) =>
-      apiRequest("PUT", `/api/loans/${id}`, data),
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const res = await apiPut(`/api/loans/${id}`, data);
+      if (!res.ok) throw new Error(res.error || "Failed to update loan");
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/loans"] });
       toast({ title: "Loan updated successfully" });
@@ -72,7 +77,10 @@ export default function Loans() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => apiRequest("DELETE", `/api/loans/${id}`),
+    mutationFn: async (id: string) => {
+      const res = await apiDelete(`/api/loans/${id}`);
+      if (!res.ok) throw new Error(res.error || "Failed to delete loan");
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/loans"] });
       toast({ title: "Loan deleted successfully" });

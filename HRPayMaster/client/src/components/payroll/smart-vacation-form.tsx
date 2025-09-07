@@ -10,7 +10,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiPut, apiPost } from "@/lib/http";
 import { Calendar, AlertTriangle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -50,8 +50,10 @@ export function SmartVacationForm({
   });
 
   const updatePayrollMutation = useMutation({
-    mutationFn: (data: any) =>
-      apiRequest("PUT", `/api/payroll/entries/${payrollEntryId}`, data),
+    mutationFn: async (data: any) => {
+      const res = await apiPut(`/api/payroll/entries/${payrollEntryId}`, data);
+      if (!res.ok) throw new Error(res.error || "Failed to update vacation days");
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
       toast({
@@ -94,7 +96,7 @@ export function SmartVacationForm({
 
     // Create event first, then update payroll
     try {
-      await apiRequest("POST", "/api/employee-events", eventData);
+      await apiPost("/api/employee-events", eventData);
     } catch (error) {
       console.error("Failed to create employee event:", error);
     }

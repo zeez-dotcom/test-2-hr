@@ -16,8 +16,8 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 
 import { insertVacationRequestSchema, type VacationRequestWithEmployee } from "@shared/schema";
-import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
+import { apiPost, apiPut, apiDelete } from "@/lib/http";
 
 export default function Vacations() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -36,7 +36,10 @@ export default function Vacations() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/vacations", data),
+    mutationFn: async (data: any) => {
+      const res = await apiPost("/api/vacations", data);
+      if (!res.ok) throw new Error(res.error || "Failed to submit vacation request");
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vacations"] });
       setIsCreateDialogOpen(false);
@@ -48,8 +51,10 @@ export default function Vacations() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) =>
-      apiRequest("PUT", `/api/vacations/${id}`, data),
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const res = await apiPut(`/api/vacations/${id}`, data);
+      if (!res.ok) throw new Error(res.error || "Failed to update vacation request");
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vacations"] });
       toast({ title: "Vacation request updated successfully" });
@@ -60,7 +65,10 @@ export default function Vacations() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => apiRequest("DELETE", `/api/vacations/${id}`),
+    mutationFn: async (id: string) => {
+      const res = await apiDelete(`/api/vacations/${id}`);
+      if (!res.ok) throw new Error(res.error || "Failed to delete vacation request");
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vacations"] });
       toast({ title: "Vacation request deleted successfully" });

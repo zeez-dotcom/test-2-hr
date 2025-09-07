@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import type { EmployeeWithDepartment, Department } from "@shared/schema";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { apiRequest } from "@/lib/queryClient";
+import { apiGet } from "@/lib/http";
 
 interface EmployeesResponse {
   data: EmployeeWithDepartment[];
@@ -86,12 +86,12 @@ export default function EmployeeTable({
       if (params.sortBy) searchParams.set("sort", params.sortBy);
       searchParams.set("order", params.sortOrder);
 
-      const res = await apiRequest(
-        "GET",
+      const res = await apiGet(
         `/api/employees?${searchParams.toString()}`,
       );
-      const total = Number(res.headers.get("X-Total-Count")) || 0;
-      const employees = await res.json();
+      if (!res.ok) throw new Error(res.error || "Failed to load employees");
+      const total = Number(res.headers?.get("X-Total-Count")) || 0;
+      const employees = res.data;
       return { data: employees, total };
     },
   });

@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, FileText, CreditCard, BookOpen, Mail, Clock, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
+import { apiPost } from "@/lib/http";
 import { useToast } from "@/hooks/use-toast";
 import type { DocumentExpiryCheck } from "@shared/schema";
 
@@ -20,7 +21,11 @@ export default function DocumentsPage() {
   });
 
   const sendAlertsMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/documents/send-alerts"),
+    mutationFn: async () => {
+      const res = await apiPost("/api/documents/send-alerts");
+      if (!res.ok) throw new Error(res.error || "Failed to send alerts");
+      return res.data;
+    },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/documents/expiry-check"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });

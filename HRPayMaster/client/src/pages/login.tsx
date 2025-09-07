@@ -4,7 +4,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
+import { apiPost } from "@/lib/http";
 import { useLocation } from "wouter";
 import { Eye, EyeOff } from "lucide-react";
 
@@ -26,7 +27,8 @@ export default function Login() {
     }
     try {
       setIsSubmitting(true);
-      await apiRequest("POST", "/login", { username, password });
+      const res = await apiPost("/login", { username, password });
+      if (!res.ok) throw new Error(res.error || "Login failed");
       await queryClient.invalidateQueries({ queryKey: ["/api/me"] });
       navigate("/");
     } catch (err: any) {
