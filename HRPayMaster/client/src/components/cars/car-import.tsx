@@ -46,7 +46,13 @@ export default function CarImport() {
     try {
       const res = await apiUpload("/api/cars/import", formData);
       if (!res.ok) {
-        toastApiError(res, "Upload failed");
+        if (res.status === 415) {
+          toast({ title: "Unsupported file type", variant: "destructive" });
+        } else if (res.status === 413) {
+          toast({ title: "File too large", variant: "destructive" });
+        } else {
+          toastApiError(res, "Upload failed");
+        }
         return;
       }
       const data = res.data;
@@ -125,10 +131,16 @@ export default function CarImport() {
           variant: data.failed ? "destructive" : "default",
         });
       } else {
-        toastApiError(res, "Import failed");
+        if (res.status === 415) {
+          toast({ title: "Unsupported file type", variant: "destructive" });
+        } else if (res.status === 413) {
+          toast({ title: "File too large", variant: "destructive" });
+        } else {
+          toastApiError(res, "Upload failed");
+        }
       }
     } catch (err) {
-      toastApiError(err, "Import failed");
+      toastApiError(err, "Upload failed");
     } finally {
       setIsSubmitting(false);
     }
