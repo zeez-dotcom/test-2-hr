@@ -79,22 +79,18 @@ export default function Payroll() {
         description: "Payroll generated successfully",
       });
     },
-    onError: (err: any) => {
-      const status = err?.status;
-      if (status === 401 || status === 403) {
-        toast({
-          title: "Error",
-          description: "Please log in as an admin or HR user",
-          variant: "destructive",
-        });
-        return;
-      }
+    onError: (res: any) => {
+      const status = res?.status;
       if (status === 409) {
-        const description = err?.error?.message || "Payroll run already exists for this period";
-        toast({ title: "Error", description, variant: "destructive" });
+        const description = res?.error?.message ?? res?.error;
+        toast({ title: "Duplicate period", description, variant: "destructive" });
         return;
       }
-      toastApiError(err, "Failed to generate payroll");
+      if (status === 401) {
+        navigate("/login");
+        return;
+      }
+      toastApiError(res, "Failed to generate payroll");
     },
   });
 

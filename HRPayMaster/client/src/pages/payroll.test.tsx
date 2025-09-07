@@ -2,8 +2,13 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
-import Payroll from './payroll';
 import '@testing-library/jest-dom';
+
+const navigate = vi.fn();
+vi.mock('wouter', () => ({
+  useSearch: () => '',
+  useLocation: () => ['', navigate],
+}));
 
 const { toast } = vi.hoisted(() => ({ toast: vi.fn() }));
 const mutationMocks: any[] = [];
@@ -71,10 +76,13 @@ vi.mock('@/components/ui/dialog', () => ({
   DialogTrigger: ({ children }: any) => <div>{children}</div>,
 }));
 
+import Payroll from './payroll';
+
 beforeEach(() => {
   queryClient.clear();
   toast.mockReset();
   mutationMocks.length = 0;
+  navigate.mockReset();
 });
 
 describe('Payroll page', () => {
@@ -106,17 +114,19 @@ describe('Payroll page', () => {
     expect(toast).toHaveBeenCalledWith({ title: 'Success', description: 'Payroll generated successfully' });
     toast.mockReset();
 
-    // generate payroll 401 error
     mutationMocks[0].shouldError = true;
-    mutationMocks[0].error = { ok: false, status: 401, error: {} } as any;
+
+    // generate payroll 409 error
+    mutationMocks[0].error = { ok: false, status: 409, error: 'Period exists' } as any;
     await mutationMocks[0].mutate({});
-    expect(toast).toHaveBeenCalledWith({ title: 'Error', description: 'Please log in as an admin or HR user', variant: 'destructive' });
+    expect(toast).toHaveBeenCalledWith({ title: 'Duplicate period', description: 'Period exists', variant: 'destructive' });
     toast.mockReset();
 
-    // generate payroll 403 error
-    mutationMocks[0].error = { ok: false, status: 403, error: {} } as any;
+    // generate payroll 401 error
+    mutationMocks[0].error = { ok: false, status: 401, error: {} } as any;
     await mutationMocks[0].mutate({});
-    expect(toast).toHaveBeenCalledWith({ title: 'Error', description: 'Please log in as an admin or HR user', variant: 'destructive' });
+    expect(navigate).toHaveBeenCalledWith('/login');
+    navigate.mockReset();
     toast.mockReset();
 
     // generate payroll server error message
