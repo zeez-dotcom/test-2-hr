@@ -1,3 +1,6 @@
+export type ApiResult<T = any> =
+  | { ok: true; status: number; data: T; headers: Headers }
+  | { ok: false; status: number; error: any; headers?: Headers };
 
 async function request(
   method: string,

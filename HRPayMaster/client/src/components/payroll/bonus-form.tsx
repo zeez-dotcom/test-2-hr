@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiPut, apiPost } from "@/lib/http";
 import ImageUpload from "@/components/ui/image-upload";
 import { Gift, FileImage } from "lucide-react";
+import { toastApiError } from "@/lib/toastError";
 
 const bonusFormSchema = z.object({
   amount: z.number().min(0.01, "Amount must be greater than 0"),
@@ -65,7 +66,7 @@ export function BonusForm({
   const updatePayrollMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiPut(`/api/payroll/entries/${payrollEntryId}`, data);
-      if (!res.ok) throw new Error(res.error || "Failed to add bonus");
+      if (!res.ok) throw res;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
@@ -76,23 +77,20 @@ export function BonusForm({
       onSuccess();
       onClose();
     },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to add bonus",
-        variant: "destructive",
-      });
+    onError: (err) => {
+      toastApiError(err as any, "Failed to add bonus");
     },
   });
 
   const createEmployeeEventMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiPost("/api/employee-events", data);
-      if (!res.ok) throw new Error(res.error || "Failed to record event");
+      if (!res.ok) throw res;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/employee-events"] });
     },
+    onError: (err) => toastApiError(err as any, "Failed to record event"),
   });
 
   const onSubmit = async (data: BonusFormData) => {
@@ -122,11 +120,7 @@ export function BonusForm({
       await updatePayrollMutation.mutateAsync(updateData);
     } catch (error) {
       console.error("Error adding bonus:", error);
-      toast({
-        title: "Error",
-        description: "Failed to add bonus",
-        variant: "destructive",
-      });
+      toastApiError(error as any, "Failed to add bonus");
     }
   };
 

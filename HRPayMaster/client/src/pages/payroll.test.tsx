@@ -19,7 +19,7 @@ vi.mock('@tanstack/react-query', async () => {
         isPending: false,
         mutate: async (vars: any) => {
           if (mock.shouldError) {
-            await options.onError?.(mock.error ?? 'error', vars, null);
+            await options.onError?.(mock.error ?? { ok: false, status: 500, error: { message: 'error' } }, vars, null);
           } else {
             await options.onSuccess?.('success', vars, null);
           }
@@ -108,25 +108,25 @@ describe('Payroll page', () => {
 
     // generate payroll 401 error
     mutationMocks[0].shouldError = true;
-    mutationMocks[0].error = { response: { status: 401 } } as any;
+    mutationMocks[0].error = { ok: false, status: 401, error: {} } as any;
     await mutationMocks[0].mutate({});
     expect(toast).toHaveBeenCalledWith({ title: 'Error', description: 'Please log in as an admin or HR user', variant: 'destructive' });
     toast.mockReset();
 
     // generate payroll 403 error
-    mutationMocks[0].error = { response: { status: 403 } } as any;
+    mutationMocks[0].error = { ok: false, status: 403, error: {} } as any;
     await mutationMocks[0].mutate({});
     expect(toast).toHaveBeenCalledWith({ title: 'Error', description: 'Please log in as an admin or HR user', variant: 'destructive' });
     toast.mockReset();
 
     // generate payroll server error message
-    mutationMocks[0].error = { response: { json: () => Promise.resolve({ message: 'Server failure' }) } };
+    mutationMocks[0].error = { ok: false, status: 500, error: { message: 'Server failure' } } as any;
     await mutationMocks[0].mutate({});
     expect(toast).toHaveBeenCalledWith({ title: 'Error', description: 'Server failure', variant: 'destructive' });
     toast.mockReset();
 
     // generate payroll generic error
-    mutationMocks[0].error = undefined;
+    mutationMocks[0].error = { ok: false, status: 500, error: {} } as any;
     await mutationMocks[0].mutate({});
     expect(toast).toHaveBeenCalledWith({ title: 'Error', description: 'Failed to generate payroll', variant: 'destructive' });
     mutationMocks[0].shouldError = false;
@@ -138,6 +138,7 @@ describe('Payroll page', () => {
     toast.mockReset();
     // delete payroll error
     mutationMocks[1].shouldError = true;
+    mutationMocks[1].error = { ok: false, status: 500, error: { message: 'Failed to delete payroll run' } } as any;
     await mutationMocks[1].mutate('1');
     expect(toast).toHaveBeenCalledWith({ title: 'Error', description: 'Failed to delete payroll run', variant: 'destructive' });
   });

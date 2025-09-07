@@ -23,6 +23,7 @@ import { SmartDeductionForm } from "@/components/payroll/smart-deduction-form";
 import { EnhancedPayrollTable } from "@/components/payroll/enhanced-payroll-table";
 import { SimpleExportModal } from "@/components/payroll/simple-export-modal";
 import { apiPut } from "@/lib/http";
+import { toastApiError } from "@/lib/toastError";
 
 interface PayrollEditViewProps {
   payrollId: string;
@@ -47,7 +48,7 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
   const updatePayrollEntryMutation = useMutation({
     mutationFn: async ({ entryId, updates }: { entryId: string; updates: Partial<PayrollEntry> }) => {
       const res = await apiPut(`/api/payroll/entries/${entryId}`, updates);
-      if (!res.ok) throw new Error(res.error || "Failed to update payroll entry");
+      if (!res.ok) throw res;
       return res.data;
     },
     onSuccess: () => {
@@ -57,12 +58,8 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
         description: "Payroll entry updated successfully",
       });
     },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to update payroll entry",
-        variant: "destructive",
-      });
+    onError: (err) => {
+      toastApiError(err as any, "Failed to update payroll entry");
     },
   });
 

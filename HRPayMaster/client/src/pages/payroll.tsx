@@ -16,6 +16,7 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import type { PayrollRun, User } from "@shared/schema";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
 import { useSearch, useLocation } from "wouter";
+import { toastApiError } from "@/lib/toastError";
 
 interface PayrollGenerateRequest {
   period: string;
@@ -67,7 +68,7 @@ export default function Payroll() {
   const generatePayrollMutation = useMutation({
     mutationFn: async (data: PayrollGenerateRequest) => {
       const res = await apiPost("/api/payroll/generate", data);
-      if (!res.ok) throw new Error(res.error || "Failed to generate payroll");
+      if (!res.ok) throw res;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
@@ -78,9 +79,8 @@ export default function Payroll() {
         description: "Payroll generated successfully",
       });
     },
-    onError: async (err: any) => {
-      const status = err?.response?.status;
-
+    onError: (err: any) => {
+      const status = err?.status;
       if (status === 401 || status === 403) {
         toast({
           title: "Error",
@@ -89,49 +89,19 @@ export default function Payroll() {
         });
         return;
       }
-
       if (status === 409) {
-        let description = "Payroll run already exists for this period";
-        try {
-          const data = await err.response?.json();
-          if (data?.error?.message || data?.message) {
-            description = data.error?.message ?? data.message;
-          }
-        } catch {}
-
-        toast({
-          title: "Error",
-          description,
-          variant: "destructive",
-        });
+        const description = err?.error?.message || "Payroll run already exists for this period";
+        toast({ title: "Error", description, variant: "destructive" });
         return;
       }
-
-      let description = "Failed to generate payroll";
-
-      try {
-        const data = await err.response?.json();
-        if (data?.error?.message || data?.message) {
-          description = data.error?.message ?? data.message;
-        }
-      } catch {
-        if (err instanceof Error && err.message) {
-          description = err.message;
-        }
-      }
-
-      toast({
-        title: "Error",
-        description,
-        variant: "destructive",
-      });
+      toastApiError(err, "Failed to generate payroll");
     },
   });
 
   const deletePayrollMutation = useMutation({
     mutationFn: async (payrollId: string) => {
       const res = await apiDelete(`/api/payroll/${payrollId}`);
-      if (!res.ok) throw new Error(res.error || "Failed to delete payroll run");
+      if (!res.ok) throw res;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
@@ -141,12 +111,8 @@ export default function Payroll() {
         description: "Payroll run deleted successfully",
       });
     },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to delete payroll run",
-        variant: "destructive",
-      });
+    onError: (err) => {
+      toastApiError(err as any, "Failed to delete payroll run");
     },
   });
 
