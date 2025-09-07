@@ -2,8 +2,9 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { format } from "date-fns";
-import { Calendar, CalendarDays, Clock, CheckCircle, XCircle, Plus, Trash2, Edit } from "lucide-react";
+import { Calendar, CalendarDays, Clock, CheckCircle, XCircle, Plus, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,10 +16,26 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 
-import { insertVacationRequestSchema, type VacationRequestWithEmployee } from "@shared/schema";
+import type { VacationRequestWithEmployee } from "@shared/schema";
 import { queryClient } from "@/lib/queryClient";
 import { apiPost, apiPut, apiDelete } from "@/lib/http";
 import { toastApiError } from "@/lib/toastError";
+
+const schema = z
+  .object({
+    employeeId: z.string().min(1),
+    start: z.string(),
+    end: z.string(),
+    leaveType: z.enum(["vacation", "sick", "personal", "other"]),
+    reason: z.string().optional(),
+  })
+  .refine(({ end, start }) => new Date(end) >= new Date(start), {
+    message: "End date must be on or after start date",
+    path: ["end"],
+  });
+
+const calcDays = (start: string, end: string) =>
+  Math.ceil((new Date(end).getTime() - new Date(start).getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
 export default function Vacations() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -39,16 +56,16 @@ export default function Vacations() {
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiPost("/api/vacations", data);
-      if (!res.ok) throw res;
+      if (!res.ok) {
+        toastApiError(res, "Failed to submit vacation request");
+        throw res;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vacations"] });
       setIsCreateDialogOpen(false);
       toast({ title: "Vacation request submitted successfully" });
     },
-    onError: (err) => {
-      toastApiError(err as any, "Failed to submit vacation request");
-    }
   });
 
   const updateMutation = useMutation({
@@ -79,24 +96,32 @@ export default function Vacations() {
     }
   });
 
-  const form = useForm({
-    resolver: zodResolver(insertVacationRequestSchema),
+  const form = useForm<z.infer<typeof schema>>({
+    resolver: zodResolver(schema),
     defaultValues: {
       employeeId: "",
-      startDate: new Date().toISOString().split('T')[0],
-      endDate: new Date().toISOString().split('T')[0],
-      type: "vacation",
+      start: new Date().toISOString().split("T")[0],
+      end: new Date().toISOString().split("T")[0],
+      leaveType: "vacation",
       reason: "",
-      status: "pending"
-    }
+    },
   });
 
   if (vacationError || employeesError) {
     return <div>Error loading vacations</div>;
   }
 
-  const onSubmit = (data: any) => {
-    createMutation.mutate(data);
+  const onSubmit = (data: z.infer<typeof schema>) => {
+    const payload = {
+      employeeId: data.employeeId,
+      startDate: data.start,
+      endDate: data.end,
+      days: calcDays(data.start, data.end),
+      leaveType: data.leaveType,
+      reason: data.reason,
+      status: "pending",
+    };
+    createMutation.mutate(payload);
   };
 
   const handleApprove = (id: string) => {
@@ -186,7 +211,7 @@ export default function Vacations() {
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
-                    name="startDate"
+                    name="start"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Start Date</FormLabel>
@@ -200,7 +225,7 @@ export default function Vacations() {
 
                   <FormField
                     control={form.control}
-                    name="endDate"
+                    name="end"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>End Date</FormLabel>
@@ -215,7 +240,7 @@ export default function Vacations() {
 
                 <FormField
                   control={form.control}
-                  name="type"
+                  name="leaveType"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Type</FormLabel>
