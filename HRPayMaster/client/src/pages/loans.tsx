@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { format } from "date-fns";
 import { DollarSign, Calendar, CheckCircle, XCircle, Plus, Trash2, Edit, TrendingUp } from "lucide-react";
 
@@ -18,6 +19,18 @@ import { useToast } from "@/hooks/use-toast";
 import { insertLoanSchema, type LoanWithEmployee } from "@shared/schema";
 import { queryClient } from "@/lib/queryClient";
 import { apiPost, apiPut, apiDelete } from "@/lib/http";
+import { toastApiError } from "@/lib/toastError";
+
+const schema = insertLoanSchema
+  .omit({ remainingAmount: true })
+  .extend({
+    amount: z.coerce.number().positive(),
+    monthlyDeduction: z.coerce.number().positive(),
+  })
+  .refine((d) => d.monthlyDeduction <= d.amount, {
+    path: ["monthlyDeduction"],
+    message: "Monthly deduction must be ≤ amount",
+  });
 
 export default function Loans() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -38,68 +51,56 @@ export default function Loans() {
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiPost("/api/loans", data);
-      if (!res.ok) throw new Error(res.error || "Failed to create loan");
+      if (!res.ok) throw res;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/loans"] });
       setIsCreateDialogOpen(false);
       toast({ title: "Loan created successfully" });
     },
-    onError: async (err: any) => {
-      let message = "Failed to create loan";
-      try {
-        const data = await err.response?.json();
-        message =
-          data?.error?.fields?.[0]?.message ||
-          data?.error?.details?.[0]?.message ||
-          data?.error?.message ||
-          err.message ||
-          message;
-      } catch {
-        message = err?.message || message;
-      }
-      toast({ title: message, variant: "destructive" });
+    onError: (err) => {
+      toastApiError(err as any, "Failed to create loan");
     }
   });
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
       const res = await apiPut(`/api/loans/${id}`, data);
-      if (!res.ok) throw new Error(res.error || "Failed to update loan");
+      if (!res.ok) throw res;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/loans"] });
       toast({ title: "Loan updated successfully" });
     },
-    onError: () => {
-      toast({ title: "Failed to update loan", variant: "destructive" });
+    onError: (err) => {
+      toastApiError(err as any, "Failed to update loan");
     }
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await apiDelete(`/api/loans/${id}`);
-      if (!res.ok) throw new Error(res.error || "Failed to delete loan");
+      if (!res.ok) throw res;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/loans"] });
       toast({ title: "Loan deleted successfully" });
     },
-    onError: () => {
-      toast({ title: "Failed to delete loan", variant: "destructive" });
+    onError: (err) => {
+      toastApiError(err as any, "Failed to delete loan");
     }
   });
 
-  const form = useForm({
-    resolver: zodResolver(insertLoanSchema.omit({ remainingAmount: true })),
+  const form = useForm<z.infer<typeof schema>>({
+    resolver: zodResolver(schema),
     defaultValues: {
       employeeId: "",
-      amount: "",
-      monthlyDeduction: "",
+      amount: undefined,
+      monthlyDeduction: undefined,
       startDate: new Date().toISOString().split('T')[0],
       status: "pending",
-      interestRate: "0",
-      reason: ""
+      interestRate: undefined,
+      reason: "",
     },
     mode: "onChange"
   });
