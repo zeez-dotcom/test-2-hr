@@ -22,19 +22,17 @@ const formSchema = insertEmployeeSchema.extend({
   firstName: z.string().trim().min(1, "First name is required"),
   lastName: z.string().trim().min(1, "Last name is required"),
   position: z.string().trim().min(1, "Position is required"),
-  salary: z.string().trim().min(1, "Salary is required"),
+  salary: z
+    .coerce
+    .number({ invalid_type_error: "Salary is required" })
+    .min(1, "Salary is required"),
   startDate: z.string().trim().min(1, "Start date is required"),
-  additions: z.string().optional(),
+  additions: z.coerce.number().optional(),
   email: z.string().email("Please enter a valid email").optional().or(z.literal("")),
   visaAlertDays: z.coerce.number().max(365).optional(),
   civilIdAlertDays: z.coerce.number().max(365).optional(),
   passportAlertDays: z.coerce.number().max(365).optional(),
-  employeeCode: z
-    .string()
-    .trim()
-    .min(1, "Employee code cannot be empty")
-    .optional()
-    .or(z.literal("")),
+  employeeCode: z.string().trim().min(1, "Employee code is required"),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -75,12 +73,8 @@ export default function EmployeeForm({
       role: initialData?.role || "employee",
       departmentId: initialData?.departmentId || undefined,
       companyId: initialData?.companyId || undefined,
-      salary:
-        initialData?.salary !== undefined ? String(initialData.salary) : "",
-      additions:
-        initialData?.additions !== undefined
-          ? String(initialData.additions)
-          : "",
+      salary: initialData?.salary ?? undefined,
+      additions: initialData?.additions ?? undefined,
       standardWorkingDays: initialData?.standardWorkingDays || 26,
       startDate: initialData?.startDate || new Date().toISOString().split('T')[0],
       status: initialData?.status || "active",
@@ -137,32 +131,19 @@ export default function EmployeeForm({
 
   const residencyOnCompany = form.watch("residencyOnCompany");
 
-  const handleSubmit: SubmitHandler<FormData> = (data) => {
-    const {
-      employeeCode,
-      workLocation,
-      salary,
-      additions,
-      visaAlertDays,
-      civilIdAlertDays,
-      passportAlertDays,
-      transferable,
-      residencyOnCompany,
-      ...rest
-    } = data;
+  const handleSubmit: SubmitHandler<FormData> = ({
+    employeeCode,
+    workLocation,
+    transferable,
+    residencyOnCompany,
+    ...rest
+  }) => {
     const payload: any = {
       ...rest,
-      ...(salary ? { salary: Number(salary) } : {}),
-      ...(additions ? { additions: Number(additions) } : {}),
-      ...(visaAlertDays ? { visaAlertDays: Number(visaAlertDays) } : {}),
-      ...(civilIdAlertDays ? { civilIdAlertDays: Number(civilIdAlertDays) } : {}),
-      ...(passportAlertDays ? { passportAlertDays: Number(passportAlertDays) } : {}),
       transferable: transferable ?? false,
       residencyOnCompany: residencyOnCompany ?? false,
+      employeeCode,
     };
-    if (employeeCode && employeeCode.trim() !== "") {
-      payload.employeeCode = employeeCode.trim();
-    }
     if (workLocation && workLocation.trim() !== "") {
       payload.workLocation = workLocation.trim();
     }
@@ -176,13 +157,15 @@ export default function EmployeeForm({
           <FormField
             control={form.control}
             name="employeeCode"
-            render={({ field }) => (
+            render={({ field, fieldState }) => (
               <FormItem>
                 <FormLabel>Employee Code</FormLabel>
                 <FormControl>
-                  <Input placeholder="EMP001" disabled={!!initialData?.employeeCode} {...field} />
+                  <Input placeholder="EMP001" disabled={!!initialData?.id} {...field} />
                 </FormControl>
-                <FormMessage />
+                {fieldState.error && (
+                  <p className="text-sm text-red-500">{fieldState.error.message}</p>
+                )}
               </FormItem>
             )}
           />
@@ -408,7 +391,7 @@ export default function EmployeeForm({
               <FormItem>
                 <FormLabel>Salary</FormLabel>
                 <FormControl>
-                  <Input type="number" placeholder="75000" {...field} />
+                  <Input type="number" placeholder="75000" {...field} value={field.value ?? ""} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -422,7 +405,7 @@ export default function EmployeeForm({
               <FormItem>
                 <FormLabel>Additions</FormLabel>
                 <FormControl>
-                  <Input type="number" placeholder="0" {...field} />
+                  <Input type="number" placeholder="0" {...field} value={field.value ?? ""} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
