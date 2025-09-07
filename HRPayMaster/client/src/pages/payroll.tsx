@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Calculator, DollarSign, FileText, Trash2, Eye, Edit } from "lucide-react";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
+import { apiPost, apiDelete } from "@/lib/http";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { PayrollRun, User } from "@shared/schema";
@@ -65,7 +66,8 @@ export default function Payroll() {
 
   const generatePayrollMutation = useMutation({
     mutationFn: async (data: PayrollGenerateRequest) => {
-      await apiRequest("POST", "/api/payroll/generate", data);
+      const res = await apiPost("/api/payroll/generate", data);
+      if (!res.ok) throw new Error(res.error || "Failed to generate payroll");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
@@ -128,7 +130,8 @@ export default function Payroll() {
 
   const deletePayrollMutation = useMutation({
     mutationFn: async (payrollId: string) => {
-      await apiRequest("DELETE", `/api/payroll/${payrollId}`);
+      const res = await apiDelete(`/api/payroll/${payrollId}`);
+      if (!res.ok) throw new Error(res.error || "Failed to delete payroll run");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });

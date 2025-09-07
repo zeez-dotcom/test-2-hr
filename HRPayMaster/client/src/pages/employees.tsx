@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Search } from "lucide-react";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
+import { apiPost, apiPut, apiDelete } from "@/lib/http";
 import { useToast } from "@/hooks/use-toast";
 import type { EmployeeWithDepartment, Department, InsertEmployee, Company } from "@shared/schema";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
@@ -51,7 +52,8 @@ export default function Employees() {
 
   const deleteEmployeeMutation = useMutation({
     mutationFn: async (employeeId: string) => {
-      await apiRequest("DELETE", `/api/employees/${employeeId}`);
+      const res = await apiDelete(`/api/employees/${employeeId}`);
+      if (!res.ok) throw new Error(res.error || "Failed to delete employee");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
@@ -72,7 +74,8 @@ export default function Employees() {
 
   const addEmployeeMutation = useMutation({
     mutationFn: async (employee: InsertEmployee) => {
-      await apiRequest("POST", "/api/employees", employee);
+      const res = await apiPost("/api/employees", employee);
+      if (!res.ok) throw new Error(res.error || "Failed to add employee");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
@@ -94,7 +97,8 @@ export default function Employees() {
 
   const updateEmployeeMutation = useMutation({
     mutationFn: async ({ id, employee }: { id: string; employee: Partial<InsertEmployee> }) => {
-      await apiRequest("PUT", `/api/employees/${id}`, employee);
+      const res = await apiPut(`/api/employees/${id}`, employee);
+      if (!res.ok) throw new Error(res.error || "Failed to update employee");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/employees"] });

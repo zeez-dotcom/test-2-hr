@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Bell, CheckCircle, Clock, AlertTriangle, FileText, CreditCard, BookOpen } from "lucide-react";
 import { format } from "date-fns";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
+import { apiPut, apiDelete } from "@/lib/http";
 import { useToast } from "@/hooks/use-toast";
 import type { NotificationWithEmployee } from "@shared/schema";
 
@@ -28,7 +29,10 @@ export default function NotificationsPage() {
   });
 
   const markAsReadMutation = useMutation({
-    mutationFn: (id: string) => apiRequest("PUT", `/api/notifications/${id}/read`),
+    mutationFn: async (id: string) => {
+      const res = await apiPut(`/api/notifications/${id}/read`);
+      if (!res.ok) throw new Error(res.error || "Failed to mark as read");
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread"] });
@@ -47,7 +51,10 @@ export default function NotificationsPage() {
   });
 
   const deleteNotificationMutation = useMutation({
-    mutationFn: (id: string) => apiRequest("DELETE", `/api/notifications/${id}`),
+    mutationFn: async (id: string) => {
+      const res = await apiDelete(`/api/notifications/${id}`);
+      if (!res.ok) throw new Error(res.error || "Failed to delete notification");
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread"] });

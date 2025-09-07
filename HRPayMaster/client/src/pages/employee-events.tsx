@@ -15,7 +15,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
+import { apiPost, apiPut, apiDelete } from "@/lib/http";
 import { useToast } from "@/hooks/use-toast";
 import type { EmployeeEvent, Employee, InsertEmployeeEvent } from "@shared/schema";
 import { insertEmployeeEventSchema } from "@shared/schema";
@@ -66,7 +67,8 @@ export default function EmployeeEvents() {
 
   const createEventMutation = useMutation({
     mutationFn: async (data: InsertEmployeeEvent) => {
-      await apiRequest("POST", "/api/employee-events", data);
+      const res = await apiPost("/api/employee-events", data);
+      if (!res.ok) throw new Error(res.error || "Failed to record employee event");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/employee-events"] });
@@ -88,7 +90,8 @@ export default function EmployeeEvents() {
 
   const deleteEventMutation = useMutation({
     mutationFn: async (eventId: string) => {
-      await apiRequest("DELETE", `/api/employee-events/${eventId}`);
+      const res = await apiDelete(`/api/employee-events/${eventId}`);
+      if (!res.ok) throw new Error(res.error || "Failed to delete employee event");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/employee-events"] });
@@ -108,7 +111,8 @@ export default function EmployeeEvents() {
   
   const updateEventMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: InsertEmployeeEvent }) => {
-      await apiRequest("PUT", `/api/employee-events/${id}`, data);
+      const res = await apiPut(`/api/employee-events/${id}`, data);
+      if (!res.ok) throw new Error(res.error || "Failed to update employee event");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/employee-events"] });

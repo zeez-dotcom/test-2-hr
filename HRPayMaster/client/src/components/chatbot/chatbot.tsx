@@ -8,7 +8,7 @@ import type {
 } from "@shared/schema";
 import { resolveDate, ChatIntent } from "@shared/chatbot";
 import { differenceInCalendarDays } from "date-fns";
-import { apiRequest } from "@/lib/queryClient";
+import { apiGet, apiPost } from "@/lib/http";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -68,8 +68,10 @@ export function Chatbot() {
 
     let intent: { type: ChatIntent } = { type: "unknown" };
     try {
-      const res = await apiRequest("POST", "/api/chatbot", { message: text });
-      intent = await res.json();
+      const res = await apiPost("/api/chatbot", { message: text });
+      if (res.ok) {
+        intent = res.data as any;
+      }
     } catch {
       // Fallback to unknown intent on failure
     }
@@ -93,11 +95,11 @@ export function Chatbot() {
         break;
       case "loanStatus":
         try {
-          const res = await apiRequest(
-            "GET",
+          const res = await apiGet(
             `/api/chatbot/loan-status/${selectedEmployee}`
           );
-          const data = await res.json();
+          if (!res.ok) throw new Error();
+          const data: any = res.data;
           setMessages((m) => [
             ...m,
             { from: "bot", text: `Loan balance is ${data.balance}.` },
@@ -111,11 +113,11 @@ export function Chatbot() {
         break;
       case "reportSummary":
         try {
-          const res = await apiRequest(
-            "GET",
+          const res = await apiGet(
             `/api/chatbot/report-summary/${selectedEmployee}`
           );
-          const data = await res.json();
+          if (!res.ok) throw new Error();
+          const data: any = res.data;
           setMessages((m) => [
             ...m,
             {
@@ -170,7 +172,7 @@ export function Chatbot() {
               affectsPayroll: true,
               status: "active",
             };
-            await apiRequest("POST", "/api/employee-events", eventData);
+            await apiPost("/api/employee-events", eventData);
             setMessages((m) => [
               ...m,
               {
@@ -199,7 +201,7 @@ export function Chatbot() {
               deductFromSalary: false,
               status: "approved",
             };
-            await apiRequest("POST", "/api/vacations", vacation);
+            await apiPost("/api/vacations", vacation);
             setMessages((m) => [
               ...m,
               {
@@ -218,7 +220,7 @@ export function Chatbot() {
               totalDeductions: "0",
               netAmount: "0",
             };
-            await apiRequest("POST", "/api/payroll/generate", payroll);
+            await apiPost("/api/payroll/generate", payroll);
             setMessages((m) => [
               ...m,
               {

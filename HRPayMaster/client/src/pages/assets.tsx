@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
+import { apiPost } from "@/lib/http";
 import { CheckCircle, Users, AlertTriangle } from "lucide-react";
 
 import {
@@ -46,7 +47,10 @@ export default function Assets() {
   });
 
   const createAsset = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/assets", data),
+    mutationFn: async (data: any) => {
+      const res = await apiPost("/api/assets", data);
+      if (!res.ok) throw new Error(res.error || "Failed to create asset");
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/assets"] });
       setIsCreateOpen(false);
@@ -56,7 +60,10 @@ export default function Assets() {
   });
 
   const assignAsset = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/asset-assignments", data),
+    mutationFn: async (data: any) => {
+      const res = await apiPost("/api/asset-assignments", data);
+      if (!res.ok) throw new Error(res.error || "Failed to assign asset");
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/assets"] });
       queryClient.invalidateQueries({ queryKey: ["/api/asset-assignments"] });

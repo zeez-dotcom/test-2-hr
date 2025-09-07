@@ -11,7 +11,8 @@ import {
   Minus,
   Edit3
 } from "lucide-react";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
+import { apiPut } from "@/lib/http";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { PayrollRunWithEntries, PayrollEntry } from "@shared/schema";
@@ -43,7 +44,8 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
 
   const updatePayrollEntryMutation = useMutation({
     mutationFn: async ({ entryId, updates }: { entryId: string; updates: Partial<PayrollEntry> }) => {
-      await apiRequest("PUT", `/api/payroll/entries/${entryId}`, updates);
+      const res = await apiPut(`/api/payroll/entries/${entryId}`, updates);
+      if (!res.ok) throw new Error(res.error || "Failed to update payroll entry");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });

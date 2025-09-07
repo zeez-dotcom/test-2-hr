@@ -11,7 +11,8 @@ import { Separator } from "@/components/ui/separator";
 import ImageUpload from "@/components/ui/image-upload";
 import { CommandDialog, CommandInput, CommandList, CommandItem, CommandEmpty } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
+import { apiPost } from "@/lib/http";
 import { useToast } from "@/hooks/use-toast";
 import type { Company, Department, InsertEmployee } from "@shared/schema";
 import { z } from "zod";
@@ -117,8 +118,9 @@ export default function EmployeeForm({
 
   const addCompanyMutation = useMutation({
     mutationFn: async (name: string) => {
-      const res = await apiRequest("POST", "/api/companies", { name });
-      return res.json();
+      const res = await apiPost("/api/companies", { name });
+      if (!res.ok) throw new Error(res.error || "Failed to add company");
+      return res.data as Company;
     },
     onSuccess: (data: Company) => {
       queryClient.invalidateQueries({ queryKey: ["/api/companies"] });

@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
+import { apiUpload, apiGet } from "@/lib/http";
 
 interface ImportResult {
   success?: number;
@@ -42,8 +43,8 @@ export default function CarImport() {
     formData.append("file", file);
     setIsSubmitting(true);
     try {
-      const res = await apiRequest("POST", "/api/cars/import", formData);
-      const data = await res.json();
+      const res = await apiUpload("/api/cars/import", formData);
+      const data = res.data;
       if (Array.isArray(data.headers)) {
         setHeaders(data.headers);
         setSelections({});
@@ -60,8 +61,9 @@ export default function CarImport() {
 
   const downloadTemplate = async () => {
     try {
-      const res = await apiRequest("GET", "/api/cars/import/template");
-      const blob = await res.blob();
+      const res = await apiGet("/api/cars/import/template");
+      if (!res.ok) throw new Error();
+      const blob = res.data as Blob;
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -104,8 +106,8 @@ export default function CarImport() {
     formData.append("mapping", JSON.stringify(mapping));
     setIsSubmitting(true);
     try {
-      const res = await apiRequest("POST", "/api/cars/import", formData);
-      const data = await res.json();
+      const res = await apiUpload("/api/cars/import", formData);
+      const data = res.data;
       setResult(data);
       if (res.ok) {
         queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
@@ -115,7 +117,7 @@ export default function CarImport() {
           variant: data.failed ? "destructive" : "default",
         });
       } else {
-        toast({ title: "Error", description: data.error?.message || "Import failed", variant: "destructive" });
+        toast({ title: "Error", description: data?.error?.message || "Import failed", variant: "destructive" });
       }
     } catch {
       toast({ title: "Error", description: "Import failed", variant: "destructive" });

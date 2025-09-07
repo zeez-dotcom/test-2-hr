@@ -21,8 +21,8 @@ import CarImport from "@/components/cars/car-import";
 
 import { insertCarSchema, insertCarAssignmentSchema, type CarWithAssignment, type CarAssignmentWithDetails, type InsertCarAssignment } from "@shared/schema";
 import { sanitizeImageSrc } from "@/lib/sanitizeImageSrc";
-import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
+import { apiPost, apiPut, apiDelete, apiUpload } from "@/lib/http";
 
 export default function Cars() {
   const [isCreateCarDialogOpen, setIsCreateCarDialogOpen] = useState(false);
@@ -53,7 +53,10 @@ export default function Cars() {
   });
 
   const createCarMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/cars", data),
+    mutationFn: async (data: any) => {
+      const res = await apiUpload("/api/cars", data);
+      if (!res.ok) throw new Error(res.error || "Failed to add car");
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
       setIsCreateCarDialogOpen(false);
@@ -65,10 +68,13 @@ export default function Cars() {
   });
 
   const assignCarMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/car-assignments", data),
+    mutationFn: async (data: any) => {
+      const res = await apiPost("/api/car-assignments", data);
+      if (!res.ok) throw new Error(res.error || "Failed to assign car");
+    },
     onSuccess: async (_data, variables: any) => {
       if (variables?.carId) {
-        await apiRequest("PUT", `/api/cars/${variables.carId}`, { status: "assigned" });
+        await apiPut(`/api/cars/${variables.carId}`, { status: "assigned" });
       }
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
       queryClient.invalidateQueries({ queryKey: ["/api/car-assignments"] });
@@ -81,11 +87,13 @@ export default function Cars() {
   });
 
   const updateAssignmentMutation = useMutation<Response, Error, { id: string; data: any; carId?: string }>({
-    mutationFn: ({ id, data }) =>
-      apiRequest("PUT", `/api/car-assignments/${id}`, data),
+    mutationFn: async ({ id, data }) => {
+      const res = await apiPut(`/api/car-assignments/${id}`, data);
+      if (!res.ok) throw new Error(res.error || "Failed to update assignment");
+    },
     onSuccess: async (_data, variables) => {
       if (variables?.carId) {
-        await apiRequest("PUT", `/api/cars/${variables.carId}`, { status: "available" });
+        await apiPut(`/api/cars/${variables.carId}`, { status: "available" });
       }
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
       queryClient.invalidateQueries({ queryKey: ["/api/car-assignments"] });
@@ -97,7 +105,10 @@ export default function Cars() {
   });
 
   const deleteCarMutation = useMutation({
-    mutationFn: (id: string) => apiRequest("DELETE", `/api/cars/${id}`),
+    mutationFn: async (id: string) => {
+      const res = await apiDelete(`/api/cars/${id}`);
+      if (!res.ok) throw new Error(res.error || "Failed to delete car");
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
       toast({ title: "Car deleted successfully" });
@@ -108,8 +119,10 @@ export default function Cars() {
   });
 
   const updateCarMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: FormData }) =>
-      apiRequest("PUT", `/api/cars/${id}`, data),
+    mutationFn: async ({ id, data }: { id: string; data: FormData }) => {
+      const res = await apiPut(`/api/cars/${id}`, data);
+      if (!res.ok) throw new Error(res.error || "Failed to update car");
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
       setEditingCar(null);

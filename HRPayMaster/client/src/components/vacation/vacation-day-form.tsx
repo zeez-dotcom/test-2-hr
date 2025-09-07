@@ -11,7 +11,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiPut, apiPost } from "@/lib/http";
 import ImageUpload from "@/components/ui/image-upload";
 import { Calendar, AlertTriangle, FileImage } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -71,8 +71,10 @@ export function VacationDayForm({
   const watchedDays = form.watch("days");
 
   const updatePayrollMutation = useMutation({
-    mutationFn: (data: any) =>
-      apiRequest("PUT", `/api/payroll/entries/${payrollEntryId}`, data),
+    mutationFn: async (data: any) => {
+      const res = await apiPut(`/api/payroll/entries/${payrollEntryId}`, data);
+      if (!res.ok) throw new Error(res.error || "Failed to update vacation days");
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
       toast({
@@ -92,7 +94,10 @@ export function VacationDayForm({
   });
 
   const createVacationRequestMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/vacations", data),
+    mutationFn: async (data: any) => {
+      const res = await apiPost("/api/vacations", data);
+      if (!res.ok) throw new Error(res.error || "Failed to create vacation");
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vacations"] });
     },
@@ -143,7 +148,7 @@ export function VacationDayForm({
 
       // Update sick leave balance if it's sick leave
       if (data.leaveType === "sick") {
-        await apiRequest("POST", `/api/employees/${employeeId}/sick-leave-balance`, {
+        await apiPost(`/api/employees/${employeeId}/sick-leave-balance`, {
           daysUsed: data.days,
           year: new Date().getFullYear(),
         });
