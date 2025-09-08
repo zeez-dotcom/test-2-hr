@@ -28,7 +28,7 @@ export default function Login() {
     try {
       setIsSubmitting(true);
       const res = await apiPost("/login", { username, password });
-      if (!res.ok) throw new Error(res.error || "Login failed");
+      if (!res.ok) throw new Error(res.error || t("login.loginFailed"));
       await queryClient.invalidateQueries({ queryKey: ["/api/me"] });
       navigate("/");
     } catch (err: any) {
@@ -44,17 +44,19 @@ export default function Login() {
         <CardContent className="pt-6">
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="username">{t("login.username")}</Label>
               <Input
                 id="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 autoComplete="username"
                 required
+                aria-invalid={!!error}
+                aria-describedby={error ? "login-error" : undefined}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{t("login.password")}</Label>
               <div className="relative">
                 <Input
                   id="password"
@@ -64,12 +66,14 @@ export default function Login() {
                   autoComplete="current-password"
                   required
                   className="pr-10"
+                  aria-invalid={!!error}
+                  aria-describedby={error ? "login-error" : undefined}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPwd((prev) => !prev)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
-                  aria-label={showPwd ? "Hide password" : "Show password"}
+                  aria-label={t(showPwd ? "login.hidePassword" : "login.showPassword")}
                 >
                   {showPwd ? (
                     <EyeOff className="h-4 w-4" />
@@ -80,7 +84,7 @@ export default function Login() {
               </div>
             </div>
             {error && (
-              <p className="text-sm text-red-500" data-testid="form-error">
+              <p className="text-sm text-red-500" data-testid="form-error" id="login-error">
                 {error}
               </p>
             )}
