@@ -28,4 +28,15 @@ describe("vacation schema", () => {
       expect(result.error.issues[0].path).toEqual(["end"]);
     }
   });
+
+  it("accepts valid vacation request", () => {
+    const parsed = vacationSchema.parse({
+      employeeId: "1",
+      start: "2024-01-05",
+      end: "2024-01-10",
+      leaveType: "vacation",
+    });
+    expect(parsed.start).toBe("2024-01-05");
+    expect(parsed.end).toBe("2024-01-10");
+  });
 });

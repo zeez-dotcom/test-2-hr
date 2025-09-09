@@ -38,4 +38,14 @@ describe("loan schema", () => {
       expect(result.error.issues[0].path).toEqual(["monthlyDeduction"]);
     }
   });
+
+  it("allows monthly deduction equal to amount", () => {
+    const parsed = loanSchema.parse({
+      employeeId: "1",
+      amount: "500",
+      monthlyDeduction: "500",
+      startDate: "2024-01-01",
+    });
+    expect(parsed.monthlyDeduction).toBe(500);
+  });
 });
