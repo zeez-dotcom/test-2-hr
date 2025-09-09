@@ -1,7 +1,11 @@
-import { toast } from "@/hooks/use-toast";
-import type { ApiResult } from "./http";
+import i18next from "i18next"
+import { toast } from "@/hooks/use-toast"
+import type { ApiResult } from "./http"
 
-export function toastApiError(result: ApiResult | unknown, fallback = "An unexpected error occurred") {
+export function toastApiError(
+  result: ApiResult | unknown,
+  fallback = i18next.t("errors.general")
+) {
   let message: string | undefined;
   if (typeof result === "string") {
     message = result;
@@ -11,5 +15,9 @@ export function toastApiError(result: ApiResult | unknown, fallback = "An unexpe
     const err: any = (result as any).error;
     message = typeof err === "string" ? err : err?.message;
   }
-  toast({ title: "Error", description: message || fallback, variant: "destructive" });
+  toast({
+    title: i18next.t("errors.errorTitle"),
+    description: message || fallback,
+    variant: "destructive",
+  })
 }
