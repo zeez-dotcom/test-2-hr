@@ -53,6 +53,7 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
       return res.data;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
       queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
       toast({
         title: "Success",
@@ -376,6 +377,7 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
             setSelectedPayrollEntry(null);
           }}
           onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
             queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
           }}
           payrollEntryId={selectedPayrollEntry.id}
@@ -392,6 +394,7 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
             setSelectedPayrollEntry(null);
           }}
           onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
             queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
           }}
           payrollEntryId={selectedPayrollEntry.id}

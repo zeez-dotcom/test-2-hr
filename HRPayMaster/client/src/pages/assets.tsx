@@ -51,9 +51,13 @@ export default function Assets() {
     mutationFn: async (data: any) => {
       const res = await apiPost("/api/assets", data);
       if (!res.ok) throw res;
+      return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/assets"] });
+      if (data?.id) {
+        queryClient.invalidateQueries({ queryKey: ["/api/assets", data.id] });
+      }
       setIsCreateOpen(false);
       toast({ title: "Asset created" });
     },
@@ -64,9 +68,14 @@ export default function Assets() {
     mutationFn: async (data: any) => {
       const res = await apiPost("/api/asset-assignments", data);
       if (!res.ok) throw res;
+      return data;
     },
-    onSuccess: () => {
+    onSuccess: (_, data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/assets"] });
+      if (data?.assetId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/assets", data.assetId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/asset-assignments", data.assetId] });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/asset-assignments"] });
       setIsAssignOpen(false);
       toast({ title: "Asset assigned" });

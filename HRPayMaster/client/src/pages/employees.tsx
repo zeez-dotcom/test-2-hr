@@ -55,9 +55,11 @@ export default function Employees() {
     mutationFn: async (employeeId: string) => {
       const res = await apiDelete(`/api/employees/${employeeId}`);
       if (!res.ok) throw res;
+      return employeeId;
     },
-    onSuccess: () => {
+    onSuccess: (_, employeeId) => {
       queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/employees", employeeId] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       toast({
         title: "Success",
@@ -73,9 +75,13 @@ export default function Employees() {
     mutationFn: async (employee: InsertEmployee) => {
       const res = await apiPost("/api/employees", employee);
       if (!res.ok) throw res;
+      return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+      if (data?.id) {
+        queryClient.invalidateQueries({ queryKey: ["/api/employees", data.id] });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       setIsAddDialogOpen(false);
       toast({
@@ -92,9 +98,11 @@ export default function Employees() {
     mutationFn: async ({ id, employee }: { id: string; employee: Partial<InsertEmployee> }) => {
       const res = await apiPut(`/api/employees/${id}`, employee);
       if (!res.ok) throw res;
+      return id;
     },
-    onSuccess: () => {
+    onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/employees", id] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       setIsEditDialogOpen(false);
       setEditingEmployee(null);

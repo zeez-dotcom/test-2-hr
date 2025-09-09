@@ -52,9 +52,13 @@ export default function Loans() {
     mutationFn: async (data: any) => {
       const res = await apiPost("/api/loans", data);
       if (!res.ok) throw res;
+      return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/loans"] });
+      if (data?.id) {
+        queryClient.invalidateQueries({ queryKey: ["/api/loans", data.id] });
+      }
       setIsCreateDialogOpen(false);
       toast({ title: "Loan created successfully" });
     },
@@ -67,9 +71,11 @@ export default function Loans() {
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
       const res = await apiPut(`/api/loans/${id}`, data);
       if (!res.ok) throw res;
+      return id;
     },
-    onSuccess: () => {
+    onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/loans"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/loans", id] });
       toast({ title: "Loan updated successfully" });
     },
     onError: (err) => {
@@ -81,9 +87,11 @@ export default function Loans() {
     mutationFn: async (id: string) => {
       const res = await apiDelete(`/api/loans/${id}`);
       if (!res.ok) throw res;
+      return id;
     },
-    onSuccess: () => {
+    onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ["/api/loans"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/loans", id] });
       toast({ title: "Loan deleted successfully" });
     },
     onError: (err) => {

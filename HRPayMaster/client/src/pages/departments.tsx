@@ -63,6 +63,7 @@ export default function Departments() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/departments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       setIsAddDialogOpen(false);
       addForm.reset();
@@ -87,6 +88,7 @@ export default function Departments() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/departments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
       setEditingDepartment(null);
       editForm.reset();
       toast({
@@ -110,6 +112,7 @@ export default function Departments() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/departments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       toast({
         title: "Success",
