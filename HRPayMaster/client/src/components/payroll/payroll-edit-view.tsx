@@ -16,7 +16,6 @@ import { apiPut } from "@/lib/http";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { PayrollRunWithEntries, PayrollEntry } from "@shared/schema";
-import { VacationDayForm } from "@/components/vacation/vacation-day-form";
 import { DeductionForm } from "@/components/payroll/deduction-form";
 import { BonusForm } from "@/components/payroll/bonus-form";
 import { toastApiError } from "@/lib/toastError";
@@ -400,10 +399,8 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
           currentNetPay={parseFloat(selectedPayrollEntry.netPay) || 0}
           isOpen={isBonusFormOpen}
           onClose={() => setIsBonusFormOpen(false)}
-          onSuccess={() => {
-            queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
-            queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
-          }}
+          onSuccess={() => {}}
+          payrollId={payrollId}
         />
       )}
 
@@ -414,10 +411,8 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
           currentDeductions={parseFloat(selectedPayrollEntry.otherDeductions) || 0}
           isOpen={isDeductionFormOpen}
           onClose={() => setIsDeductionFormOpen(false)}
-          onSuccess={() => {
-            queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
-            queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
-          }}
+          onSuccess={() => {}}
+          payrollId={payrollId}
         />
       )}
     </div>
