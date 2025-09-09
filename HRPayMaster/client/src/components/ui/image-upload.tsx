@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Upload, X, User, FileText } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
 
 interface ImageUploadProps {
   label: string;
@@ -21,7 +22,7 @@ export default function ImageUpload({
   value,
   onChange,
   accept,
-  maxSizeMB = 5,
+  maxSizeMB = 1,
   preview = true,
   variant = "document"
 }: ImageUploadProps) {
@@ -38,7 +39,9 @@ export default function ImageUpload({
     
     // Validate file size
     if (file.size > maxSizeMB * 1024 * 1024) {
-      setError(`File size must be less than ${maxSizeMB}MB`);
+      const message = `File size must be less than ${maxSizeMB}MB`;
+      setError(message);
+      toast({ title: message, variant: "destructive" });
       return;
     }
 

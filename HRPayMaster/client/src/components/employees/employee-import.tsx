@@ -54,7 +54,7 @@ export default function EmployeeImport() {
         if (res.status === 415) {
           toast({ title: "Unsupported file type", variant: "destructive" });
         } else if (res.status === 413) {
-          toast({ title: "File too large", variant: "destructive" });
+          toastApiError(res, "File too large");
         } else {
           toastApiError(res, "Upload failed");
         }
@@ -145,7 +145,7 @@ export default function EmployeeImport() {
         if (res.status === 415) {
           toast({ title: "Unsupported file type", variant: "destructive" });
         } else if (res.status === 413) {
-          toast({ title: "File too large", variant: "destructive" });
+          toastApiError(res, "File too large");
         } else {
           toastApiError(res, "Upload failed");
         }

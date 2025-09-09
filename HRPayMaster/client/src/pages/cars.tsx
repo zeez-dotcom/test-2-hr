@@ -23,6 +23,7 @@ import { insertCarSchema, insertCarAssignmentSchema, type CarWithAssignment, typ
 import { sanitizeImageSrc } from "@/lib/sanitizeImageSrc";
 import { queryClient } from "@/lib/queryClient";
 import { apiPost, apiPut, apiDelete, apiUpload } from "@/lib/http";
+import { toastApiError } from "@/lib/toastError";
 
 export default function Cars() {
   const [isCreateCarDialogOpen, setIsCreateCarDialogOpen] = useState(false);
@@ -55,15 +56,19 @@ export default function Cars() {
   const createCarMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiUpload("/api/cars", data);
-      if (!res.ok) throw new Error(res.error || "Failed to add car");
+      if (!res.ok) throw res;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
       setIsCreateCarDialogOpen(false);
       toast({ title: "Car added successfully" });
     },
-    onError: () => {
-      toast({ title: "Failed to add car", variant: "destructive" });
+    onError: (err: any) => {
+      if (err?.status === 413) {
+        toastApiError(err, "File too large");
+      } else {
+        toastApiError(err, "Failed to add car");
+      }
     }
   });
 
@@ -121,7 +126,7 @@ export default function Cars() {
   const updateCarMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: FormData }) => {
       const res = await apiPut(`/api/cars/${id}`, data);
-      if (!res.ok) throw new Error(res.error || "Failed to update car");
+      if (!res.ok) throw res;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
@@ -129,8 +134,12 @@ export default function Cars() {
       setRegistrationPreview(null);
       toast({ title: "Car updated successfully" });
     },
-    onError: () => {
-      toast({ title: "Failed to update car", variant: "destructive" });
+    onError: (err: any) => {
+      if (err?.status === 413) {
+        toastApiError(err, "File too large");
+      } else {
+        toastApiError(err, "Failed to update car");
+      }
     }
   });
 
