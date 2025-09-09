@@ -17,6 +17,7 @@
   "type": "commonjs",
   "devDependencies": {
     "@playwright/test": "^1.55.0",
+    "cross-env": "^10.0.0",
     "vitest": "^3.2.4"
   },
   "dependencies": {
