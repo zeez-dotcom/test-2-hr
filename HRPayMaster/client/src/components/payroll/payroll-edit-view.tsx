@@ -49,6 +49,7 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
       if (!res.ok) throw res;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
       queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
       toast({
         title: "Success",
@@ -399,9 +400,10 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
           currentNetPay={parseFloat(selectedPayrollEntry.netPay) || 0}
           isOpen={isBonusFormOpen}
           onClose={() => setIsBonusFormOpen(false)}
-          onSuccess={() =>
-            queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] })
-          }
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
+          }}
         />
       )}
 
@@ -412,9 +414,10 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
           currentDeductions={parseFloat(selectedPayrollEntry.otherDeductions) || 0}
           isOpen={isDeductionFormOpen}
           onClose={() => setIsDeductionFormOpen(false)}
-          onSuccess={() =>
-            queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] })
-          }
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
+          }}
         />
       )}
     </div>

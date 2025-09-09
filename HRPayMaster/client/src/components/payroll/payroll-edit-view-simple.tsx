@@ -52,6 +52,7 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
       return res.data;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
       queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
       toast({
         title: "Success",
@@ -289,6 +290,7 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
             setSelectedPayrollEntry(null);
           }}
           onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
             queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
           }}
           payrollEntryId={selectedPayrollEntry.id}
@@ -305,6 +307,7 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
             setSelectedPayrollEntry(null);
           }}
           onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
             queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
           }}
           payrollEntryId={selectedPayrollEntry.id}

@@ -98,9 +98,11 @@ export default function Payroll() {
     mutationFn: async (payrollId: string) => {
       const res = await apiDelete(`/api/payroll/${payrollId}`);
       if (!res.ok) throw res;
+      return payrollId;
     },
-    onSuccess: () => {
+    onSuccess: (_, payrollId) => {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       toast({
         title: "Success",
