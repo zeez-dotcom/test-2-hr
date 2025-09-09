@@ -67,7 +67,14 @@ export default function Assets() {
   const assignAsset = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiPost("/api/asset-assignments", data);
-      if (!res.ok) throw res;
+      if (!res.ok) {
+        toast({
+          title: "Failed to assign asset",
+          description: res.error,
+          variant: "destructive",
+        });
+        throw res;
+      }
       return data;
     },
     onSuccess: (_, data: any) => {
@@ -80,7 +87,6 @@ export default function Assets() {
       setIsAssignOpen(false);
       toast({ title: "Asset assigned" });
     },
-    onError: (err) => toastApiError(err as any, "Failed to assign asset"),
   });
 
   const assetForm = useForm({
