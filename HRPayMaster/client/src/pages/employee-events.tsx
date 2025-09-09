@@ -153,9 +153,9 @@ export default function EmployeeEvents() {
         return <User className="h-4 w-4 text-gray-600" />;
       case 'document_update':
         return <FileText className="h-4 w-4 text-gray-600" />;
-      case 'fleet_assignment':
-      case 'fleet_update':
-      case 'fleet_removal':
+      case 'asset_assignment':
+      case 'asset_update':
+      case 'asset_removal':
         return <Car className="h-4 w-4 text-gray-600" />;
       default:
         return <Info className="h-4 w-4 text-gray-600" />;
@@ -176,9 +176,9 @@ export default function EmployeeEvents() {
         return 'bg-orange-100 text-orange-800';
       case 'employee_update':
       case 'document_update':
-      case 'fleet_assignment':
-      case 'fleet_update':
-      case 'fleet_removal':
+      case 'asset_assignment':
+      case 'asset_update':
+      case 'asset_removal':
         return 'bg-gray-100 text-gray-800';
       default:
         return 'bg-gray-100 text-gray-800';
@@ -327,9 +327,9 @@ export default function EmployeeEvents() {
                             <SelectItem value="penalty">Penalty</SelectItem>
                             <SelectItem value="employee_update">Employee Update</SelectItem>
                             <SelectItem value="document_update">Document Update</SelectItem>
-                            <SelectItem value="fleet_assignment">Fleet Assignment</SelectItem>
-                            <SelectItem value="fleet_update">Fleet Update</SelectItem>
-                            <SelectItem value="fleet_removal">Fleet Removal</SelectItem>
+                            <SelectItem value="asset_assignment">Asset Assignment</SelectItem>
+                            <SelectItem value="asset_update">Asset Update</SelectItem>
+                            <SelectItem value="asset_removal">Asset Removal</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
