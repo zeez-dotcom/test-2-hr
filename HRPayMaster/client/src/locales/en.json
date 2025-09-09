@@ -25,6 +25,8 @@
     "loggingIn": "Logging in…"
   },
   "errors": {
-    "loginRequired": "Username and password are required"
+    "loginRequired": "Username and password are required",
+    "general": "An unexpected error occurred",
+    "errorTitle": "Error"
   }
 }
