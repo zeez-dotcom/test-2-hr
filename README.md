@@ -37,6 +37,8 @@ Alternatively, run `cd HRPayMaster && npm run dev`.
 
 ## Error handling & date formatting
 
-The client uses a small HTTP wrapper in [`http.ts`](HRPayMaster/client/src/lib/http.ts) that returns an `ApiResult` object instead of throwing on failed requests. [`toastError`](HRPayMaster/client/src/lib/toastError.ts) converts these results into user-friendly toast messages when requests fail. For date fields, [`toLocalYMD`](HRPayMaster/client/src/lib/date.ts) converts `Date` objects into `YYYY-MM-DD` strings.
+- [`http.ts`](HRPayMaster/client/src/lib/http.ts) wraps fetch and returns an `ApiResult` rather than throwing on failed requests.
+- [`toastError`](HRPayMaster/client/src/lib/toastError.ts) converts failed results into user-friendly toast messages.
+- [`toLocalYMD`](HRPayMaster/client/src/lib/date.ts) formats `Date` objects into `YYYY-MM-DD` strings.
 
-Uploads have a default 1 MB limit enforced by Express; requests over this size respond with **413 Payload Too Large** and unsupported file types yield **415 Unsupported Media Type**. Import interfaces surface these errors to users via destructive toasts.
+Uploads have a default 1 MB limit enforced by Express. Requests exceeding this size respond with **413 Payload Too Large**, and unsupported file types yield **415 Unsupported Media Type**. Import interfaces surface these errors to users via destructive toasts.
