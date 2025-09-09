@@ -37,6 +37,7 @@ interface VacationDayFormProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  payrollId: string;
 }
 
 export function VacationDayForm({
@@ -46,6 +47,7 @@ export function VacationDayForm({
   isOpen,
   onClose,
   onSuccess,
+  payrollId,
 }: VacationDayFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -78,6 +80,7 @@ export function VacationDayForm({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
       toast({
         title: "Success",
         description: "Vacation days updated successfully",

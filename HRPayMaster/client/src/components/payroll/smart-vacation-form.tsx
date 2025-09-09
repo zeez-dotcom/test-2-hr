@@ -28,6 +28,7 @@ interface SmartVacationFormProps {
   payrollEntryId: string;
   employeeId: string;
   currentVacationDays: number;
+  payrollId: string;
 }
 
 export function SmartVacationForm({
@@ -37,6 +38,7 @@ export function SmartVacationForm({
   payrollEntryId,
   employeeId,
   currentVacationDays,
+  payrollId,
 }: SmartVacationFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -57,6 +59,7 @@ export function SmartVacationForm({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
       toast({
         title: "Success",
         description: "Vacation days updated successfully",

@@ -35,6 +35,7 @@ interface BonusFormProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  payrollId: string;
 }
 
 export function BonusForm({
@@ -46,6 +47,7 @@ export function BonusForm({
   isOpen,
   onClose,
   onSuccess,
+  payrollId,
 }: BonusFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -70,6 +72,7 @@ export function BonusForm({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
       toast({
         title: "Success",
         description: "Bonus added successfully",

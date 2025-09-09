@@ -33,6 +33,7 @@ interface DeductionFormProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  payrollId: string;
 }
 
 export function DeductionForm({
@@ -42,6 +43,7 @@ export function DeductionForm({
   isOpen,
   onClose,
   onSuccess,
+  payrollId,
 }: DeductionFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -66,6 +68,7 @@ export function DeductionForm({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
       toast({
         title: "Success",
         description: "Deduction added successfully",

@@ -376,13 +376,11 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
             setIsVacationFormOpen(false);
             setSelectedPayrollEntry(null);
           }}
-          onSuccess={() => {
-            queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
-            queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
-          }}
+          onSuccess={() => {}}
           payrollEntryId={selectedPayrollEntry.id}
           employeeId={selectedPayrollEntry.employeeId}
           currentVacationDays={selectedPayrollEntry.vacationDays || 0}
+          payrollId={payrollId}
         />
       )}
 
@@ -393,13 +391,11 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
             setIsDeductionFormOpen(false);
             setSelectedPayrollEntry(null);
           }}
-          onSuccess={() => {
-            queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
-            queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
-          }}
+          onSuccess={() => {}}
           payrollEntryId={selectedPayrollEntry.id}
           employeeId={selectedPayrollEntry.employeeId}
           currentDeductions={parseFloat(selectedPayrollEntry.otherDeductions?.toString() || "0")}
+          payrollId={payrollId}
         />
       )}
     </div>

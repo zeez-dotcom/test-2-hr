@@ -27,6 +27,7 @@ interface SmartDeductionFormProps {
   payrollEntryId: string;
   employeeId: string;
   currentDeductions: number;
+  payrollId: string;
 }
 
 export function SmartDeductionForm({
@@ -36,6 +37,7 @@ export function SmartDeductionForm({
   payrollEntryId,
   employeeId,
   currentDeductions,
+  payrollId,
 }: SmartDeductionFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -56,6 +58,7 @@ export function SmartDeductionForm({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
       toast({
         title: "Success",
         description: "Deduction added successfully",
