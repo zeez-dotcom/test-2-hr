@@ -277,7 +277,7 @@ export const emailAlerts = pgTable("email_alerts", {
 export const employeeEvents = pgTable("employee_events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   employeeId: varchar("employee_id").references(() => employees.id).notNull(),
-  eventType: text("event_type").notNull(), // bonus, deduction, allowance, overtime, penalty, vacation, employee_update, document_update, fleet_assignment, fleet_update, fleet_removal
+  eventType: text("event_type").notNull(), // bonus, deduction, allowance, overtime, penalty, vacation, employee_update, document_update, asset_assignment, asset_update, asset_removal
   title: text("title").notNull(),
   description: text("description").notNull(),
   amount: numeric("amount", { precision: 10, scale: 2 }).notNull().default("0"),
@@ -556,9 +556,9 @@ export const insertEmployeeEventSchema = baseInsertEmployeeEventSchema.extend({
     "vacation",
     "employee_update",
     "document_update",
-    "fleet_assignment",
-    "fleet_update",
-    "fleet_removal",
+    "asset_assignment",
+    "asset_update",
+    "asset_removal",
   ]),
   amount: baseInsertEmployeeEventSchema.shape.amount.optional().default("0"),
 });

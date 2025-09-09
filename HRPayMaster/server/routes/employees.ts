@@ -9,6 +9,7 @@ import {
   insertVacationRequestSchema,
   insertAssetSchema,
   insertCarSchema,
+  insertAssetAssignmentSchema,
   insertCarAssignmentSchema,
   insertNotificationSchema,
   insertEmailAlertSchema,
@@ -16,7 +17,6 @@ import {
   type InsertEmployeeEvent,
   type InsertEmployee,
   type InsertCar,
-  type InsertCarAssignment,
 } from "@shared/schema";
 import {
   sendEmail,
@@ -940,7 +940,7 @@ const upload = multer({ storage: multer.memoryStorage() });
   // Asset assignment routes
   employeesRouter.get("/api/asset-assignments", async (req, res, next) => {
     try {
-      const assignments = await storage.getCarAssignments();
+      const assignments = await storage.getAssetAssignments();
       res.json(assignments);
     } catch (error) {
       next(new HttpError(500, "Failed to fetch asset assignments"));
@@ -949,34 +949,34 @@ const upload = multer({ storage: multer.memoryStorage() });
 
   employeesRouter.get("/api/asset-assignments/:id", async (req, res, next) => {
     try {
-      const assignment = await storage.getCarAssignment(req.params.id);
+      const assignment = await storage.getAssetAssignment(req.params.id);
       if (!assignment) {
-        return next(new HttpError(404, "Car assignment not found"));
+        return next(new HttpError(404, "Asset assignment not found"));
       }
       res.json(assignment);
     } catch (error) {
-      next(new HttpError(500, "Failed to fetch car assignment"));
+      next(new HttpError(500, "Failed to fetch asset assignment"));
     }
   });
 
   employeesRouter.post("/api/asset-assignments", async (req, res, next) => {
     try {
-      const assignment = insertCarAssignmentSchema.parse(req.body);
-      const newAssignment = await storage.createCarAssignment(assignment);
-      // ensure the car reflects its new assignment
-      if (newAssignment?.carId) {
-        await storage.updateCar(newAssignment.carId, {
+      const assignment = insertAssetAssignmentSchema.parse(req.body);
+      const newAssignment = await storage.createAssetAssignment(assignment);
+      // ensure the asset reflects its new assignment
+      if (newAssignment?.assetId) {
+        await storage.updateAsset(newAssignment.assetId, {
           status: "assigned",
         });
       }
-      const detailed = await storage.getCarAssignment(newAssignment.id);
+      const detailed = await storage.getAssetAssignment(newAssignment.id);
       if (detailed) {
         const addedBy = await getAddedBy(req);
         const event: InsertEmployeeEvent = {
           employeeId: detailed.employeeId,
-          eventType: "fleet_assignment",
-          title: `Assigned vehicle ${detailed.car?.make ?? ""} ${detailed.car?.model ?? ""}`.trim(),
-          description: `Assigned vehicle ${detailed.car?.make ?? ""} ${detailed.car?.model ?? ""} to ${detailed.employee?.firstName ?? ""} ${detailed.employee?.lastName ?? ""}`.trim(),
+          eventType: "asset_assignment",
+          title: `Assigned ${detailed.asset?.name ?? ""}`.trim(),
+          description: `Assigned ${detailed.asset?.name ?? ""} to ${detailed.employee?.firstName ?? ""} ${detailed.employee?.lastName ?? ""}`.trim(),
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
@@ -987,32 +987,32 @@ const upload = multer({ storage: multer.memoryStorage() });
       res.status(201).json(newAssignment);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return next(new HttpError(400, "Invalid car assignment data", error.errors));
+        return next(new HttpError(400, "Invalid asset assignment data", error.errors));
       }
-      next(new HttpError(500, "Failed to create car assignment"));
+      next(new HttpError(500, "Failed to create asset assignment"));
     }
   });
 
   employeesRouter.put("/api/asset-assignments/:id", async (req, res, next) => {
     try {
-      const updates = insertCarAssignmentSchema.partial().parse(req.body);
-      const updated = await storage.updateCarAssignment(req.params.id, updates);
+      const updates = insertAssetAssignmentSchema.partial().parse(req.body);
+      const updated = await storage.updateAssetAssignment(req.params.id, updates);
       if (!updated) {
-        return next(new HttpError(404, "Car assignment not found"));
+        return next(new HttpError(404, "Asset assignment not found"));
       }
       if (updates.status) {
-        await storage.updateCar(updated.carId, {
+        await storage.updateAsset(updated.assetId, {
           status: updates.status === "completed" ? "available" : "assigned",
         });
       }
-      const detailed = await storage.getCarAssignment(req.params.id);
+      const detailed = await storage.getAssetAssignment(req.params.id);
       if (detailed) {
         const addedBy = await getAddedBy(req);
         const event: InsertEmployeeEvent = {
           employeeId: detailed.employeeId,
-          eventType: "fleet_update",
-          title: `Updated assignment for vehicle ${detailed.car?.make ?? ""} ${detailed.car?.model ?? ""}`.trim(),
-          description: `Updated vehicle ${detailed.car?.make ?? ""} ${detailed.car?.model ?? ""} assignment for ${detailed.employee?.firstName ?? ""} ${detailed.employee?.lastName ?? ""}`.trim(),
+          eventType: "asset_update",
+          title: `Updated assignment for ${detailed.asset?.name ?? ""}`.trim(),
+          description: `Updated ${detailed.asset?.name ?? ""} assignment for ${detailed.employee?.firstName ?? ""} ${detailed.employee?.lastName ?? ""}`.trim(),
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
@@ -1023,29 +1023,29 @@ const upload = multer({ storage: multer.memoryStorage() });
       res.json(updated);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return next(new HttpError(400, "Invalid car assignment data", error.errors));
+        return next(new HttpError(400, "Invalid asset assignment data", error.errors));
       }
-      next(new HttpError(500, "Failed to update car assignment"));
+      next(new HttpError(500, "Failed to update asset assignment"));
     }
   });
 
   employeesRouter.delete("/api/asset-assignments/:id", async (req, res, next) => {
     try {
-      const existing = await storage.getCarAssignment(req.params.id);
-      const deleted = await storage.deleteCarAssignment(req.params.id);
+      const existing = await storage.getAssetAssignment(req.params.id);
+      const deleted = await storage.deleteAssetAssignment(req.params.id);
       if (!deleted) {
-        return next(new HttpError(404, "Car assignment not found"));
+        return next(new HttpError(404, "Asset assignment not found"));
       }
-      if (existing?.carId) {
-        await storage.updateCar(existing.carId, { status: "available" });
+      if (existing?.assetId) {
+        await storage.updateAsset(existing.assetId, { status: "available" });
       }
       if (existing) {
         const addedBy = await getAddedBy(req);
         const event: InsertEmployeeEvent = {
           employeeId: existing.employeeId,
-          eventType: "fleet_removal",
-          title: `Removed vehicle ${existing.car?.make ?? ""} ${existing.car?.model ?? ""} assignment`.trim(),
-          description: `Removed vehicle ${existing.car?.make ?? ""} ${existing.car?.model ?? ""} from ${existing.employee?.firstName ?? ""} ${existing.employee?.lastName ?? ""}`.trim(),
+          eventType: "asset_removal",
+          title: `Removed ${existing.asset?.name ?? ""} assignment`.trim(),
+          description: `Removed ${existing.asset?.name ?? ""} from ${existing.employee?.firstName ?? ""} ${existing.employee?.lastName ?? ""}`.trim(),
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
@@ -1055,7 +1055,7 @@ const upload = multer({ storage: multer.memoryStorage() });
       }
       res.status(204).send();
     } catch (error) {
-      next(new HttpError(500, "Failed to delete car assignment"));
+      next(new HttpError(500, "Failed to delete asset assignment"));
     }
   });
 
@@ -1281,9 +1281,9 @@ const upload = multer({ storage: multer.memoryStorage() });
         const addedBy = await getAddedBy(req);
         const event: InsertEmployeeEvent = {
           employeeId: detailed.employeeId,
-          eventType: "fleet_assignment",
-          title: `Assigned vehicle ${detailed.car?.make ?? ""} ${detailed.car?.model ?? ""}`.trim(),
-          description: `Assigned vehicle ${detailed.car?.make ?? ""} ${detailed.car?.model ?? ""} to ${detailed.employee?.firstName ?? ""} ${detailed.employee?.lastName ?? ""}`.trim(),
+          eventType: "asset_assignment",
+          title: `Assigned ${detailed.car?.make ?? ""} ${detailed.car?.model ?? ""}`.trim(),
+          description: `Assigned ${detailed.car?.make ?? ""} ${detailed.car?.model ?? ""} to ${detailed.employee?.firstName ?? ""} ${detailed.employee?.lastName ?? ""}`.trim(),
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
@@ -1317,9 +1317,9 @@ const upload = multer({ storage: multer.memoryStorage() });
         const addedBy = await getAddedBy(req);
         const event: InsertEmployeeEvent = {
           employeeId: detailed.employeeId,
-          eventType: "fleet_update",
-          title: `Updated assignment for vehicle ${detailed.car?.make ?? ""} ${detailed.car?.model ?? ""}`.trim(),
-          description: `Updated vehicle ${detailed.car?.make ?? ""} ${detailed.car?.model ?? ""} assignment for ${detailed.employee?.firstName ?? ""} ${detailed.employee?.lastName ?? ""}`.trim(),
+          eventType: "asset_update",
+          title: `Updated assignment for ${detailed.car?.make ?? ""} ${detailed.car?.model ?? ""}`.trim(),
+          description: `Updated ${detailed.car?.make ?? ""} ${detailed.car?.model ?? ""} assignment for ${detailed.employee?.firstName ?? ""} ${detailed.employee?.lastName ?? ""}`.trim(),
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
@@ -1350,9 +1350,9 @@ const upload = multer({ storage: multer.memoryStorage() });
         const addedBy = await getAddedBy(req);
         const event: InsertEmployeeEvent = {
           employeeId: existing.employeeId,
-          eventType: "fleet_removal",
-          title: `Removed vehicle ${existing.car?.make ?? ""} ${existing.car?.model ?? ""} assignment`.trim(),
-          description: `Removed vehicle ${existing.car?.make ?? ""} ${existing.car?.model ?? ""} from ${existing.employee?.firstName ?? ""} ${existing.employee?.lastName ?? ""}`.trim(),
+          eventType: "asset_removal",
+          title: `Removed ${existing.car?.make ?? ""} ${existing.car?.model ?? ""} assignment`.trim(),
+          description: `Removed ${existing.car?.make ?? ""} ${existing.car?.model ?? ""} from ${existing.employee?.firstName ?? ""} ${existing.employee?.lastName ?? ""}`.trim(),
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
