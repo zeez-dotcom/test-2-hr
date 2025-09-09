@@ -7,6 +7,7 @@ import { format } from "date-fns";
 import { queryClient } from "@/lib/queryClient";
 import { apiPost } from "@/lib/http";
 import { useToast } from "@/hooks/use-toast";
+import { toastApiError } from "@/lib/toastError";
 import type { DocumentExpiryCheck } from "@shared/schema";
 
 export default function DocumentsPage() {
@@ -22,24 +23,22 @@ export default function DocumentsPage() {
 
   const sendAlertsMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiPost("/api/documents/send-alerts");
-      if (!res.ok) throw new Error(res.error || "Failed to send alerts");
-      return res.data;
+      const res = await apiPost<{ alertsGenerated: number; emailsSent: number }>(
+        "/api/documents/send-alerts"
+      );
+      if (!res.ok) throw res;
+      return res;
     },
-    onSuccess: (data: any) => {
+    onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ["/api/documents/expiry-check"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       toast({
         title: "Alerts Sent Successfully",
-        description: `Generated ${data.alertsGenerated} alerts, sent ${data.emailsSent} emails`,
+        description: `Generated ${res.data.alertsGenerated} alerts, sent ${res.data.emailsSent} emails`,
       });
     },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to send expiry alerts",
-        variant: "destructive",
-      });
+    onError: (res) => {
+      toastApiError(res, "Failed to send alerts");
     },
   });
 
