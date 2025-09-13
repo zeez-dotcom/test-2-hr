@@ -69,11 +69,12 @@ export function Chatbot() {
     let intent: { type: ChatIntent } = { type: "unknown" };
     try {
       const res = await apiPost("/api/chatbot", { message: text });
-      if (res.ok) {
-        intent = res.data as any;
-      }
-    } catch {
-      // Fallback to unknown intent on failure
+      if (!res.ok) throw new Error(res.error);
+      intent = res.data as any;
+    } catch (err) {
+      console.error("Chatbot intent request failed", err);
+      setMessages((m) => [...m, { from: "bot", text: "Could not connect to server" }]);
+      return;
     }
 
     switch (intent.type) {
@@ -98,16 +99,17 @@ export function Chatbot() {
           const res = await apiGet(
             `/api/chatbot/loan-status/${selectedEmployee}`
           );
-          if (!res.ok) throw new Error();
+          if (!res.ok) throw new Error(res.error);
           const data: any = res.data;
           setMessages((m) => [
             ...m,
             { from: "bot", text: `Loan balance is ${data.balance}.` },
           ]);
-        } catch {
+        } catch (err) {
+          console.error("Loan status request failed", err);
           setMessages((m) => [
             ...m,
-            { from: "bot", text: "Could not fetch loan status." },
+            { from: "bot", text: "Could not connect to server" },
           ]);
         }
         break;
@@ -116,7 +118,7 @@ export function Chatbot() {
           const res = await apiGet(
             `/api/chatbot/report-summary/${selectedEmployee}`
           );
-          if (!res.ok) throw new Error();
+          if (!res.ok) throw new Error(res.error);
           const data: any = res.data;
           setMessages((m) => [
             ...m,
@@ -125,10 +127,11 @@ export function Chatbot() {
               text: `Bonuses: ${data.bonuses}, Deductions: ${data.deductions}, Net Pay: ${data.netPay}.`,
             },
           ]);
-        } catch {
+        } catch (err) {
+          console.error("Report summary request failed", err);
           setMessages((m) => [
             ...m,
-            { from: "bot", text: "Could not fetch report summary." },
+            { from: "bot", text: "Could not connect to server" },
           ]);
         }
         break;
@@ -172,17 +175,26 @@ export function Chatbot() {
               affectsPayroll: true,
               status: "active",
             };
-            await apiPost("/api/employee-events", eventData);
-            setMessages((m) => [
-              ...m,
-              {
-                from: "bot",
-                text:
-                  pending.type === "addBonus"
-                    ? `Bonus of ${pending.data.amount} added for ${pending.data.date}.`
-                    : `Deduction of ${pending.data.amount} recorded for ${pending.data.date}.`,
-              },
-            ]);
+            try {
+              const res = await apiPost("/api/employee-events", eventData);
+              if (!res.ok) throw new Error(res.error);
+              setMessages((m) => [
+                ...m,
+                {
+                  from: "bot",
+                  text:
+                    pending.type === "addBonus"
+                      ? `Bonus of ${pending.data.amount} added for ${pending.data.date}.`
+                      : `Deduction of ${pending.data.amount} recorded for ${pending.data.date}.`,
+                },
+              ]);
+            } catch (err) {
+              console.error("Employee event request failed", err);
+              setMessages((m) => [
+                ...m,
+                { from: "bot", text: "Could not connect to server" },
+              ]);
+            }
             break;
           }
           case "requestVacation": {
@@ -201,14 +213,23 @@ export function Chatbot() {
               deductFromSalary: false,
               status: "approved",
             };
-            await apiPost("/api/vacations", vacation);
-            setMessages((m) => [
-              ...m,
-              {
-                from: "bot",
-                text: `Vacation from ${vacation.startDate} to ${vacation.endDate} recorded.`,
-              },
-            ]);
+            try {
+              const res = await apiPost("/api/vacations", vacation);
+              if (!res.ok) throw new Error(res.error);
+              setMessages((m) => [
+                ...m,
+                {
+                  from: "bot",
+                  text: `Vacation from ${vacation.startDate} to ${vacation.endDate} recorded.`,
+                },
+              ]);
+            } catch (err) {
+              console.error("Vacation request failed", err);
+              setMessages((m) => [
+                ...m,
+                { from: "bot", text: "Could not connect to server" },
+              ]);
+            }
             break;
           }
           case "runPayroll": {
@@ -220,14 +241,23 @@ export function Chatbot() {
               totalDeductions: "0",
               netAmount: "0",
             };
-            await apiPost("/api/payroll/generate", payroll);
-            setMessages((m) => [
-              ...m,
-              {
-                from: "bot",
-                text: `Payroll for ${payroll.period} generated.`,
-              },
-            ]);
+            try {
+              const res = await apiPost("/api/payroll/generate", payroll);
+              if (!res.ok) throw new Error(res.error);
+              setMessages((m) => [
+                ...m,
+                {
+                  from: "bot",
+                  text: `Payroll for ${payroll.period} generated.`,
+                },
+              ]);
+            } catch (err) {
+              console.error("Payroll generate request failed", err);
+              setMessages((m) => [
+                ...m,
+                { from: "bot", text: "Could not connect to server" },
+              ]);
+            }
             break;
           }
         }
