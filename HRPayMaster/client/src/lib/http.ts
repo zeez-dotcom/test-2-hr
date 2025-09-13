@@ -24,7 +24,12 @@ async function request(
   }
 
   try {
-    const res = await fetch(url, init);
+    const base = import.meta.env.VITE_API_BASE_URL;
+    const fullUrl =
+      base && !/^https?:\/\//i.test(url)
+        ? new URL(url, base).toString()
+        : url;
+    const res = await fetch(fullUrl, init);
     const contentType = res.headers.get("content-type") || "";
     let body: any = undefined;
     if (contentType.includes("application/json")) {

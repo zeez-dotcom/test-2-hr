@@ -5,12 +5,13 @@
 1. **Get a connection string**
    - Sign in to the [Neon](https://neon.tech) dashboard and copy the connection string for your project.
 2. **Configure environment variables**
-   - Create a `.env` file in this directory or add secrets via your hosting platform's UI.
+   - Copy `.env.example` to `.env` in this directory or add secrets via your hosting platform's UI.
    - Define the following variables:
 
      ```bash
      DATABASE_URL="<your Neon connection string>"
      SESSION_SECRET="<random session secret>"
+     VITE_API_BASE_URL="http://localhost:5000"
      ```
 
    > [!IMPORTANT]
