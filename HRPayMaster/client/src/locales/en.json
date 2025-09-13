@@ -20,6 +20,17 @@
     "chatbot": "Chatbot",
     "login": "Login"
   },
+  "chatbot": {
+    "selectAction": "Select action",
+    "intents": {
+      "addBonus": "Add bonus",
+      "addDeduction": "Add deduction",
+      "requestVacation": "Request vacation",
+      "runPayroll": "Run payroll",
+      "loanStatus": "Loan status",
+      "reportSummary": "Report summary"
+    }
+  },
   "login": {
     "submit": "Login",
     "loggingIn": "Logging in…"

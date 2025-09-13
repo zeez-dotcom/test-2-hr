@@ -20,6 +20,17 @@
     "chatbot": "الدردشة",
     "login": "تسجيل الدخول"
   },
+  "chatbot": {
+    "selectAction": "اختر الإجراء",
+    "intents": {
+      "addBonus": "إضافة مكافأة",
+      "addDeduction": "إضافة خصم",
+      "requestVacation": "طلب إجازة",
+      "runPayroll": "تشغيل الرواتب",
+      "loanStatus": "حالة القرض",
+      "reportSummary": "ملخص التقرير"
+    }
+  },
   "login": {
     "submit": "تسجيل الدخول",
     "loggingIn": "جاري تسجيل الدخول..."
