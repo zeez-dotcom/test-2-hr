@@ -16,6 +16,12 @@ import { calculateEmployeePayroll, calculateTotals } from "../utils/payroll";
 
 export const payrollRouter = Router();
 
+const deductionsSchema = z.object({
+  taxDeduction: z.number().optional(),
+  socialSecurityDeduction: z.number().optional(),
+  healthInsuranceDeduction: z.number().optional(),
+});
+
 payrollRouter.get("/", async (req, res, next) => {
   try {
     const payrollRuns = await storage.getPayrollRuns();
@@ -59,6 +65,15 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
       return next(new HttpError(400, "Period, start date, and end date are required"));
     }
 
+    const parsedDeductions = deductionsSchema.safeParse(req.body.deductions ?? {});
+    if (!parsedDeductions.success) {
+      return next(
+        new HttpError(400, "Invalid deduction data", parsedDeductions.error.errors),
+      );
+    }
+
+    const deductionConfig = parsedDeductions.data;
+
     // Parse dates once for reuse below
     const start = new Date(startDate);
     const end = new Date(endDate);
@@ -101,7 +116,7 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
           start,
           end,
           workingDays,
-          config: req.body.deductions,
+          config: deductionConfig,
         }),
       ),
     );
