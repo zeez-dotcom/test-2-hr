@@ -9,6 +9,7 @@ export type ChatIntent =
   | "help"
   | "loanStatus"
   | "reportSummary"
+  | "monthlySummary"
   | "unknown";
 
 export interface ParsedIntent {
@@ -36,6 +37,13 @@ export function parseIntent(message: string): ParsedIntent {
 
   if (lower.includes("loan")) {
     return { type: "loanStatus" };
+  }
+
+  if (
+    (lower.includes("current month") || lower.includes("monthly")) &&
+    lower.includes("summary")
+  ) {
+    return { type: "monthlySummary" };
   }
 
   if (lower.includes("report") || lower.includes("summary")) {

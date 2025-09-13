@@ -118,32 +118,58 @@ export function Chatbot() {
           ]);
         }
         break;
-      case "reportSummary":
-        try {
-          const res = await apiGet(
-            `/api/chatbot/report-summary/${selectedEmployee}`
-          );
-          if (!res.ok) throw new Error(res.error);
-          const data: any = res.data;
-          setMessages((m) => [
-            ...m,
-            {
-              from: "bot",
-              text: `Bonuses: ${data.bonuses}, Deductions: ${data.deductions}, Net Pay: ${data.netPay}.`,
-            },
-          ]);
-        } catch (err) {
-          console.error("Report summary request failed", err);
-          setMessages((m) => [
-            ...m,
-            { from: "bot", text: "Could not connect to server" },
-          ]);
+          case "reportSummary":
+            try {
+              const res = await apiGet(
+                `/api/chatbot/report-summary/${selectedEmployee}`
+              );
+              if (!res.ok) throw new Error(res.error);
+              const data: any = res.data;
+              setMessages((m) => [
+                ...m,
+                {
+                  from: "bot",
+                  text: `Bonuses: ${data.bonuses}, Deductions: ${data.deductions}, Net Pay: ${data.netPay}.`,
+                },
+              ]);
+            } catch (err) {
+              console.error("Report summary request failed", err);
+              setMessages((m) => [
+                ...m,
+                { from: "bot", text: "Could not connect to server" },
+              ]);
+            }
+            break;
+          case "monthlySummary":
+            try {
+              const res = await apiGet(
+                `/api/chatbot/monthly-summary/${selectedEmployee}`
+              );
+              if (!res.ok) throw new Error(res.error);
+              const data: any = res.data;
+              const eventsText =
+                data.events && data.events.length
+                  ? data.events.map((e: any) => e.title).join(", ")
+                  : "No events";
+              setMessages((m) => [
+                ...m,
+                {
+                  from: "bot",
+                  text: `Gross: ${data.payroll.gross}, Net: ${data.payroll.net}, Loan balance: ${data.loanBalance}. Events: ${eventsText}.`,
+                },
+              ]);
+            } catch (err) {
+              console.error("Monthly summary request failed", err);
+              setMessages((m) => [
+                ...m,
+                { from: "bot", text: "Could not retrieve summary" },
+              ]);
+            }
+            break;
+          default:
+            break;
         }
-        break;
-      default:
-        break;
-    }
-  };
+      };
 
   const handlePending = async (text: string) => {
     if (!pending) return;
@@ -393,6 +419,7 @@ export function Chatbot() {
               <SelectItem value="runPayroll">{t("chatbot.intents.runPayroll")}</SelectItem>
               <SelectItem value="loanStatus">{t("chatbot.intents.loanStatus")}</SelectItem>
               <SelectItem value="reportSummary">{t("chatbot.intents.reportSummary")}</SelectItem>
+              <SelectItem value="monthlySummary">{t("chatbot.intents.monthlySummary")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
