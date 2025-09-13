@@ -17,11 +17,12 @@ Before starting the server, install dependencies and configure environment varia
    npm install --prefix HRPayMaster
    ```
 
-2. Create an `.env` file in `HRPayMaster` with at least:
+2. Copy `.env.example` to `.env` in `HRPayMaster` and set at least:
 
    ```bash
    DATABASE_URL="<your Neon connection string>"
    SESSION_SECRET="<random session secret>"
+   VITE_API_BASE_URL="http://localhost:5000"
    ```
 
 Then start the development server:
