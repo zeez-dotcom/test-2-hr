@@ -2,8 +2,11 @@ import { Router } from "express";
 import { parseIntent } from "@shared/chatbot";
 import { storage } from "../storage";
 import { HttpError } from "../errorHandler";
+import { ensureAuth, requireRole } from "./auth";
 
 export const chatbotRouter = Router();
+
+chatbotRouter.use(ensureAuth);
 
 chatbotRouter.post("/api/chatbot", (req, res) => {
   const { message } = req.body ?? {};
@@ -13,6 +16,7 @@ chatbotRouter.post("/api/chatbot", (req, res) => {
 
 chatbotRouter.get(
   "/api/chatbot/loan-status/:id",
+  requireRole(["admin", "hr"]),
   async (req, res, next) => {
     try {
       const balances = await storage.getLoanBalances();
@@ -27,6 +31,7 @@ chatbotRouter.get(
 
 chatbotRouter.get(
   "/api/chatbot/report-summary/:id",
+  requireRole(["admin", "hr"]),
   async (req, res, next) => {
     try {
       const today = new Date();
