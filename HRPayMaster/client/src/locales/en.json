@@ -28,7 +28,8 @@
       "requestVacation": "Request vacation",
       "runPayroll": "Run payroll",
       "loanStatus": "Loan status",
-      "reportSummary": "Report summary"
+      "reportSummary": "Report summary",
+      "monthlySummary": "Monthly summary"
     }
   },
   "login": {

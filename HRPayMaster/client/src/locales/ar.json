@@ -28,7 +28,8 @@
       "requestVacation": "طلب إجازة",
       "runPayroll": "تشغيل الرواتب",
       "loanStatus": "حالة القرض",
-      "reportSummary": "ملخص التقرير"
+      "reportSummary": "ملخص التقرير",
+      "monthlySummary": "ملخص شهري"
     }
   },
   "login": {
