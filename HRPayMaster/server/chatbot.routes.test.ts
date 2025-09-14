@@ -21,14 +21,14 @@ vi.mock('./storage', () => ({
   },
 }));
 
-function createApp(role: string) {
+function createApp(role: string, id = '1') {
   const app = express();
   app.use(express.json({ limit: '1mb' }));
   app.use((req, _res, next) => {
     // @ts-ignore
     req.isAuthenticated = () => true;
     // @ts-ignore
-    req.user = { role };
+    req.user = { role, id };
     next();
   });
   return app;
@@ -149,6 +149,15 @@ describe('chatbot routes access control', () => {
 
   it('GET /api/chatbot/monthly-summary/:id returns 403 for unauthorized role', async () => {
     const app = createApp('guest');
+    await registerRoutes(app);
+    app.use(errorHandler);
+
+    const res = await request(app).get('/api/chatbot/monthly-summary/1');
+    expect(res.status).toBe(403);
+  });
+
+  it('GET /api/chatbot/monthly-summary/:id returns 403 when employeeId mismatches user', async () => {
+    const app = createApp('employee', '2');
     await registerRoutes(app);
     app.use(errorHandler);
 
