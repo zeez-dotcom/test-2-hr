@@ -1,9 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-const { selectMock } = vi.hoisted(() => ({ selectMock: vi.fn() }));
+const { selectMock, transactionMock } = vi.hoisted(() => ({
+  selectMock: vi.fn(),
+  transactionMock: vi.fn(),
+}));
 
 vi.mock('./db', () => ({
-  db: { select: selectMock },
+  db: { transaction: transactionMock },
 }));
 
 import { storage } from './storage';
@@ -11,6 +14,8 @@ import { storage } from './storage';
 describe('getMonthlyEmployeeSummary', () => {
   beforeEach(() => {
     selectMock.mockReset();
+    transactionMock.mockReset();
+    transactionMock.mockImplementation(async cb => cb({ select: selectMock }));
   });
 
   it('returns payroll, loans, and events for the month', async () => {
