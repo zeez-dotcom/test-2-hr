@@ -100,6 +100,7 @@ chatbotRouter.get(
   async (req, res, next) => {
     const start = process.hrtime.bigint();
     const { employeeId } = req.params;
+    const user = req.user as Express.User & { role?: string; id?: string };
     if (!employeeId) {
       const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000;
       chatbotMonthlySummaryRequestsTotal.inc({ status: "error" });
@@ -114,6 +115,22 @@ chatbotRouter.get(
         "chatbot",
       );
       return next(new HttpError(400, "Invalid employeeId"));
+    }
+
+    if (user.role !== "admin" && user.role !== "hr" && user.id !== employeeId) {
+      const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000;
+      chatbotMonthlySummaryRequestsTotal.inc({ status: "error" });
+      log(
+        JSON.stringify({
+          route: "chatbot/monthly-summary",
+          employeeId,
+          status: "error",
+          error: "Forbidden",
+          durationMs,
+        }),
+        "chatbot",
+      );
+      return next(new HttpError(403, "Forbidden"));
     }
     try {
       const now = new Date();
