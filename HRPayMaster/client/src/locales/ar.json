@@ -39,6 +39,11 @@
   "errors": {
     "loginRequired": "اسم المستخدم وكلمة المرور مطلوبة",
     "general": "حدث خطأ غير متوقع",
-    "errorTitle": "خطأ"
+    "errorTitle": "خطأ",
+    "loanStatusFetchError": "تعذر جلب حالة القرض",
+    "reportSummaryFetchError": "تعذر جلب ملخص التقرير",
+    "monthlySummaryInvalidEmployeeId": "معرّف الموظف غير صالح",
+    "monthlySummaryForbidden": "ليس لديك صلاحية للوصول إلى هذا الموظف",
+    "monthlySummaryFetchError": "تعذر جلب الملخص الشهري"
   }
 }

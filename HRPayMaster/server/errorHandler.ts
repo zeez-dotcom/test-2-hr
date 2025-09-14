@@ -4,11 +4,13 @@ import { ZodError } from "zod";
 export class HttpError extends Error {
   status: number;
   details?: unknown;
+  code?: string;
 
-  constructor(status: number, message: string, details?: unknown) {
+  constructor(status: number, message: string, details?: unknown, code?: string) {
     super(message);
     this.status = status;
     this.details = details;
+    this.code = code;
   }
 }
 
@@ -21,6 +23,9 @@ export function errorHandler(err: any, _req: Request, res: Response, _next: Next
     : err.details ?? (err instanceof Error ? err : undefined);
 
   const body: any = { error: { message } };
+  if (err.code) {
+    body.error.code = err.code;
+  }
 
   if (isZodError) {
     body.error.fields = err.errors.map((issue: any) => ({

@@ -39,6 +39,11 @@
   "errors": {
     "loginRequired": "Username and password are required",
     "general": "An unexpected error occurred",
-    "errorTitle": "Error"
+    "errorTitle": "Error",
+    "loanStatusFetchError": "Unable to fetch loan status",
+    "reportSummaryFetchError": "Unable to fetch report summary",
+    "monthlySummaryInvalidEmployeeId": "Invalid employee selected",
+    "monthlySummaryForbidden": "You do not have access to this employee",
+    "monthlySummaryFetchError": "Unable to fetch monthly summary"
   }
 }

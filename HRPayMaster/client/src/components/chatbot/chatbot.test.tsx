@@ -13,6 +13,8 @@ vi.mock('react-i18next', () => ({
       ({
         'chatbot.intents.monthlySummary': 'Monthly summary',
         'chatbot.selectAction': 'Select action',
+        'errors.monthlySummaryForbidden': 'You do not have access to this employee',
+        'errors.general': 'An unexpected error occurred',
       } as Record<string, string>)[key] || key,
   }),
 }));
@@ -118,11 +120,11 @@ describe('Chatbot monthly summary', () => {
     ).toBeInTheDocument();
   });
 
-  it('shows error when unauthorized', async () => {
+  it('shows localized error when unauthorized', async () => {
     apiGet.mockResolvedValue({
       ok: false,
-      status: 401,
-      error: 'Unauthorized',
+      status: 403,
+      error: { error: { code: 'monthlySummaryForbidden' } },
     } as any);
 
     render(
@@ -136,7 +138,7 @@ describe('Chatbot monthly summary', () => {
     fireEvent.click(screen.getByText('Send'));
 
     expect(
-      await screen.findByText('Could not retrieve summary'),
+      await screen.findByText('You do not have access to this employee'),
     ).toBeInTheDocument();
   });
 });
