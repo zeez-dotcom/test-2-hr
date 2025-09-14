@@ -219,6 +219,10 @@ export interface IStorage {
   deleteEmployeeEvent(id: string): Promise<boolean>;
 
   // Reports
+  getMonthlyEmployeeSummary(
+    employeeId: string,
+    month: Date
+  ): Promise<{ payroll: PayrollEntry[]; loans: Loan[]; events: EmployeeEvent[] }>;
   getEmployeeReport(
     employeeId: string,
     range: { startDate: string; endDate: string; groupBy: "month" | "year" }
@@ -1253,6 +1257,67 @@ export class DatabaseStorage implements IStorage {
   async deleteEmployeeEvent(id: string): Promise<boolean> {
     const result = await db.delete(employeeEvents).where(eq(employeeEvents.id, id));
     return (result.rowCount ?? 0) > 0;
+  }
+
+  async getMonthlyEmployeeSummary(
+    employeeId: string,
+    month: Date
+  ): Promise<{ payroll: PayrollEntry[]; loans: Loan[]; events: EmployeeEvent[] }> {
+    const startDate = new Date(
+      month.getFullYear(),
+      month.getMonth(),
+      1
+    )
+      .toISOString()
+      .split("T")[0];
+    const endDate = new Date(
+      month.getFullYear(),
+      month.getMonth() + 1,
+      0
+    )
+      .toISOString()
+      .split("T")[0];
+
+    const payrollRows = await db
+      .select({ entry: payrollEntries })
+      .from(payrollEntries)
+      .innerJoin(payrollRuns, eq(payrollEntries.payrollRunId, payrollRuns.id))
+      .where(
+        and(
+          eq(payrollEntries.employeeId, employeeId),
+          gte(payrollRuns.startDate, startDate),
+          lte(payrollRuns.startDate, endDate)
+        )
+      );
+
+    const loansRows = await db
+      .select()
+      .from(loans)
+      .where(
+        and(
+          eq(loans.employeeId, employeeId),
+          eq(loans.status, "active"),
+          lte(loans.startDate, endDate)
+        )
+      );
+
+    const eventRows = await db
+      .select()
+      .from(employeeEvents)
+      .where(
+        and(
+          eq(employeeEvents.employeeId, employeeId),
+          gte(employeeEvents.eventDate, startDate),
+          lte(employeeEvents.eventDate, endDate),
+          eq(employeeEvents.affectsPayroll, true)
+        )
+      );
+
+    return {
+      payroll: payrollRows.map((r) => r.entry),
+      loans: loansRows,
+      events: eventRows,
+    };
   }
 
   async getEmployeeReport(

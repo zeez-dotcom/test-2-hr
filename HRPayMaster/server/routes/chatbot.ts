@@ -102,41 +102,31 @@ chatbotRouter.get(
     }
     try {
       const now = new Date();
-      const startDate = new Date(now.getFullYear(), now.getMonth(), 1)
-        .toISOString()
-        .split("T")[0];
-      const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-        .toISOString()
-        .split("T")[0];
-
-      const report = await storage.getEmployeeReport(employeeId, {
-        startDate,
-        endDate,
-        groupBy: "month",
-      });
-      const period = report[0];
+      const summary = await storage.getMonthlyEmployeeSummary(
+        employeeId,
+        now,
+      );
 
       const payroll = {
-        gross:
-          period?.payrollEntries.reduce(
-            (sum, e) => sum + Number(e.grossPay || 0),
-            0,
-          ) || 0,
-        net:
-          period?.payrollEntries.reduce(
-            (sum, e) => sum + Number(e.netPay || 0),
-            0,
-          ) || 0,
+        gross: summary.payroll.reduce(
+          (sum, e) => sum + Number(e.grossPay || 0),
+          0,
+        ),
+        net: summary.payroll.reduce(
+          (sum, e) => sum + Number(e.netPay || 0),
+          0,
+        ),
       };
 
-      const balances = await storage.getLoanBalances();
-      const loanBalance =
-        balances.find((b) => b.employeeId === employeeId)?.balance || 0;
+      const loanBalance = summary.loans.reduce(
+        (sum, l) => sum + Number(l.remainingAmount || 0),
+        0,
+      );
 
       res.json({
         payroll,
         loanBalance,
-        events: period?.employeeEvents || [],
+        events: summary.events,
       });
     } catch (err) {
       next(new HttpError(500, "Failed to fetch monthly summary"));
