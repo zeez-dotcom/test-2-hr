@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, numeric, date, timestamp, boolean, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, numeric, date, timestamp, boolean, integer, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import {
@@ -223,25 +223,32 @@ export const payrollRuns = pgTable("payroll_runs", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const payrollEntries = pgTable("payroll_entries", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  payrollRunId: varchar("payroll_run_id").references(() => payrollRuns.id).notNull(),
-  employeeId: varchar("employee_id").references(() => employees.id).notNull(),
-  grossPay: numeric("gross_pay", { precision: 10, scale: 2 }).notNull(),
-  baseSalary: numeric("base_salary", { precision: 10, scale: 2 }).notNull().default("0"),
-  bonusAmount: numeric("bonus_amount", { precision: 10, scale: 2 }).notNull().default("0"),
-  workingDays: integer("working_days").notNull().default(30),
-  actualWorkingDays: integer("actual_working_days").notNull().default(30),
-  vacationDays: integer("vacation_days").notNull().default(0),
-  taxDeduction: numeric("tax_deduction", { precision: 10, scale: 2 }).notNull().default("0"),
-  socialSecurityDeduction: numeric("social_security_deduction", { precision: 10, scale: 2 }).notNull().default("0"),
-  healthInsuranceDeduction: numeric("health_insurance_deduction", { precision: 10, scale: 2 }).notNull().default("0"),
-  loanDeduction: numeric("loan_deduction", { precision: 10, scale: 2 }).notNull().default("0"),
-  otherDeductions: numeric("other_deductions", { precision: 10, scale: 2 }).notNull().default("0"),
-  netPay: numeric("net_pay", { precision: 10, scale: 2 }).notNull(),
-  adjustmentReason: text("adjustment_reason"), // Explanation for any adjustments
-  createdAt: timestamp("created_at").defaultNow(),
-});
+export const payrollEntries = pgTable(
+  "payroll_entries",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    payrollRunId: varchar("payroll_run_id").references(() => payrollRuns.id).notNull(),
+    employeeId: varchar("employee_id").references(() => employees.id).notNull(),
+    grossPay: numeric("gross_pay", { precision: 10, scale: 2 }).notNull(),
+    baseSalary: numeric("base_salary", { precision: 10, scale: 2 }).notNull().default("0"),
+    bonusAmount: numeric("bonus_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+    workingDays: integer("working_days").notNull().default(30),
+    actualWorkingDays: integer("actual_working_days").notNull().default(30),
+    vacationDays: integer("vacation_days").notNull().default(0),
+    taxDeduction: numeric("tax_deduction", { precision: 10, scale: 2 }).notNull().default("0"),
+    socialSecurityDeduction: numeric("social_security_deduction", { precision: 10, scale: 2 }).notNull().default("0"),
+    healthInsuranceDeduction: numeric("health_insurance_deduction", { precision: 10, scale: 2 }).notNull().default("0"),
+    loanDeduction: numeric("loan_deduction", { precision: 10, scale: 2 }).notNull().default("0"),
+    otherDeductions: numeric("other_deductions", { precision: 10, scale: 2 }).notNull().default("0"),
+    netPay: numeric("net_pay", { precision: 10, scale: 2 }).notNull(),
+    adjustmentReason: text("adjustment_reason"), // Explanation for any adjustments
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => ({
+    payrollEntriesEmployeeIdx: index("payroll_entries_employee_id_idx").on(t.employeeId),
+    payrollEntriesDateIdx: index("payroll_entries_date_idx").on(t.createdAt),
+  })
+);
 
 // Notifications table for document expiry alerts
 export const notifications = pgTable("notifications", {
@@ -274,20 +281,27 @@ export const emailAlerts = pgTable("email_alerts", {
 });
 
 // Employee events for payroll adjustments
-export const employeeEvents = pgTable("employee_events", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  employeeId: varchar("employee_id").references(() => employees.id).notNull(),
-  eventType: text("event_type").notNull(), // bonus, deduction, allowance, overtime, penalty, vacation, employee_update, document_update, asset_assignment, asset_update, asset_removal
-  title: text("title").notNull(),
-  description: text("description").notNull(),
-  amount: numeric("amount", { precision: 10, scale: 2 }).notNull().default("0"),
-  eventDate: date("event_date").notNull(),
-  affectsPayroll: boolean("affects_payroll").default(true),
-  documentUrl: text("document_url"), // For uploaded supporting documents
-  status: text("status").notNull().default("active"), // active, cancelled, processed
-  addedBy: varchar("added_by").references(() => employees.id),
-  createdAt: timestamp("created_at").defaultNow(),
-});
+export const employeeEvents = pgTable(
+  "employee_events",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    employeeId: varchar("employee_id").references(() => employees.id).notNull(),
+    eventType: text("event_type").notNull(), // bonus, deduction, allowance, overtime, penalty, vacation, employee_update, document_update, asset_assignment, asset_update, asset_removal
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    amount: numeric("amount", { precision: 10, scale: 2 }).notNull().default("0"),
+    eventDate: date("event_date").notNull(),
+    affectsPayroll: boolean("affects_payroll").default(true),
+    documentUrl: text("document_url"), // For uploaded supporting documents
+    status: text("status").notNull().default("active"), // active, cancelled, processed
+    addedBy: varchar("added_by").references(() => employees.id),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => ({
+    employeeEventsEmployeeIdx: index("employee_events_employee_id_idx").on(t.employeeId),
+    employeeEventsDateIdx: index("employee_events_event_date_idx").on(t.eventDate),
+  })
+);
 
 // Insert schemas
 export const insertDepartmentSchema = createInsertSchema(departments).omit({

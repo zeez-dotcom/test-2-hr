@@ -1278,46 +1278,48 @@ export class DatabaseStorage implements IStorage {
       .toISOString()
       .split("T")[0];
 
-    const payrollRows = await db
-      .select({ entry: payrollEntries })
-      .from(payrollEntries)
-      .innerJoin(payrollRuns, eq(payrollEntries.payrollRunId, payrollRuns.id))
-      .where(
-        and(
-          eq(payrollEntries.employeeId, employeeId),
-          gte(payrollRuns.startDate, startDate),
-          lte(payrollRuns.startDate, endDate)
-        )
-      );
+    return await db.transaction(async (tx) => {
+      const [payrollRows, loansRows, eventRows] = await Promise.all([
+        tx
+          .select({ entry: payrollEntries })
+          .from(payrollEntries)
+          .innerJoin(payrollRuns, eq(payrollEntries.payrollRunId, payrollRuns.id))
+          .where(
+            and(
+              eq(payrollEntries.employeeId, employeeId),
+              gte(payrollRuns.startDate, startDate),
+              lte(payrollRuns.startDate, endDate)
+            )
+          ),
+        tx
+          .select()
+          .from(loans)
+          .where(
+            and(
+              eq(loans.employeeId, employeeId),
+              eq(loans.status, "active"),
+              lte(loans.startDate, endDate)
+            )
+          ),
+        tx
+          .select()
+          .from(employeeEvents)
+          .where(
+            and(
+              eq(employeeEvents.employeeId, employeeId),
+              gte(employeeEvents.eventDate, startDate),
+              lte(employeeEvents.eventDate, endDate),
+              eq(employeeEvents.affectsPayroll, true)
+            )
+          ),
+      ]);
 
-    const loansRows = await db
-      .select()
-      .from(loans)
-      .where(
-        and(
-          eq(loans.employeeId, employeeId),
-          eq(loans.status, "active"),
-          lte(loans.startDate, endDate)
-        )
-      );
-
-    const eventRows = await db
-      .select()
-      .from(employeeEvents)
-      .where(
-        and(
-          eq(employeeEvents.employeeId, employeeId),
-          gte(employeeEvents.eventDate, startDate),
-          lte(employeeEvents.eventDate, endDate),
-          eq(employeeEvents.affectsPayroll, true)
-        )
-      );
-
-    return {
-      payroll: payrollRows.map((r) => r.entry),
-      loans: loansRows,
-      events: eventRows,
-    };
+      return {
+        payroll: payrollRows.map((r) => r.entry),
+        loans: loansRows,
+        events: eventRows,
+      };
+    });
   }
 
   async getEmployeeReport(
