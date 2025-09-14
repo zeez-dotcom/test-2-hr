@@ -26,7 +26,9 @@ chatbotRouter.get(
         balances.find((b) => b.employeeId === req.params.id)?.balance || 0;
       res.json({ balance });
     } catch (err) {
-      next(new HttpError(500, "Failed to fetch loan status"));
+      next(
+        new HttpError(500, "Failed to fetch loan status", undefined, "loanStatusFetchError"),
+      );
     }
   }
 );
@@ -89,7 +91,9 @@ chatbotRouter.get(
       );
       res.json(totals);
     } catch (err) {
-      next(new HttpError(500, "Failed to fetch report summary"));
+      next(
+        new HttpError(500, "Failed to fetch report summary", undefined, "reportSummaryFetchError"),
+      );
     }
   }
 );
@@ -114,7 +118,9 @@ chatbotRouter.get(
         }),
         "chatbot",
       );
-      return next(new HttpError(400, "Invalid employeeId"));
+      return next(
+        new HttpError(400, "Invalid employeeId", undefined, "monthlySummaryInvalidEmployeeId"),
+      );
     }
 
     if (user.role !== "admin" && user.role !== "hr" && user.id !== employeeId) {
@@ -130,7 +136,9 @@ chatbotRouter.get(
         }),
         "chatbot",
       );
-      return next(new HttpError(403, "Forbidden"));
+      return next(
+        new HttpError(403, "Forbidden", undefined, "monthlySummaryForbidden"),
+      );
     }
     try {
       const now = new Date();
@@ -185,7 +193,9 @@ chatbotRouter.get(
         }),
         "chatbot",
       );
-      next(new HttpError(500, "Failed to fetch monthly summary"));
+      next(
+        new HttpError(500, "Failed to fetch monthly summary", undefined, "monthlySummaryFetchError"),
+      );
     }
   },
 );

@@ -104,17 +104,24 @@ export function Chatbot() {
           const res = await apiGet(
             `/api/chatbot/loan-status/${selectedEmployee}`
           );
-          if (!res.ok) throw new Error(res.error);
-          const data: any = res.data;
-          setMessages((m) => [
-            ...m,
-            { from: "bot", text: `Loan balance is ${data.balance}.` },
-          ]);
+          if (res.ok) {
+            const data: any = res.data;
+            setMessages((m) => [
+              ...m,
+              { from: "bot", text: `Loan balance is ${data.balance}.` },
+            ]);
+          } else {
+            const code = res.error?.error?.code || "general";
+            setMessages((m) => [
+              ...m,
+              { from: "bot", text: t(`errors.${code}`) },
+            ]);
+          }
         } catch (err) {
           console.error("Loan status request failed", err);
           setMessages((m) => [
             ...m,
-            { from: "bot", text: "Could not connect to server" },
+            { from: "bot", text: t("errors.general") },
           ]);
         }
         break;
@@ -123,20 +130,27 @@ export function Chatbot() {
               const res = await apiGet(
                 `/api/chatbot/report-summary/${selectedEmployee}`
               );
-              if (!res.ok) throw new Error(res.error);
-              const data: any = res.data;
-              setMessages((m) => [
-                ...m,
-                {
-                  from: "bot",
-                  text: `Bonuses: ${data.bonuses}, Deductions: ${data.deductions}, Net Pay: ${data.netPay}.`,
-                },
-              ]);
+              if (res.ok) {
+                const data: any = res.data;
+                setMessages((m) => [
+                  ...m,
+                  {
+                    from: "bot",
+                    text: `Bonuses: ${data.bonuses}, Deductions: ${data.deductions}, Net Pay: ${data.netPay}.`,
+                  },
+                ]);
+              } else {
+                const code = res.error?.error?.code || "general";
+                setMessages((m) => [
+                  ...m,
+                  { from: "bot", text: t(`errors.${code}`) },
+                ]);
+              }
             } catch (err) {
               console.error("Report summary request failed", err);
               setMessages((m) => [
                 ...m,
-                { from: "bot", text: "Could not connect to server" },
+                { from: "bot", text: t("errors.general") },
               ]);
             }
             break;
@@ -145,24 +159,31 @@ export function Chatbot() {
               const res = await apiGet(
                 `/api/chatbot/monthly-summary/${selectedEmployee}`
               );
-              if (!res.ok) throw new Error(res.error);
-              const data: any = res.data;
-              const eventsText =
-                data.events && data.events.length
-                  ? data.events.map((e: any) => e.title).join(", ")
-                  : "No events";
-              setMessages((m) => [
-                ...m,
-                {
-                  from: "bot",
-                  text: `Gross: ${data.payroll.gross}, Net: ${data.payroll.net}, Loan balance: ${data.loanBalance}. Events: ${eventsText}.`,
-                },
-              ]);
+              if (res.ok) {
+                const data: any = res.data;
+                const eventsText =
+                  data.events && data.events.length
+                    ? data.events.map((e: any) => e.title).join(", ")
+                    : "No events";
+                setMessages((m) => [
+                  ...m,
+                  {
+                    from: "bot",
+                    text: `Gross: ${data.payroll.gross}, Net: ${data.payroll.net}, Loan balance: ${data.loanBalance}. Events: ${eventsText}.`,
+                  },
+                ]);
+              } else {
+                const code = res.error?.error?.code || "general";
+                setMessages((m) => [
+                  ...m,
+                  { from: "bot", text: t(`errors.${code}`) },
+                ]);
+              }
             } catch (err) {
               console.error("Monthly summary request failed", err);
               setMessages((m) => [
                 ...m,
-                { from: "bot", text: "Could not retrieve summary" },
+                { from: "bot", text: t("errors.general") },
               ]);
             }
             break;
