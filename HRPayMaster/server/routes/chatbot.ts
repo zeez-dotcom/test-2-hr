@@ -3,6 +3,8 @@ import { parseIntent } from "@shared/chatbot";
 import { storage } from "../storage";
 import { HttpError } from "../errorHandler";
 import { ensureAuth, requireRole } from "./auth";
+import { log } from "../vite";
+import { chatbotMonthlySummaryRequestsTotal } from "../metrics";
 
 export const chatbotRouter = Router();
 
@@ -96,8 +98,21 @@ chatbotRouter.get(
   "/api/chatbot/monthly-summary/:employeeId",
   requireRole(["admin", "hr", "employee"]),
   async (req, res, next) => {
+    const start = process.hrtime.bigint();
     const { employeeId } = req.params;
     if (!employeeId) {
+      const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000;
+      chatbotMonthlySummaryRequestsTotal.inc({ status: "error" });
+      log(
+        JSON.stringify({
+          route: "chatbot/monthly-summary",
+          employeeId,
+          status: "error",
+          error: "Invalid employeeId",
+          durationMs,
+        }),
+        "chatbot",
+      );
       return next(new HttpError(400, "Invalid employeeId"));
     }
     try {
@@ -123,12 +138,36 @@ chatbotRouter.get(
         0,
       );
 
+      const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000;
+      chatbotMonthlySummaryRequestsTotal.inc({ status: "success" });
+      log(
+        JSON.stringify({
+          route: "chatbot/monthly-summary",
+          employeeId,
+          status: "success",
+          durationMs,
+        }),
+        "chatbot",
+      );
+
       res.json({
         payroll,
         loanBalance,
         events: summary.events,
       });
     } catch (err) {
+      const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000;
+      chatbotMonthlySummaryRequestsTotal.inc({ status: "error" });
+      log(
+        JSON.stringify({
+          route: "chatbot/monthly-summary",
+          employeeId,
+          status: "error",
+          error: err instanceof Error ? err.message : String(err),
+          durationMs,
+        }),
+        "chatbot",
+      );
       next(new HttpError(500, "Failed to fetch monthly summary"));
     }
   },
