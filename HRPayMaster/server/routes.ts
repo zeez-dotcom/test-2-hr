@@ -7,9 +7,11 @@ import { payrollRouter } from "./routes/payroll";
 import { loansRouter } from "./routes/loans";
 import { carsRouter } from "./routes/cars";
 import { chatbotRouter } from "./routes/chatbot";
+import { metricsRouter } from "./metrics";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.use(authRouter);
+  app.use(metricsRouter);
   app.use("/api", ensureAuth);
   app.use(employeesRouter);
   app.use(reportsRouter);
