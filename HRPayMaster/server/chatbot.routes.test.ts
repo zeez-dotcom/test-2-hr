@@ -137,5 +137,63 @@ describe('chatbot routes access control', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ bonuses: 17, deductions: 23, netPay: 100 });
   });
+
+  it('GET /api/chatbot/monthly-summary/:id returns 401 when not authenticated', async () => {
+    const app = createUnauthenticatedApp();
+    await registerRoutes(app);
+    app.use(errorHandler);
+
+    const res = await request(app).get('/api/chatbot/monthly-summary/1');
+    expect(res.status).toBe(401);
+  });
+
+  it('GET /api/chatbot/monthly-summary/:id returns 403 for unauthorized role', async () => {
+    const app = createApp('guest');
+    await registerRoutes(app);
+    app.use(errorHandler);
+
+    const res = await request(app).get('/api/chatbot/monthly-summary/1');
+    expect(res.status).toBe(403);
+  });
+
+  it('GET /api/chatbot/monthly-summary/:id returns expected fields', async () => {
+    const app = createApp('admin');
+    await registerRoutes(app);
+    app.use(errorHandler);
+
+    vi.mocked(storage.getMonthlyEmployeeSummary).mockResolvedValue({
+      payroll: [{ grossPay: '1000', netPay: '900' }],
+      loans: [{ remainingAmount: '100' }],
+      events: [{ title: 'Event' }],
+    } as any);
+
+    const res = await request(app).get('/api/chatbot/monthly-summary/1');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      payroll: { gross: 1000, net: 900 },
+      loanBalance: 100,
+      events: [{ title: 'Event' }],
+    });
+  });
+
+  it('GET /api/chatbot/monthly-summary/:id handles no data', async () => {
+    const app = createApp('admin');
+    await registerRoutes(app);
+    app.use(errorHandler);
+
+    vi.mocked(storage.getMonthlyEmployeeSummary).mockResolvedValue({
+      payroll: [],
+      loans: [],
+      events: [],
+    } as any);
+
+    const res = await request(app).get('/api/chatbot/monthly-summary/1');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      payroll: { gross: 0, net: 0 },
+      loanBalance: 0,
+      events: [],
+    });
+  });
 });
 
