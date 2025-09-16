@@ -7,6 +7,8 @@ import { queryClient } from "@/lib/queryClient";
 import { apiUpload, apiGet } from "@/lib/http";
 import { toastApiError } from "@/lib/toastError";
 import { insertEmployeeSchema } from "@shared/schema";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 interface ImportError {
   row: number;
@@ -41,12 +43,14 @@ export default function EmployeeImport() {
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
+  const [basicOnly, setBasicOnly] = useState(true);
   const { toast } = useToast();
 
   const detectHeaders = async () => {
     if (!file) return;
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("basicOnly", basicOnly ? "1" : "0");
     setIsSubmitting(true);
     try {
       const res = await apiUpload("/api/employees/import", formData);
@@ -123,6 +127,7 @@ export default function EmployeeImport() {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("mapping", JSON.stringify(mapping));
+    formData.append("basicOnly", basicOnly ? "1" : "0");
     setIsSubmitting(true);
     try {
       const res = await apiUpload("/api/employees/import", formData);
@@ -165,6 +170,11 @@ export default function EmployeeImport() {
           {headers.length ? "Import" : "Next"}
         </Button>
         <Button variant="outline" onClick={downloadTemplate}>Download Template</Button>
+      </div>
+
+      <div className="flex items-center space-x-2">
+        <Switch id="basic-only" checked={basicOnly} onCheckedChange={setBasicOnly} />
+        <Label htmlFor="basic-only">Import basic info only (ignore custom columns)</Label>
       </div>
 
       {headers.length > 0 && (

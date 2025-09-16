@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Calculator, DollarSign, FileText, Trash2, Eye, Edit } from "lucide-react";
+import { Calculator, DollarSign, FileText, Trash2, Eye, Edit, RefreshCcw } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import { apiPost, apiDelete } from "@/lib/http";
 import { useToast } from "@/hooks/use-toast";
@@ -22,6 +22,11 @@ interface PayrollGenerateRequest {
   period: string;
   startDate: string;
   endDate: string;
+  deductions?: {
+    taxDeduction?: number;
+    socialSecurityDeduction?: number;
+    healthInsuranceDeduction?: number;
+  };
 }
 
 function useSearchParams() {
@@ -90,7 +95,16 @@ export default function Payroll() {
         navigate("/login");
         return;
       }
-      toastApiError(res, "Failed to generate payroll");
+      // Tests expect generic errors to use title 'Error' and a descriptive message
+      const serverMessage =
+        (res?.error && typeof res.error === "object" && (res.error as any)?.message)
+          ? (res.error as any).message
+          : (typeof res?.error === "string" ? res.error : undefined);
+      if (serverMessage) {
+        toast({ title: "Error", description: serverMessage, variant: "destructive" });
+      } else {
+        toast({ title: "Error", description: "Failed to generate payroll", variant: "destructive" });
+      }
     },
   });
 
@@ -111,6 +125,22 @@ export default function Payroll() {
     },
     onError: (err) => {
       toastApiError(err as any, "Failed to delete payroll run");
+    },
+  });
+
+  const recalcMutation = useMutation({
+    mutationFn: async (payrollId: string) => {
+      const res = await apiPost(`/api/payroll/${payrollId}/recalculate`);
+      if (!res.ok) throw res;
+      return payrollId;
+    },
+    onSuccess: (_, payrollId) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
+      toast({ title: "Success", description: "Totals recalculated" });
+    },
+    onError: (err) => {
+      toastApiError(err as any, "Failed to recalculate totals");
     },
   });
 
@@ -390,6 +420,16 @@ export default function Payroll() {
                                 >
                                   <Edit className="mr-1" size={14} />
                                   Edit
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => recalcMutation.mutate(payroll.id)}
+                                  disabled={recalcMutation.isPending}
+                                  className="text-emerald-700 hover:text-emerald-800"
+                                >
+                                  <RefreshCcw className="mr-1" size={14} />
+                                  Recalc
                                 </Button>
                                 <Button
                                   variant="ghost"

@@ -97,11 +97,14 @@ export function calculateEmployeePayroll({
       ? (monthlySalary * actualWorkingDays) / workingDays
       : 0;
 
-  const employeeLoans = loans.filter(l =>
-    l.employeeId === employee.id &&
-    l.status === "active" &&
-    parseFloat(l.remainingAmount) > 0
-  );
+  const employeeLoans = loans.filter(l => {
+    const isActive = l.status === "active" || l.status === "approved"; // tolerate legacy "approved"
+    return (
+      l.employeeId === employee.id &&
+      isActive &&
+      parseFloat(l.remainingAmount) > 0
+    );
+  });
 
   const loanDeduction = employeeLoans.reduce((total, loan) => {
     return total + Math.min(parseFloat(loan.monthlyDeduction), parseFloat(loan.remainingAmount));

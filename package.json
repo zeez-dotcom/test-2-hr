@@ -9,12 +9,17 @@
   "scripts": {
     "dev": "npm run dev --prefix HRPayMaster",
     "test": "npm test --prefix HRPayMaster && npx playwright test",
+    "test:coverage": "npm run test:coverage --prefix HRPayMaster && npx playwright test",
     "db:push": "npm run db:push --prefix HRPayMaster"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": ">=20",
+    "npm": ">=10"
+  },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
     "cross-env": "^10.0.0",

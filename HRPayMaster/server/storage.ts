@@ -81,6 +81,14 @@ export interface PayrollSummaryPeriod {
   payrollEntries: PayrollEntry[];
 }
 
+export interface PayrollDepartmentSummaryRow {
+  period: string;
+  departmentId: string | null;
+  departmentName: string | null;
+  grossPay: number;
+  netPay: number;
+}
+
 export interface LoanBalance {
   employeeId: string;
   balance: number;
@@ -230,6 +238,9 @@ export interface IStorage {
   getCompanyPayrollSummary(
     range: { startDate: string; endDate: string; groupBy: "month" | "year" }
   ): Promise<PayrollSummaryPeriod[]>;
+  getCompanyPayrollByDepartment(
+    range: { startDate: string; endDate: string; groupBy: "month" | "year" }
+  ): Promise<PayrollDepartmentSummaryRow[]>;
   getLoanBalances(): Promise<LoanBalance[]>;
   getAssetUsage(): Promise<AssetUsage[]>;
 
@@ -664,8 +675,8 @@ export class DatabaseStorage implements IStorage {
     const where =
       start && end
         ? and(
-            lte(vacationRequests.startDate, end),
-            gte(vacationRequests.endDate, start),
+            lte(vacationRequests.startDate, end.toISOString().split("T")[0]),
+            gte(vacationRequests.endDate, start.toISOString().split("T")[0]),
           )
         : undefined;
 
@@ -733,8 +744,8 @@ export class DatabaseStorage implements IStorage {
     const where =
       start && end
         ? and(
-            lte(loans.startDate, end),
-            sql`(${loans.endDate} IS NULL OR ${loans.endDate} >= ${start})`,
+            lte(loans.startDate, end.toISOString().split("T")[0]),
+            sql`(${loans.endDate} IS NULL OR ${loans.endDate} >= ${start.toISOString().split("T")[0]})`,
           )
         : undefined;
 
@@ -774,8 +785,11 @@ export class DatabaseStorage implements IStorage {
       .insert(loans)
       .values({
         ...loan,
+        amount: loan.amount.toString(),
+        monthlyDeduction: loan.monthlyDeduction.toString(),
+        remainingAmount: (loan as any).remainingAmount !== undefined ? (loan as any).remainingAmount!.toString() : undefined,
+        interestRate: (loan as any).interestRate !== undefined ? (loan as any).interestRate!.toString() : "0",
         status: loan.status || "pending",
-        interestRate: loan.interestRate || "0",
       })
       .returning();
     return newLoan;
@@ -784,7 +798,13 @@ export class DatabaseStorage implements IStorage {
   async updateLoan(id: string, loan: Partial<InsertLoan>): Promise<Loan | undefined> {
     const [updated] = await db
       .update(loans)
-      .set(loan)
+      .set({
+        ...loan,
+        amount: loan.amount !== undefined ? loan.amount.toString() : undefined as any,
+        monthlyDeduction: loan.monthlyDeduction !== undefined ? loan.monthlyDeduction.toString() : undefined as any,
+        remainingAmount: (loan as any).remainingAmount !== undefined ? (loan as any).remainingAmount!.toString() : undefined as any,
+        interestRate: (loan as any).interestRate !== undefined ? (loan as any).interestRate!.toString() : undefined as any,
+      })
       .where(eq(loans.id, id))
       .returning();
     return updated || undefined;
@@ -1018,34 +1038,9 @@ export class DatabaseStorage implements IStorage {
   async getCarAssignments(): Promise<CarAssignmentWithDetails[]> {
     const assignments = await db.query.carAssignments.findMany({
       with: {
-        car: {
-          columns: {
-            id: true,
-            make: true,
-            model: true,
-            year: true,
-            plateNumber: true,
-            registrationExpiry: true,
-            registrationOwner: true,
-            registrationDocumentImage: true,
-          },
-        },
-        employee: {
-          columns: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            phone: true,
-            drivingLicenseNumber: true,
-          },
-        },
-        assigner: {
-          columns: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
+        car: true,
+        employee: true,
+        assigner: true,
       },
       orderBy: desc(carAssignments.createdAt),
     });
@@ -1061,34 +1056,9 @@ export class DatabaseStorage implements IStorage {
     const assignment = await db.query.carAssignments.findFirst({
       where: eq(carAssignments.id, id),
       with: {
-        car: {
-          columns: {
-            id: true,
-            make: true,
-            model: true,
-            year: true,
-            plateNumber: true,
-            registrationExpiry: true,
-            registrationOwner: true,
-            registrationDocumentImage: true,
-          },
-        },
-        employee: {
-          columns: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            phone: true,
-            drivingLicenseNumber: true,
-          },
-        },
-        assigner: {
-          columns: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
+        car: true,
+        employee: true,
+        assigner: true,
       },
     });
     if (!assignment) return undefined;
@@ -1213,8 +1183,8 @@ export class DatabaseStorage implements IStorage {
     const where =
       start && end
         ? and(
-            gte(employeeEvents.eventDate, start),
-            lte(employeeEvents.eventDate, end),
+            gte(employeeEvents.eventDate, start.toISOString().split("T")[0]),
+            lte(employeeEvents.eventDate, end.toISOString().split("T")[0]),
           )
         : undefined;
 
@@ -1450,6 +1420,43 @@ export class DatabaseStorage implements IStorage {
     });
 
     return Object.values(grouped).sort((a, b) => a.period.localeCompare(b.period));
+  }
+
+  async getCompanyPayrollByDepartment(
+    range: { startDate: string; endDate: string; groupBy: "month" | "year" }
+  ): Promise<PayrollDepartmentSummaryRow[]> {
+    const { startDate, endDate, groupBy } = range;
+    const periodExpr = (column: AnyColumn) =>
+      groupBy === "year"
+        ? sql<string>`to_char(${column}, 'YYYY')`
+        : sql<string>`to_char(${column}, 'YYYY-MM')`;
+
+    const grossSum = sql<string>`sum(${payrollEntries.grossPay})`;
+    const netSum = sql<string>`sum(${payrollEntries.netPay})`;
+
+    const rows = await db
+      .select({
+        period: periodExpr(payrollRuns.startDate),
+        departmentId: employees.departmentId,
+        departmentName: departments.name,
+        gross: grossSum,
+        net: netSum,
+      })
+      .from(payrollEntries)
+      .innerJoin(payrollRuns, eq(payrollEntries.payrollRunId, payrollRuns.id))
+      .innerJoin(employees, eq(payrollEntries.employeeId, employees.id))
+      .leftJoin(departments, eq(employees.departmentId, departments.id))
+      .where(and(gte(payrollRuns.startDate, startDate), lte(payrollRuns.startDate, endDate)))
+      .groupBy(periodExpr(payrollRuns.startDate), employees.departmentId, departments.name)
+      .orderBy(periodExpr(payrollRuns.startDate));
+
+    return rows.map(r => ({
+      period: r.period,
+      departmentId: r.departmentId ?? null,
+      departmentName: r.departmentName ?? null,
+      grossPay: Number(r.gross),
+      netPay: Number(r.net),
+    }));
   }
 
   async getLoanBalances(): Promise<LoanBalance[]> {

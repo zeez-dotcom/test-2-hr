@@ -19,7 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { openPdf } from "@/lib/pdf";
 import type { TDocumentDefinitions } from "pdfmake/interfaces";
-import type { PayrollRunWithEntries, PayrollEntry, Employee } from "@shared/schema";
+import type { PayrollRunWithEntries, PayrollEntry, Employee, Department } from "@shared/schema";
 
 interface SimpleExportModalProps {
   payrollRun: PayrollRunWithEntries;
@@ -30,10 +30,15 @@ interface SimpleExportModalProps {
 export function SimpleExportModal({ payrollRun, isOpen, onClose }: SimpleExportModalProps) {
   const [selectedLocation, setSelectedLocation] = useState<string>("all");
   const [exportFormat, setExportFormat] = useState<string>("pdf");
+  const [groupBy, setGroupBy] = useState<"location" | "department">("location");
+  const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
   const { toast } = useToast();
 
   const { data: employees } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
+  });
+  const { data: departments } = useQuery<Department[]>({
+    queryKey: ["/api/departments"],
   });
 
   const entries: (PayrollEntry & { employee?: Employee })[] =
@@ -52,17 +57,38 @@ export function SimpleExportModal({ payrollRun, isOpen, onClose }: SimpleExportM
     )
   );
 
+  // Get unique department IDs present in this payroll, with names
+  const departmentIds = Array.from(
+    new Set(
+      entries
+        .map(entry => entry.employee?.departmentId)
+        .filter((id): id is string => Boolean(id && id.trim() !== ""))
+    )
+  );
+  const departmentOptions = departmentIds.map(id => ({
+    id,
+    name: departments?.find(d => d.id === id)?.name || id,
+  }));
+
   // Filter entries by work location
-  const filteredEntries =
-    selectedLocation === "all"
+  const filteredEntries = (() => {
+    if (groupBy === "location") {
+      return selectedLocation === "all"
+        ? entries
+        : entries.filter(entry => (entry.employee?.workLocation || "Office") === selectedLocation);
+    }
+    // group by department
+    return selectedDepartment === "all"
       ? entries
-      : entries.filter(
-          entry =>
-            (entry.employee?.workLocation || "Office") === selectedLocation
-        );
+      : entries.filter(entry => (entry.employee?.departmentId || "") === selectedDepartment);
+  })();
 
   const generatePDFPayslips = () => {
     const locationLabel = selectedLocation === "all" ? "All Locations" : selectedLocation;
+    const departmentLabel = selectedDepartment === "all"
+      ? "All Departments"
+      : (departmentOptions.find(o => o.id === selectedDepartment)?.name || selectedDepartment);
+    const scopeLabel = groupBy === "location" ? locationLabel : departmentLabel;
 
     const docDefinition: TDocumentDefinitions = {
       info: { title: `Payroll - ${locationLabel}`, creationDate: new Date(0) },
@@ -72,7 +98,7 @@ export function SimpleExportModal({ payrollRun, isOpen, onClose }: SimpleExportM
       },
       content: [
         { text: "HR Pro - Payroll Summary", style: "header" },
-        { text: locationLabel, style: "subheader" },
+        { text: scopeLabel, style: "subheader" },
         {
           text: `Period: ${formatDate(payrollRun.startDate)} to ${formatDate(payrollRun.endDate)}`,
           margin: [0, 0, 0, 10],
@@ -96,7 +122,7 @@ export function SimpleExportModal({ payrollRun, isOpen, onClose }: SimpleExportM
     openPdf(docDefinition);
     toast({
       title: "Success",
-      description: `Payroll for ${locationLabel} opened for printing`,
+      description: `Payroll for ${scopeLabel} opened for printing`,
     });
   };
   const handleExport = () => {
@@ -117,24 +143,56 @@ export function SimpleExportModal({ payrollRun, isOpen, onClose }: SimpleExportM
         
         <div className="space-y-6">
           {/* Export Controls */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium mb-2">Work Location</label>
-              <Select value={selectedLocation} onValueChange={setSelectedLocation}>
+              <label className="block text-sm font-medium mb-2">Group By</label>
+              <Select value={groupBy} onValueChange={(v) => setGroupBy(v as any)}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select work location" />
+                  <SelectValue placeholder="Select grouping" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Locations</SelectItem>
-                  {workLocations.map((location: string) => (
-                    <SelectItem key={location} value={location}>
-                      {location}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="location">Work Location</SelectItem>
+                  <SelectItem value="department">Department</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            
+
+            {groupBy === "location" ? (
+              <div>
+                <label className="block text-sm font-medium mb-2">Work Location</label>
+                <Select value={selectedLocation} onValueChange={setSelectedLocation}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select work location" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Locations</SelectItem>
+                    {workLocations.map((location: string) => (
+                      <SelectItem key={location} value={location}>
+                        {location}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium mb-2">Department</label>
+                <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Departments</SelectItem>
+                    {departmentOptions.map((dept) => (
+                      <SelectItem key={dept.id} value={dept.id}>
+                        {dept.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div>
               <label className="block text-sm font-medium mb-2">Export Format</label>
               <Select value={exportFormat} onValueChange={setExportFormat}>
@@ -213,26 +271,43 @@ export function SimpleExportModal({ payrollRun, isOpen, onClose }: SimpleExportM
             </Card>
           </div>
 
-          {/* Work Locations Preview */}
+          {/* Scope Preview */}
           <div>
-            <h3 className="text-lg font-semibold mb-3">Available Work Locations</h3>
+            <h3 className="text-lg font-semibold mb-3">
+              {groupBy === "location" ? "Available Work Locations" : "Available Departments"}
+            </h3>
             <div className="flex flex-wrap gap-2">
-                {workLocations.map((location: string) => {
-                  const locationCount = entries.filter(
-                    entry => (entry.employee?.workLocation || "Office") === location
-                  ).length;
-                
-                return (
-                  <Badge 
-                    key={location} 
-                    variant={selectedLocation === location ? "default" : "outline"}
-                    className="flex items-center gap-1"
-                  >
-                    <span>{location}</span>
-                    <span className="text-xs">({locationCount})</span>
-                  </Badge>
-                );
-              })}
+              {groupBy === "location"
+                ? workLocations.map((location: string) => {
+                    const locationCount = entries.filter(
+                      entry => (entry.employee?.workLocation || "Office") === location
+                    ).length;
+                    return (
+                      <Badge
+                        key={location}
+                        variant={selectedLocation === location ? "default" : "outline"}
+                        className="flex items-center gap-1"
+                      >
+                        <span>{location}</span>
+                        <span className="text-xs">({locationCount})</span>
+                      </Badge>
+                    );
+                  })
+                : departmentOptions.map((dept) => {
+                    const deptCount = entries.filter(
+                      entry => (entry.employee?.departmentId || "") === dept.id
+                    ).length;
+                    return (
+                      <Badge
+                        key={dept.id}
+                        variant={selectedDepartment === dept.id ? "default" : "outline"}
+                        className="flex items-center gap-1"
+                      >
+                        <span>{dept.name}</span>
+                        <span className="text-xs">({deptCount})</span>
+                      </Badge>
+                    );
+                  })}
             </div>
           </div>
 
@@ -243,7 +318,9 @@ export function SimpleExportModal({ payrollRun, isOpen, onClose }: SimpleExportM
             </Button>
             <Button onClick={handleExport} className="flex items-center gap-2">
               <Printer className="h-4 w-4" />
-              Export {selectedLocation === "all" ? "All Locations" : selectedLocation}
+              {groupBy === "location"
+                ? `Export ${selectedLocation === "all" ? "All Locations" : selectedLocation}`
+                : `Export ${selectedDepartment === "all" ? "All Departments" : (departmentOptions.find(d => d.id === selectedDepartment)?.name || selectedDepartment)}`}
             </Button>
           </div>
         </div>

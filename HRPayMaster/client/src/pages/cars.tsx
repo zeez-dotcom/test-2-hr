@@ -95,6 +95,7 @@ export default function Cars() {
     mutationFn: async ({ id, data }) => {
       const res = await apiPut(`/api/car-assignments/${id}`, data);
       if (!res.ok) throw new Error(res.error || "Failed to update assignment");
+      return res as any;
     },
     onSuccess: async (_data, variables) => {
       if (variables?.carId) {

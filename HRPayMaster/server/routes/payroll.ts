@@ -31,6 +31,77 @@ payrollRouter.get("/", async (req, res, next) => {
   }
 });
 
+// Recalculate payroll run totals (and fix entry netPay based on fields)
+payrollRouter.post(
+  "/:id/recalculate",
+  requireRole(["admin", "hr"]),
+  async (req, res, next) => {
+    try {
+      const runId = req.params.id;
+
+      // Load entries for this run
+      const entries = await db
+        .select()
+        .from(payrollEntriesTable)
+        .where(eq(payrollEntriesTable.payrollRunId, runId));
+
+      if (!entries || entries.length === 0) {
+        return next(new HttpError(404, "No payroll entries found for this run"));
+      }
+
+      // Recompute net per entry and update if needed; compute totals
+      let grossAmount = 0;
+      let totalDeductions = 0;
+      let netAmount = 0;
+
+      await db.transaction(async (tx) => {
+        for (const e of entries) {
+          const gross = parseFloat(e.grossPay as any);
+          const tax = parseFloat((e.taxDeduction as any) ?? "0");
+          const soc = parseFloat((e.socialSecurityDeduction as any) ?? "0");
+          const health = parseFloat((e.healthInsuranceDeduction as any) ?? "0");
+          const loan = parseFloat((e.loanDeduction as any) ?? "0");
+          const other = parseFloat((e.otherDeductions as any) ?? "0");
+          const ded = tax + soc + health + loan + other;
+          const net = Math.max(0, gross - ded);
+
+          grossAmount += gross;
+          totalDeductions += ded;
+          netAmount += net;
+
+          const storedNet = parseFloat((e.netPay as any) ?? "0");
+          if (Math.abs(storedNet - net) > 0.01) {
+            await tx
+              .update(payrollEntriesTable)
+              .set({ netPay: net.toString() })
+              .where(eq(payrollEntriesTable.id, e.id));
+          }
+        }
+
+        await tx
+          .update(payrollRuns)
+          .set({
+            grossAmount: grossAmount.toString(),
+            totalDeductions: totalDeductions.toString(),
+            netAmount: netAmount.toString(),
+          })
+          .where(eq(payrollRuns.id, runId));
+      });
+
+      res.json({
+        id: runId,
+        grossAmount: grossAmount.toString(),
+        totalDeductions: totalDeductions.toString(),
+        netAmount: netAmount.toString(),
+        updated: true,
+      });
+    } catch (error) {
+      console.error("Recalculate payroll error:", error);
+      next(new HttpError(500, "Failed to recalculate payroll totals"));
+    }
+  },
+);
+
 payrollRouter.get("/:id", async (req, res, next) => {
   try {
     const payrollRun = await storage.getPayrollRun(req.params.id);
@@ -101,7 +172,11 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
     // Get loans, vacation requests, and employee events for the period
     const loans = await storage.getLoans(start, end);
     const vacationRequests = await storage.getVacationRequests(start, end);
-    const employeeEvents = await storage.getEmployeeEvents(start, end);
+    const rawEvents = await storage.getEmployeeEvents(start, end);
+    const employeeEvents = rawEvents.map(({ employee, ...e }) => ({
+      ...e,
+      affectsPayroll: (e as any).affectsPayroll ?? true,
+    }));
     // Calculate number of days in this payroll period
     const workingDays =
       Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;

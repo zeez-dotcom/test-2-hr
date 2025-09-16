@@ -3,6 +3,7 @@ import { HttpError } from "../errorHandler";
 import { storage } from "../storage";
 import { insertLoanSchema } from "@shared/schema";
 import { z } from "zod";
+import { requireRole } from "./auth";
 
 export const loansRouter = Router();
 
@@ -29,7 +30,7 @@ loansRouter.get("/:id", async (req, res, next) => {
   }
 });
 
-loansRouter.post("/", async (req, res, next) => {
+loansRouter.post("/", requireRole(["admin", "hr"]), async (req, res, next) => {
   try {
     req.body.remainingAmount ??= req.body.amount;
     req.body.status ??= "pending";
@@ -46,7 +47,7 @@ loansRouter.post("/", async (req, res, next) => {
   }
 });
 
-loansRouter.put("/:id", async (req, res, next) => {
+loansRouter.put("/:id", requireRole(["admin", "hr"]), async (req, res, next) => {
   try {
     const updates = insertLoanSchema.partial().parse(req.body);
     const updatedLoan = await storage.updateLoan(req.params.id, updates);
@@ -63,7 +64,7 @@ loansRouter.put("/:id", async (req, res, next) => {
   }
 });
 
-loansRouter.delete("/:id", async (req, res, next) => {
+loansRouter.delete("/:id", requireRole(["admin", "hr"]), async (req, res, next) => {
   try {
     const deleted = await storage.deleteLoan(req.params.id);
     if (!deleted) {

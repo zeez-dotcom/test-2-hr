@@ -154,7 +154,7 @@ const upload = multer({ storage: multer.memoryStorage() });
     }
   });
 
-  employeesRouter.post("/api/departments", async (req, res, next) => {
+  employeesRouter.post("/api/departments", requireRole(["admin", "hr"]), async (req, res, next) => {
     try {
       const department = insertDepartmentSchema.parse(req.body);
       const newDepartment = await storage.createDepartment(department);
@@ -167,7 +167,7 @@ const upload = multer({ storage: multer.memoryStorage() });
     }
   });
 
-  employeesRouter.put("/api/departments/:id", async (req, res, next) => {
+  employeesRouter.put("/api/departments/:id", requireRole(["admin", "hr"]), async (req, res, next) => {
     try {
       const updates = insertDepartmentSchema.partial().parse(req.body);
       const updatedDepartment = await storage.updateDepartment(req.params.id, updates);
@@ -183,7 +183,7 @@ const upload = multer({ storage: multer.memoryStorage() });
     }
   });
 
-  employeesRouter.delete("/api/departments/:id", async (req, res, next) => {
+  employeesRouter.delete("/api/departments/:id", requireRole(["admin", "hr"]), async (req, res, next) => {
     try {
       const deleted = await storage.deleteDepartment(req.params.id);
       if (!deleted) {
@@ -217,7 +217,7 @@ const upload = multer({ storage: multer.memoryStorage() });
     }
   });
 
-  employeesRouter.post("/api/companies", async (req, res, next) => {
+  employeesRouter.post("/api/companies", requireRole(["admin"]), async (req, res, next) => {
     try {
       const company = insertCompanySchema.parse(req.body);
       const newCompany = await storage.createCompany(company);
@@ -230,7 +230,7 @@ const upload = multer({ storage: multer.memoryStorage() });
     }
   });
 
-  employeesRouter.put("/api/companies/:id", async (req, res, next) => {
+  employeesRouter.put("/api/companies/:id", requireRole(["admin"]), async (req, res, next) => {
     try {
       const updates = insertCompanySchema.partial().parse(req.body);
       const updatedCompany = await storage.updateCompany(req.params.id, updates);
@@ -246,7 +246,7 @@ const upload = multer({ storage: multer.memoryStorage() });
     }
   });
 
-  employeesRouter.delete("/api/companies/:id", async (req, res, next) => {
+  employeesRouter.delete("/api/companies/:id", requireRole(["admin"]), async (req, res, next) => {
     try {
       const deleted = await storage.deleteCompany(req.params.id);
       if (!deleted) {
@@ -340,6 +340,11 @@ const upload = multer({ storage: multer.memoryStorage() });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       const headerRow = (XLSX.utils.sheet_to_json(sheet, { header: 1 })[0] || []) as string[];
       const mappingRaw = (req.body as any)?.mapping;
+      const basicOnlyRaw = (req.body as any)?.basicOnly;
+      const basicOnly =
+        typeof basicOnlyRaw === 'string'
+          ? ['1','true','yes','on'].includes(basicOnlyRaw.toLowerCase())
+          : Boolean(basicOnlyRaw);
       if (!mappingRaw) {
         const auto: Record<string, string> = {};
         for (const h of headerRow) {
@@ -391,15 +396,19 @@ const upload = multer({ storage: multer.memoryStorage() });
         mappingTargets.includes("fullName") &&
         !mappingTargets.includes("firstName") &&
         !mappingTargets.includes("lastName");
-      const excludeTargets = new Set(["englishName"]);
+      const excludeTargets = new Set(["englishName", "loans"]);
       if (hasFullNameOnly) excludeTargets.add("fullName");
       const customFieldNames = new Set(
         mappingTargets.filter(
           k => !employeeFieldKeys.has(k) && !excludeTargets.has(k)
         )
       );
+      // If basicOnly, ignore/create no custom fields at all
+      if (basicOnly) {
+        customFieldNames.clear();
+      }
       const fieldMap = new Map<string, any>();
-      if (customFieldNames.size > 0) {
+      if (!basicOnly && customFieldNames.size > 0) {
         const existingFields = await storage.getEmployeeCustomFields();
         for (const f of existingFields) fieldMap.set(f.name, f);
         for (const name of Array.from(customFieldNames)) {
@@ -611,7 +620,7 @@ const upload = multer({ storage: multer.memoryStorage() });
       const { success, failed: insertFailed, employees: inserted } =
         await storage.createEmployeesBulk(valid);
 
-      if (inserted && fieldMap.size > 0) {
+      if (inserted && fieldMap.size > 0 && !basicOnly) {
         for (let i = 0; i < inserted.length; i++) {
           const emp = inserted[i];
           const custom = customValues[i] || {};
@@ -1587,7 +1596,7 @@ const upload = multer({ storage: multer.memoryStorage() });
     }
   });
 
-  employeesRouter.post("/api/employee-events", async (req, res, next) => {
+  employeesRouter.post("/api/employee-events", requireRole(["admin", "hr"]), async (req, res, next) => {
     try {
       const event = insertEmployeeEventSchema.parse(req.body);
       const newEvent = await storage.createEmployeeEvent(event);
@@ -1600,7 +1609,7 @@ const upload = multer({ storage: multer.memoryStorage() });
     }
   });
 
-  employeesRouter.put("/api/employee-events/:id", async (req, res, next) => {
+  employeesRouter.put("/api/employee-events/:id", requireRole(["admin", "hr"]), async (req, res, next) => {
     try {
       const updates = insertEmployeeEventSchema.partial().parse(req.body);
       const updatedEvent = await storage.updateEmployeeEvent(req.params.id, updates);
@@ -1616,7 +1625,7 @@ const upload = multer({ storage: multer.memoryStorage() });
     }
   });
 
-  employeesRouter.delete("/api/employee-events/:id", async (req, res, next) => {
+  employeesRouter.delete("/api/employee-events/:id", requireRole(["admin", "hr"]), async (req, res, next) => {
     try {
       const deleted = await storage.deleteEmployeeEvent(req.params.id);
       if (!deleted) {

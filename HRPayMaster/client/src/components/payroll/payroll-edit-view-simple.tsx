@@ -22,8 +22,9 @@ import { SmartVacationForm } from "@/components/payroll/smart-vacation-form";
 import { SmartDeductionForm } from "@/components/payroll/smart-deduction-form";
 import { EnhancedPayrollTable } from "@/components/payroll/enhanced-payroll-table";
 import { SimpleExportModal } from "@/components/payroll/simple-export-modal";
-import { apiPut } from "@/lib/http";
+import { apiPut, apiPost } from "@/lib/http";
 import { toastApiError } from "@/lib/toastError";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface PayrollEditViewProps {
   payrollId: string;
@@ -58,9 +59,28 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
         title: "Success",
         description: "Payroll entry updated successfully",
       });
+      setTotalsStale(true);
     },
     onError: (err) => {
       toastApiError(err as any, "Failed to update payroll entry");
+    },
+  });
+
+  const [totalsStale, setTotalsStale] = useState(false);
+  const recalcTotalsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiPost(`/api/payroll/${payrollId}/recalculate`);
+      if (!res.ok) throw res;
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
+      toast({ title: "Success", description: "Payroll totals recalculated" });
+      setTotalsStale(false);
+    },
+    onError: (err) => {
+      toastApiError(err as any, "Failed to recalculate totals");
     },
   });
 
@@ -196,11 +216,33 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
             <Download className="h-4 w-4" />
             Export by Location
           </Button>
+          <Button 
+            variant="outline"
+            onClick={() => recalcTotalsMutation.mutate()}
+            disabled={recalcTotalsMutation.isPending}
+            className="flex items-center gap-2"
+          >
+            <Save className="h-4 w-4" />
+            {recalcTotalsMutation.isPending ? "Recalculating..." : "Recalculate Totals"}
+          </Button>
           <Badge className={getStatusColor(payrollRun.status)}>
             {payrollRun.status}
           </Badge>
         </div>
       </div>
+
+      {totalsStale && (
+        <Alert>
+          <AlertDescription className="flex items-center justify-between w-full">
+            <span>
+              Totals may be out of date after recent edits.
+            </span>
+            <Button size="sm" onClick={() => recalcTotalsMutation.mutate()} disabled={recalcTotalsMutation.isPending}>
+              {recalcTotalsMutation.isPending ? "Recalculating..." : "Recalculate Now"}
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

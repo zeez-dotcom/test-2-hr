@@ -40,6 +40,7 @@ import type {
   Employee,
   EmployeeEvent,
   PayrollRun,
+  Department,
 } from "@shared/schema";
 // Types for company-level reports
 type PayrollSummary = { period: string; totals: { grossPay: number; netPay: number } };
@@ -47,6 +48,7 @@ type LoanBalance = { employeeId: string; balance: number };
 type AssetUsage = { assetId: string; name: string; assignments: number };
 type SalaryTrend = { period: string; netPay: number; change: number };
 import { openPdf, buildEmployeeReport, buildEmployeeHistoryReport } from "@/lib/pdf";
+type PayrollByDepartment = { period: string; departmentId: string | null; departmentName?: string | null; totals: { grossPay: number; netPay: number } };
 import { sanitizeImageSrc } from "@/lib/sanitizeImageSrc";
 
 // Accept any base64 encoded image MIME type
@@ -62,6 +64,7 @@ export default function Reports() {
   const [selectedYear, setSelectedYear] = useState<string>(currentYear.toString());
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
   const [selectedWorkLocation, setSelectedWorkLocation] = useState<string>("all");
+  const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>(initialRange);
   const [searchTerm, setSearchTerm] = useState("");
   const [salaryReport, setSalaryReport] = useState<SalaryTrend[] | null>(null);
@@ -73,6 +76,10 @@ export default function Reports() {
 
   const { data: employees, error: employeesError } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
+  });
+
+  const { data: departments } = useQuery<Department[]>({
+    queryKey: ["/api/departments"],
   });
 
   const { data: employeeEvents, error: employeeEventsError } = useQuery<EmployeeEvent[]>({
@@ -120,13 +127,24 @@ export default function Reports() {
     enabled: Boolean(startDate && endDate),
   });
 
+  const { data: payrollByDept, error: payrollByDeptError } = useQuery<PayrollByDepartment[]>({
+    queryKey: ["/api/reports/payroll-by-department", startDate, endDate],
+    queryFn: async () => {
+      const res = await apiGet(`/api/reports/payroll-by-department?startDate=${startDate}&endDate=${endDate}`);
+      if (!res.ok) throw new Error(res.error || "Failed to fetch");
+      return res.data;
+    },
+    enabled: Boolean(startDate && endDate),
+  });
+
   if (
     employeesError ||
     employeeEventsError ||
     payrollRunsError ||
     payrollSummaryError ||
     loanBalancesError ||
-    assetUsageError
+    assetUsageError ||
+    payrollByDeptError
   ) {
     return <div>Error loading reports data</div>;
   }
@@ -162,6 +180,12 @@ export default function Reports() {
     if (selectedWorkLocation !== "all") {
       const employee = employees?.find(emp => emp.id === event.employeeId);
       if ((employee?.workLocation || "Office") !== selectedWorkLocation) return false;
+    }
+
+    // Department filter
+    if (selectedDepartment !== "all") {
+      const employee = employees?.find(emp => emp.id === event.employeeId);
+      if (employee?.departmentId !== selectedDepartment) return false;
     }
     
     // Date range filter
@@ -212,9 +236,11 @@ export default function Reports() {
 
   // Generate employee history report (for multiple employees)
   const generateEmployeeHistoryReport = () => {
-    const filteredEmployees = selectedEmployee === "all"
+    const filteredEmployees = (selectedEmployee === "all"
       ? employees
-      : employees?.filter(emp => emp.id === selectedEmployee);
+      : employees?.filter(emp => emp.id === selectedEmployee))
+      ?.filter(emp => selectedDepartment === 'all' || emp.departmentId === selectedDepartment)
+      ?.filter(emp => selectedWorkLocation === 'all' || (emp.workLocation || 'Office') === selectedWorkLocation);
 
     if (!filteredEmployees || filteredEmployees.length === 0) {
       toast({
@@ -291,8 +317,43 @@ export default function Reports() {
         </div>
       </div>
 
+      {/* Quick Filters */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label className="block text-sm font-medium mb-2">Work Location</label>
+          <Select value={selectedWorkLocation} onValueChange={setSelectedWorkLocation}>
+            <SelectTrigger>
+              <SelectValue placeholder="All locations" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              {Array.from(new Set((employees || []).map(emp => emp.workLocation || 'Office'))).map((loc) => (
+                <SelectItem key={loc || 'Office'} value={loc || 'Office'}>
+                  {loc || 'Office'}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-2">Department</label>
+          <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
+            <SelectTrigger>
+              <SelectValue placeholder="All departments" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              {(departments || []).map(d => (
+                <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
       <Tabs defaultValue="employee-history" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="employee-history" className="flex items-center gap-2">
             <History className="h-4 w-4" />
             Employee History
@@ -312,6 +373,10 @@ export default function Reports() {
           <TabsTrigger value="loan-balances" className="flex items-center gap-2">
             <DollarSign className="h-4 w-4" />
             Loan Balances
+          </TabsTrigger>
+          <TabsTrigger value="dept-summary" className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            Dept Summary
           </TabsTrigger>
           <TabsTrigger value="asset-usage" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
@@ -618,6 +683,45 @@ export default function Reports() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="dept-summary" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Payroll by Department
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {payrollByDept && payrollByDept.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="text-left">
+                        <th className="py-2 pr-4">Period</th>
+                        <th className="py-2 pr-4">Department</th>
+                        <th className="py-2 pr-4">Gross Pay</th>
+                        <th className="py-2">Net Pay</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {payrollByDept.map((row, idx) => (
+                        <tr key={idx} className="border-t">
+                          <td className="py-2 pr-4">{row.period}</td>
+                          <td className="py-2 pr-4">{row.departmentName || 'Unassigned'}</td>
+                          <td className="py-2 pr-4">{formatCurrency(row.totals.grossPay)}</td>
+                          <td className="py-2">{formatCurrency(row.totals.netPay)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No department payroll data available</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="salary-reports" className="space-y-6">
           <Card>
             <CardHeader>
@@ -764,6 +868,41 @@ export default function Reports() {
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">No payroll data available</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Department Breakdown (latest period) */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" />
+                Department Breakdown (latest period)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {payrollByDept && payrollByDept.length > 0 ? (
+                (() => {
+                  const latestPeriod = payrollByDept[payrollByDept.length - 1]?.period;
+                  const rows = payrollByDept.filter(r => r.period === latestPeriod);
+                  const data = rows.map(r => ({ name: r.departmentName || 'Unassigned', net: r.totals.netPay }));
+                  return (
+                    <ChartContainer
+                      config={{}}
+                      className="min-h-[240px] w-full"
+                    >
+                      <BarChart data={data}>
+                        <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                        <XAxis dataKey="name" tickLine={false} axisLine={false} interval={0} angle={-15} textAnchor="end" height={60} />
+                        <YAxis tickLine={false} axisLine={false} />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <Bar dataKey="net" fill="#34d399" radius={[4,4,0,0]} />
+                      </BarChart>
+                    </ChartContainer>
+                  );
+                })()
+              ) : (
+                <p className="text-sm text-muted-foreground">No department data</p>
               )}
             </CardContent>
           </Card>

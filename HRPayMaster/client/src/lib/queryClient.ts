@@ -1,19 +1,19 @@
-import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { QueryClient, QueryFunction, type QueryKey } from "@tanstack/react-query";
 import { apiGet } from "./http";
 
-export const getQueryFn = (
+export const getQueryFn = <T = unknown>(
   options?: { on401?: "returnNull" },
-): QueryFunction => {
-  return async ({ queryKey }) => {
+): QueryFunction<T, QueryKey> => {
+  return (async ({ queryKey }) => {
     const res = await apiGet(queryKey.join("/") as string);
     if (!res.ok) {
       if (res.status === 401 && options?.on401 === "returnNull") {
-        return null;
+        return null as T;
       }
       throw new Error(res.error || `Request failed with status ${res.status}`);
     }
-    return res.data;
-  };
+    return res.data as T;
+  }) as QueryFunction<T, QueryKey>;
 };
 
 export const defaultQueryFn = getQueryFn();

@@ -26,7 +26,7 @@ import type { User } from "@shared/schema";
 function Router() {
   const { data: user, isLoading } = useQuery<User | null>({
     queryKey: ["/api/me"],
-    queryFn: getQueryFn({ on401: "returnNull" }),
+    queryFn: getQueryFn<User | null>({ on401: "returnNull" }),
   });
   const [location, navigate] = useLocation();
 

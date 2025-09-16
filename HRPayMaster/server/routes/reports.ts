@@ -158,6 +158,30 @@ reportsRouter.get("/api/reports/asset-usage", async (_req, res, next) => {
   }
 });
 
+// Payroll by department
+reportsRouter.get("/api/reports/payroll-by-department", async (req, res, next) => {
+  try {
+    const { startDate, endDate, groupBy } = reportQuerySchema.parse(req.query);
+    const rows = await storage.getCompanyPayrollByDepartment({ startDate, endDate, groupBy });
+    const response = rows.map(r => ({
+      period: r.period,
+      departmentId: r.departmentId,
+      departmentName: r.departmentName || "Unassigned",
+      totals: {
+        grossPay: r.grossPay,
+        netPay: r.netPay,
+      },
+    }));
+    res.json(response);
+  } catch (error) {
+    console.error(error);
+    if (error instanceof z.ZodError) {
+      return next(new HttpError(400, "Invalid query parameters", error.errors));
+    }
+    next(new HttpError(500, "Failed to fetch payroll by department", error));
+  }
+});
+
 // allow both named and default imports of this router
 export default reportsRouter;
 

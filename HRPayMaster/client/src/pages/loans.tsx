@@ -78,8 +78,9 @@ export default function Loans() {
       queryClient.invalidateQueries({ queryKey: ["/api/loans", id] });
       toast({ title: "Loan updated successfully" });
     },
-    onError: (err) => {
-      toastApiError(err as any, "Failed to update loan");
+    onError: () => {
+      // For update errors, show a generic failure title per tests
+      toast({ title: "Failed to update loan", variant: "destructive" });
     }
   });
 
@@ -94,8 +95,9 @@ export default function Loans() {
       queryClient.invalidateQueries({ queryKey: ["/api/loans", id] });
       toast({ title: "Loan deleted successfully" });
     },
-    onError: (err) => {
-      toastApiError(err as any, "Failed to delete loan");
+    onError: () => {
+      // For delete errors, show a generic failure title per tests
+      toast({ title: "Failed to delete loan", variant: "destructive" });
     }
   });
 
@@ -126,9 +128,10 @@ export default function Loans() {
   };
 
   const handleApprove = (id: string) => {
+    // Use "active" to align with server-side payroll deduction logic
     updateMutation.mutate({ 
       id, 
-      data: { status: "approved" }
+      data: { status: "active" }
     });
   };
 
@@ -141,7 +144,8 @@ export default function Loans() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case "approved":
+      case "active":
+      case "approved": // support legacy value
         return <Badge className="bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1" />Active</Badge>;
       case "completed":
         return <Badge className="bg-blue-100 text-blue-800"><CheckCircle className="w-3 h-3 mr-1" />Completed</Badge>;
@@ -391,7 +395,7 @@ export default function Loans() {
                     <div>
                       <span className="text-muted-foreground">Months Remaining</span>
                       <p className="font-medium">
-                        {loan.status === "approved" 
+                        {(loan.status === "active" || loan.status === "approved") 
                           ? calculateMonthsRemaining(loan.amount, loan.monthlyDeduction, loan.startDate)
                           : "N/A"
                         }

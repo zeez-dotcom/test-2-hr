@@ -161,7 +161,7 @@ export default function EmployeeForm({
               <FormItem>
                 <FormLabel>Employee Code</FormLabel>
                 <FormControl>
-                  <Input placeholder="EMP001" disabled={!!initialData?.id} {...field} />
+                  <Input placeholder="EMP001" disabled={!!initialData?.employeeCode} {...field} />
                 </FormControl>
                 {fieldState.error && (
                   <p className="text-sm text-red-500">{fieldState.error.message}</p>

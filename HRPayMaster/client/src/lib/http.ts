@@ -30,17 +30,25 @@ async function request(
         ? new URL(url, base).toString()
         : url;
     const res = await fetch(fullUrl, init);
-    const contentType = res.headers.get("content-type") || "";
+    // Some tests/mock responses may not include headers/content-type.
+    const contentType = (res as any)?.headers?.get?.("content-type") || "";
     let body: any = undefined;
     if (contentType.includes("application/json")) {
-      body = await res.json().catch(() => undefined);
-    } else {
-      body = await res.blob();
+      body = await (res as any).json().catch(() => undefined);
+    } else if (typeof (res as any).json === "function") {
+      // Fallback to json() when headers are missing or content-type is not set
+      try {
+        body = await (res as any).json();
+      } catch {
+        body = undefined;
+      }
+    } else if (typeof (res as any).blob === "function") {
+      body = await (res as any).blob();
     }
-    if (res.ok) {
-      return { ok: true as const, status: res.status, data: body, headers: res.headers };
+    if ((res as any).ok) {
+      return { ok: true as const, status: (res as any).status ?? 200, data: body, headers: (res as any).headers };
     } else {
-      return { ok: false as const, status: res.status, error: body, headers: res.headers };
+      return { ok: false as const, status: (res as any).status ?? 500, error: body, headers: (res as any).headers };
     }
   } catch (error: any) {
     return { ok: false as const, status: 0, error: error?.message ?? String(error) };

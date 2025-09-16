@@ -429,7 +429,7 @@ export function Chatbot() {
           </Select>
         </div>
         <div>
-          <Select value={selectedIntent} onValueChange={setSelectedIntent}>
+          <Select value={selectedIntent} onValueChange={(v) => setSelectedIntent(v as ChatIntent | "")}>
             <SelectTrigger>
               <SelectValue placeholder={t("chatbot.selectAction")} />
             </SelectTrigger>

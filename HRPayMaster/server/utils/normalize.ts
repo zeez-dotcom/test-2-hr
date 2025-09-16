@@ -174,6 +174,14 @@ export const headerDictionary: Record<string, string> = {
   'vacation return date': 'vacationReturnDate',
   'residency on company or not': 'residencyOnCompany',
   'profession category': 'professionCategory',
+  'swift code': 'swiftCode',
+  'documents': 'otherDocs',
+  'document': 'otherDocs',
+  'profession code': 'professionCode',
+  'profession': 'profession',
+  'residency name': 'residencyName',
+  'company vacation return date': 'vacationReturnDate',
+  'id': 'employeeCode',
 };
 
 export function mapHeader(header: string): string | undefined {

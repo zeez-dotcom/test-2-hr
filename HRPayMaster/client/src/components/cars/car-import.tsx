@@ -136,11 +136,28 @@ export default function CarImport() {
         } else if (res.status === 413) {
           toastApiError(res, "File too large");
         } else {
-          toastApiError(res, "Upload failed");
+          // Prefer server error message as description with a generic 'Error' title
+          const serverMessage =
+            (res?.error && typeof res.error === "object" && (res.error as any)?.message)
+              ? (res.error as any).message
+              : (typeof (res as any)?.error?.error?.message === "string"
+                  ? (res as any).error.error.message
+                  : undefined);
+          if (serverMessage) {
+            toast({ title: "Error", description: serverMessage, variant: "destructive" });
+          } else {
+            toast({ title: "Error", description: "Upload failed", variant: "destructive" });
+          }
         }
       }
     } catch (err) {
-      toastApiError(err, "Upload failed");
+      // In case of thrown errors, show a generic 'Error' title and fallback description
+      const message = (err as any)?.message ?? undefined;
+      if (message) {
+        toast({ title: "Error", description: message, variant: "destructive" });
+      } else {
+        toast({ title: "Error", description: "Upload failed", variant: "destructive" });
+      }
     } finally {
       setIsSubmitting(false);
     }

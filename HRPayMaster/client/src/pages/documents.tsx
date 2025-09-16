@@ -23,9 +23,7 @@ export default function DocumentsPage() {
 
   const sendAlertsMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiPost<{ alertsGenerated: number; emailsSent: number }>(
-        "/api/documents/send-alerts"
-      );
+      const res = await apiPost("/api/documents/send-alerts");
       if (!res.ok) throw res;
       return res;
     },
@@ -34,7 +32,7 @@ export default function DocumentsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       toast({
         title: "Alerts Sent Successfully",
-        description: `Generated ${res.data.alertsGenerated} alerts, sent ${res.data.emailsSent} emails`,
+        description: `Generated ${(res.data as any).alertsGenerated} alerts, sent ${(res.data as any).emailsSent} emails`,
       });
     },
     onError: (res) => {
