@@ -8,7 +8,7 @@ import { chatbotMonthlySummaryRequestsTotal } from "../metrics";
 
 export const chatbotRouter = Router();
 
-chatbotRouter.use(ensureAuth);
+chatbotRouter.use("/api/chatbot", ensureAuth);
 
 chatbotRouter.post("/api/chatbot", (req, res) => {
   const { message } = req.body ?? {};

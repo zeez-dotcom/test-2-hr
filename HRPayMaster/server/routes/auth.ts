@@ -31,7 +31,16 @@ export const ensureAuth = (
   next: NextFunction,
 ) => {
   if (req.isAuthenticated()) return next();
-  next(new HttpError(401, "Unauthorized"));
+
+  const body: { error: { message: string; status?: number } } = {
+    error: { message: "Unauthorized" },
+  };
+
+  if (process.env.NODE_ENV !== "production") {
+    body.error.status = 401;
+  }
+
+  return res.status(401).json(body);
 };
 
 export const requireRole = (roles: string[]) => (

@@ -44,10 +44,18 @@ export function errorHandler(err: any, _req: Request, res: Response, _next: Next
     }
   }
 
+  const isServerError = status >= 500;
+  const log = isServerError ? console.error : console.warn;
+
   if (details) {
-    console.error("Error details:", JSON.stringify(details, null, 2));
+    log("Error details:", JSON.stringify(details, null, 2));
   }
-  console.error(err);
+
+  if (isServerError) {
+    console.error(err);
+  } else if (process.env.NODE_ENV !== "production") {
+    console.warn(err instanceof Error ? err.message : err);
+  }
 
   res.status(status).json(body);
 }
