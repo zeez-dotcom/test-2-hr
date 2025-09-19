@@ -1,0 +1,35 @@
+
+> rest-express@1.0.0 dev
+> cross-env NODE_ENV=development tsx server/index.ts
+
+SENDGRID_API_KEY environment variable not set. Email notifications will be disabled.
+9:44:00 PM [express] serving on port 5001
+SENDGRID_API_KEY not set or invalid. Email not sent.
+SENDGRID_API_KEY not set or invalid. Email not sent.
+SENDGRID_API_KEY not set or invalid. Email not sent.
+SENDGRID_API_KEY not set or invalid. Email not sent.
+SENDGRID_API_KEY not set or invalid. Email not sent.
+SENDGRID_API_KEY not set or invalid. Email not sent.
+9:46:47 PM [express] GET /api/me 401 in 13ms :: {"error":{"message":"Unauthorized","status":401}}
+9:46:47 PM [express] GET /api/me 401 in 0ms :: {"error":{"message":"Unauthorized","status":401}}
+9:46:47 PM [express] GET /api/employees 401 in 0ms :: {"error":{"message":"Unauthorized","status":40…
+9:46:47 PM [express] GET /api/payroll 401 in 0ms :: {"error":{"message":"Unauthorized","status":401}}
+9:46:47 PM [express] GET /api/assets 401 in 0ms :: {"error":{"message":"Unauthorized","status":401}}
+9:47:00 PM [express] GET /api/me 200 in 1ms :: {"id":"1","username":"admin","email":"admin1@gmail.co…
+9:47:01 PM [express] GET /api/employees 200 in 930ms :: [{"id":"6e4323e5-8cb4-44d8-bcee-1db9c9eda6f9…
+9:47:01 PM [express] GET /api/payroll 200 in 202ms :: [{"id":"894798b6-0fe6-4655-ad98-8284d802ab2f",…
+9:47:02 PM [express] GET /api/assets 200 in 618ms :: [{"id":"4d09d723-9f0b-437a-a133-844be3ae3ebe","…
+9:51:20 PM [express] GET /api/drivers 401 in 7ms :: {"error":{"message":"Unauthorized","status":401}}
+9:51:20 PM [express] GET /api/delivery-orders 401 in 1ms :: {"error":{"message":"Unauthorized","stat…
+Browserslist: browsers data (caniuse-lite) is 11 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+9:51:25 PM [vite] Pre-transform error: /Users/mac/Downloads/mmmmoo/test-2-hr/HRPayMaster/client/src/pages/departments.tsx: JSX value should be either an expression or a quoted JSX text. (434:17)
+
+  432 |         open={isConfirmOpen}
+  433 |         onOpenChange={handleConfirmOpenChange}
+> 434 |   const search = useSearch();
+      |                  ^
+  435 |   const [, navigate] = useLocation();
+  436 |   const params = useMemo(() => new URLSearchParams(search), [search]);
+  437 |   const filterDeptId = params.get('deptId') || '';

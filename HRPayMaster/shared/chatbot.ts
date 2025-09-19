@@ -5,11 +5,23 @@ export type ChatIntent =
   | "addBonus"
   | "addDeduction"
   | "requestVacation"
+  | "cancelVacation"
+  | "changeVacation"
+  | "assignAsset"
+  | "assignCar"
+  | "returnCar"
+  | "assetDocument"
+  | "employeeDocuments"
+  | "returnAsset"
   | "runPayroll"
   | "help"
   | "loanStatus"
   | "reportSummary"
   | "monthlySummary"
+  | "employeeInfo"
+  | "createLoan"
+  | "updateLoan"
+  | "updateEmployee"
   | "unknown";
 
 export interface ParsedIntent {
@@ -29,6 +41,28 @@ export function parseIntent(message: string): ParsedIntent {
 
   if (lower.includes("vacation")) {
     return { type: "requestVacation" };
+  }
+  if (lower.includes("cancel") && lower.includes("vacation")) {
+    return { type: "cancelVacation" };
+  }
+  if (lower.includes("change") && lower.includes("vacation")) {
+    return { type: "changeVacation" };
+  }
+
+  if (lower.includes("assign") && lower.includes("asset")) {
+    return { type: "assignAsset" };
+  }
+  if ((lower.includes("upload") || lower.includes("document")) && lower.includes("asset")) {
+    return { type: "assetDocument" };
+  }
+  if ((lower.includes("return") || lower.includes("handover")) && lower.includes("asset")) {
+    return { type: "returnAsset" };
+  }
+  if (lower.includes("assign") && lower.includes("car")) {
+    return { type: "assignCar" };
+  }
+  if ((lower.includes("return") || lower.includes("handover")) && lower.includes("car")) {
+    return { type: "returnCar" };
   }
 
   if (lower.includes("payroll")) {
@@ -50,8 +84,22 @@ export function parseIntent(message: string): ParsedIntent {
     return { type: "reportSummary" };
   }
 
+  if (lower.includes("info") || lower.includes("profile") || lower.includes("details")) {
+    return { type: "employeeInfo" };
+  }
+
   if (lower.includes("help")) {
     return { type: "help" };
+  }
+
+  if (lower.includes("create") && lower.includes("loan")) {
+    return { type: "createLoan" };
+  }
+  if (lower.includes("update") && lower.includes("loan")) {
+    return { type: "updateLoan" };
+  }
+  if (lower.includes("update") && (lower.includes("employee") || lower.includes("profile") || lower.includes("field"))) {
+    return { type: "updateEmployee" };
   }
 
   return { type: "unknown" };

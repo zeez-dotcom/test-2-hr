@@ -8,6 +8,7 @@ import { loansRouter } from "./routes/loans";
 import { carsRouter } from "./routes/cars";
 import { chatbotRouter } from "./routes/chatbot";
 import { metricsRouter } from "./metrics";
+import { templatesRouter } from "./routes/templates";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.use(authRouter);
@@ -18,8 +19,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use("/api/payroll", payrollRouter);
   app.use("/api/loans", loansRouter);
   app.use("/api/cars", carsRouter);
+  app.use(templatesRouter);
   app.use(chatbotRouter);
   const httpServer = createServer(app);
   return httpServer;
 }
-

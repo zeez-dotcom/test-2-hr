@@ -36,6 +36,67 @@ Alternatively, run `cd HRPayMaster && npm run dev`.
 > **Note**
 > Error responses include detailed messages and stack traces only when `NODE_ENV` is not set to `"production"`. The development script above already sets `NODE_ENV=development`; ensure your environment uses a non-production value to see error details during development.
 
+## Database seed data
+
+Seed realistic demo data across companies, departments, employees, payroll, assets, cars, attendance, and notifications.
+
+- Seed:
+
+  ```bash
+  npm run db:seed
+  ```
+
+- Unseed (removes only records created by the seed script):
+
+  ```bash
+  npm run db:unseed
+  ```
+
+Seeded records use a `SEED-` prefix (e.g., `SEED-EMP-001`, `SEED-2025-09`) so removal is targeted and safe.
+
+## Auth & test login
+
+- The app includes a hardcoded super admin for local testing:
+  - Username: `admin1`
+  - Password: `admin1`
+
+Start the server (default port is `5000`; use `PORT=5001` if `5000` is busy):
+
+```bash
+# default
+npm run dev --prefix HRPayMaster
+
+# or choose another free port
+PORT=5001 npm run dev --prefix HRPayMaster
+```
+
+Log in and call APIs with curl (cookies required for session):
+
+```bash
+# Replace port if different
+PORT=5000
+
+# Login (stores session cookie)
+curl -i -c cookie.txt \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  --data 'username=admin1&password=admin1' \
+  http://localhost:$PORT/login
+
+# Verify session
+curl -b cookie.txt http://localhost:$PORT/api/me
+
+# Employees
+curl -s -b cookie.txt http://localhost:$PORT/api/employees | jq 'map({code: .employeeCode, name: (.firstName+" "+(.lastName//"")), role: .role, dept: .department?.name})'
+
+# Payroll runs
+curl -s -b cookie.txt http://localhost:$PORT/api/payroll | jq 'map({id, period, grossAmount, netAmount, status})'
+
+# Assets
+curl -s -b cookie.txt http://localhost:$PORT/api/assets | jq 'map({name, status})'
+```
+
+If you change the port for the server, update `VITE_API_BASE_URL` in `HRPayMaster/.env` accordingly so the client can reach the API.
+
 ## Error handling & date formatting
 
 - [`http.ts`](HRPayMaster/client/src/lib/http.ts) wraps fetch and returns an `ApiResult` rather than throwing on failed requests.

@@ -99,7 +99,7 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Employees</p>
+                <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">{t('dashboard.totalEmployees','Total Employees')}</p>
                 <p className="text-3xl font-bold text-gray-900 mt-1">{stats?.totalEmployees || 0}</p>
               </div>
             </div>
@@ -115,7 +115,7 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Monthly Payroll</p>
+                <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">{t('dashboard.monthlyPayroll','Monthly Payroll')}</p>
                 <p className="text-2xl font-bold text-gray-900 mt-1">
                   {formatCurrency(stats?.monthlyPayroll || 0)}
                 </p>
@@ -133,7 +133,7 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Departments</p>
+                <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">{t('nav.departments')}</p>
                 <p className="text-3xl font-bold text-gray-900 mt-1">{stats?.departments || 0}</p>
               </div>
             </div>
@@ -149,7 +149,7 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Pending Reviews</p>
+                <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">{t('dashboard.pendingReviews','Pending Reviews')}</p>
                 <p className="text-3xl font-bold text-gray-900 mt-1">{stats?.pendingReviews || 0}</p>
               </div>
             </div>
@@ -162,11 +162,11 @@ export default function Dashboard() {
         <Card className="shadow-sm border-0 bg-white">
           <CardHeader className="pb-6 border-b border-gray-100">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-xl font-semibold text-gray-900">Recent Employees</CardTitle>
+              <CardTitle className="text-xl font-semibold text-gray-900">{t('dashboard.recentEmployees','Recent Employees')}</CardTitle>
               <Link href="/employees">
                 <Button className="bg-blue-600 text-white hover:bg-blue-700 shadow-sm">
                   <Plus className="mr-2" size={16} />
-                  Add Employee
+                  {t('employeesPage.addEmployee','Add Employee')}
                 </Button>
               </Link>
             </div>
@@ -175,7 +175,7 @@ export default function Dashboard() {
             {recentEmployees.length === 0 ? (
               <div className="text-center py-6">
                 <User className="mx-auto h-12 w-12 text-gray-300" />
-                <p className="mt-2 text-sm text-gray-500">No employees found</p>
+                <p className="mt-2 text-sm text-gray-500">{t('dashboard.noEmployees','No employees found')}</p>
                 <Link href="/employees">
                   <Button variant="outline" className="mt-4">
                     Add your first employee

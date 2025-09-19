@@ -29,6 +29,14 @@ export const departments = pgTable("departments", {
 export const companies = pgTable("companies", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(),
+  logo: text("logo"),
+  primaryColor: text("primary_color"),
+  secondaryColor: text("secondary_color"),
+  email: text("email"),
+  phone: text("phone"),
+  website: text("website"),
+  address: text("address"),
+  useAttendanceForDeductions: boolean("use_attendance_for_deductions").notNull().default(false),
 });
 
 export const employees = pgTable("employees", {
@@ -171,6 +179,9 @@ export const cars = pgTable("cars", {
   registrationExpiry: date("registration_expiry"),
   registrationOwner: text("registration_owner"), // Owner name as listed on the registration document
   registrationDocumentImage: text("registration_document_image"), // Image or scan of the registration document
+  carImage: text("car_image"), // Main car image
+  registrationVideo: text("registration_video"), // Optional video demonstrating registration/inspection
+  spareTireCount: integer("spare_tire_count").default(0),
   serial: text("serial"),
   company: text("company"),
   registrationBookName: text("registration_book_name"),
@@ -208,6 +219,62 @@ export const assetAssignments = pgTable("asset_assignments", {
   status: text("status").notNull().default("active"),
   assignedBy: varchar("assigned_by").references(() => employees.id),
   notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Asset repair logs (parallel to car repairs)
+export const assetRepairs = pgTable("asset_repairs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  assetId: varchar("asset_id").references(() => assets.id).notNull(),
+  repairDate: date("repair_date").notNull(),
+  description: text("description").notNull(),
+  cost: numeric("cost", { precision: 12, scale: 2 }),
+  vendor: text("vendor"),
+  documentUrl: text("document_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Asset documents (files stored as data URLs or links)
+export const assetDocuments = pgTable("asset_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  assetId: varchar("asset_id").references(() => assets.id).notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  documentUrl: text("document_url").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Generic generated documents (optionally linked to employee)
+export const genericDocuments = pgTable("generic_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").references(() => employees.id),
+  title: text("title").notNull(),
+  description: text("description"),
+  documentUrl: text("document_url").notNull(),
+  controllerNumber: text("controller_number"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Document templates (NOC/Offer/Warning/Experience) editable in Settings
+export const templates = pgTable("templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // key identifies the template: noc, offer, warning, experience
+  key: text("key").notNull().unique(),
+  en: text("en").notNull(),
+  ar: text("ar").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Car repair logs
+export const carRepairs = pgTable("car_repairs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  carId: varchar("car_id").references(() => cars.id).notNull(),
+  repairDate: date("repair_date").notNull(),
+  description: text("description").notNull(),
+  cost: numeric("cost", { precision: 12, scale: 2 }),
+  vendor: text("vendor"),
+  documentUrl: text("document_url"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -262,6 +329,9 @@ export const notifications = pgTable("notifications", {
   expiryDate: date("expiry_date").notNull(),
   daysUntilExpiry: integer("days_until_expiry").notNull(),
   emailSent: boolean("email_sent").default(false),
+  snoozedUntil: timestamp("snoozed_until"),
+  documentEventId: varchar("document_event_id"),
+  documentUrl: text("document_url"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -518,6 +588,7 @@ export const insertCarSchema = createInsertSchema(cars)
     year: z.preprocess(parseNumber, z.number()),
     mileage: z.preprocess(parseNumber, z.number()).optional(),
     purchasePrice: z.preprocess(parseNumber, z.number()).optional(),
+    spareTireCount: z.preprocess(parseNumber, z.number().optional()).optional(),
     registrationOwner: z
       .preprocess(v => {
         const val = emptyToUndef(v);
@@ -528,6 +599,16 @@ export const insertCarSchema = createInsertSchema(cars)
         const val = emptyToUndef(v);
         return val === undefined ? undefined : String(val);
       }, z.string().optional()), // Image or scan of the registration document
+    carImage: z
+      .preprocess(v => {
+        const val = emptyToUndef(v);
+        return val === undefined ? undefined : String(val);
+      }, z.string().optional()),
+    registrationVideo: z
+      .preprocess(v => {
+        const val = emptyToUndef(v);
+        return val === undefined ? undefined : String(val);
+      }, z.string().optional()),
   });
 
 export const insertCarAssignmentSchema = createInsertSchema(carAssignments).omit({
@@ -543,6 +624,32 @@ export const insertAssetSchema = createInsertSchema(assets).omit({
 export const insertAssetAssignmentSchema = createInsertSchema(assetAssignments).omit({
   id: true,
   createdAt: true,
+});
+
+export const insertAssetDocumentSchema = createInsertSchema(assetDocuments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertGenericDocumentSchema = createInsertSchema(genericDocuments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertAssetRepairSchema = createInsertSchema(assetRepairs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertCarRepairSchema = createInsertSchema(carRepairs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertTemplateSchema = createInsertSchema(templates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
 });
 
 export const insertNotificationSchema = createInsertSchema(notifications).omit({
@@ -563,11 +670,13 @@ const baseInsertEmployeeEventSchema = createInsertSchema(employeeEvents).omit({
 export const insertEmployeeEventSchema = baseInsertEmployeeEventSchema.extend({
   eventType: z.enum([
     "bonus",
+    "commission",
     "deduction",
     "allowance",
     "overtime",
     "penalty",
     "vacation",
+    "employee_added",
     "employee_update",
     "document_update",
     "asset_assignment",
@@ -617,6 +726,18 @@ export type InsertAsset = z.infer<typeof insertAssetSchema>;
 export type AssetAssignment = typeof assetAssignments.$inferSelect;
 export type InsertAssetAssignment = z.infer<typeof insertAssetAssignmentSchema>;
 
+export type AssetDocument = typeof assetDocuments.$inferSelect;
+export type InsertAssetDocument = z.infer<typeof insertAssetDocumentSchema>;
+export type GenericDocument = typeof genericDocuments.$inferSelect;
+export type Template = typeof templates.$inferSelect;
+export type InsertTemplate = z.infer<typeof insertTemplateSchema>;
+export type InsertGenericDocument = z.infer<typeof insertGenericDocumentSchema>;
+export type AssetRepair = typeof assetRepairs.$inferSelect;
+export type InsertAssetRepair = z.infer<typeof insertAssetRepairSchema>;
+
+export type CarRepair = typeof carRepairs.$inferSelect;
+export type InsertCarRepair = z.infer<typeof insertCarRepairSchema>;
+
 export type Car = typeof cars.$inferSelect;
 export type InsertCar = z.infer<typeof insertCarSchema>;
 
@@ -628,6 +749,27 @@ export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 
 export type EmailAlert = typeof emailAlerts.$inferSelect;
 export type InsertEmailAlert = z.infer<typeof insertEmailAlertSchema>;
+
+// Attendance tracking
+export const attendance = pgTable("attendance", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").references(() => employees.id).notNull(),
+  date: date("date").notNull(),
+  checkIn: timestamp("check_in"),
+  checkOut: timestamp("check_out"),
+  hours: numeric("hours", { precision: 6, scale: 2 }),
+  source: text("source").default("manual"), // manual, import, device
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAttendanceSchema = createInsertSchema(attendance).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type Attendance = typeof attendance.$inferSelect;
+export type InsertAttendance = z.infer<typeof insertAttendanceSchema>;
 
 export type EmployeeEvent = typeof employeeEvents.$inferSelect;
 export type InsertEmployeeEvent = z.infer<typeof insertEmployeeEventSchema>;
@@ -657,6 +799,12 @@ export type DocumentExpiryCheck = {
     daysUntilExpiry: number;
   };
   passport?: {
+    number: string;
+    expiryDate: string;
+    alertDays: number;
+    daysUntilExpiry: number;
+  };
+  drivingLicense?: {
     number: string;
     expiryDate: string;
     alertDays: number;

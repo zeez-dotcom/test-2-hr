@@ -52,6 +52,58 @@ export default function EmployeeTable({
   const [page, setPage] = useState(1);
   const pageSize = 10;
   const [viewEmployee, setViewEmployee] = useState<EmployeeWithDepartment | null>(null);
+  const [reportEmployee, setReportEmployee] = useState<EmployeeWithDepartment | null>(null);
+  const [reportOptions, setReportOptions] = useState({ documents: true, loans: true, breakdown: true, start: '', end: '' });
+
+  const today = new Date();
+  const defaultStart = new Date(today.getFullYear(), 0, 1).toISOString().split('T')[0];
+  const defaultEnd = today.toISOString().split('T')[0];
+  if (!reportOptions.start || !reportOptions.end) {
+    // lazy-init to avoid SSR mismatch warnings
+    setTimeout(() => setReportOptions((r) => ({ ...r, start: r.start || defaultStart, end: r.end || defaultEnd })), 0);
+  }
+
+  async function exportEmployeeReportCSV(empId: string) {
+    const params = new URLSearchParams();
+    if (reportOptions.start) params.set('startDate', reportOptions.start);
+    if (reportOptions.end) params.set('endDate', reportOptions.end);
+    const res = await apiGet(`/api/reports/employees/${empId}?${params.toString()}`);
+    if (!res.ok) return;
+    const periods = res.data as any[];
+    const rows: string[] = [];
+    const header = [
+      'Period','Gross Pay','Net Pay','Bonuses','Commissions','Allowances','Overtime','Penalties','Deductions','Loan Deduction','Other Deductions','Tax','Social','Health','Working Days','Actual Working Days'
+    ];
+    rows.push(header.join(','));
+    for (const p of periods) {
+      const gross = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.grossPay||0), 0);
+      const net = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.netPay||0), 0);
+      const tax = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.taxDeduction||0), 0);
+      const social = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.socialSecurityDeduction||0), 0);
+      const health = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.healthInsuranceDeduction||0), 0);
+      const loanDed = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.loanDeduction||0), 0);
+      const other = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.otherDeductions||0), 0);
+      const evs = (p.employeeEvents || []) as any[];
+      const sumEv = (t: string) => evs.filter(e => e.eventType === t).reduce((s, e)=> s + Number(e.amount||0), 0);
+      const bonuses = sumEv('bonus');
+      const commissions = sumEv('commission');
+      const allowances = sumEv('allowance');
+      const overtime = sumEv('overtime');
+      const penalties = sumEv('penalty');
+      const deductions = Number(p.totals?.deductions || 0);
+      const workingDays = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.workingDays||0), 0);
+      const actualWorkingDays = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.actualWorkingDays||0), 0);
+      const vals = [p.period, gross, net, bonuses, commissions, allowances, overtime, penalties, deductions, loanDed, other, tax, social, health, workingDays, actualWorkingDays]
+        .map(v => typeof v === 'number' ? v.toFixed(2) : String(v));
+      rows.push(vals.join(','));
+    }
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `employee-report-${empId}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
 
   const { data: departments } = useQuery<Department[]>({
     queryKey: ["/api/departments"],
@@ -155,6 +207,10 @@ export default function EmployeeTable({
     ) : (
       <img src={value} alt={alt} className="mt-4 max-w-xs" />
     );
+  };
+
+  const printEmployeeFile = async (employeeId: string) => {
+    window.open(`/employee-file?id=${encodeURIComponent(employeeId)}`, '_blank');
   };
 
   const handleSort = (field: string) => {
@@ -414,6 +470,14 @@ export default function EmployeeTable({
                   <Button
                     variant="ghost"
                     size="sm"
+                    onClick={() => setReportEmployee(employee)}
+                    className="text-gray-600 hover:text-gray-900"
+                  >
+                    Print
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     className="text-primary hover:text-blue-700"
                     onClick={() => setViewEmployee(employee)}
                   >
@@ -475,10 +539,7 @@ export default function EmployeeTable({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
               <span className="font-medium">Nationality</span>
               <span>{viewEmployee.nationality || "-"}</span>
-              <span className="font-medium">Profession Code</span>
-              <span>{viewEmployee.professionCode || "-"}</span>
-              <span className="font-medium">Profession</span>
-              <span>{viewEmployee.profession || "-"}</span>
+              
               <span className="font-medium">Payment Method</span>
               <span>{viewEmployee.paymentMethod || "-"}</span>
               <span className="font-medium">Transferable</span>
@@ -489,8 +550,8 @@ export default function EmployeeTable({
               <span>{viewEmployee.drivingLicenseIssueDate ? formatDate(viewEmployee.drivingLicenseIssueDate) : "-"}</span>
               <span className="font-medium">Driving License Expiry Date</span>
               <span>{viewEmployee.drivingLicenseExpiryDate ? formatDate(viewEmployee.drivingLicenseExpiryDate) : "-"}</span>
-              <span className="font-medium">IBAN</span>
-              <span>{viewEmployee.iban || "-"}</span>
+              <span className="font-medium">Bank IBAN</span>
+              <span>{viewEmployee.bankIban || "-"}</span>
               <span className="font-medium">SWIFT Code</span>
               <span>{viewEmployee.swiftCode || "-"}</span>
               <span className="font-medium">Residency On Company</span>
@@ -511,6 +572,58 @@ export default function EmployeeTable({
             renderDocument(viewEmployee.additionalDocs, "Additional Documents")}
           {viewEmployee?.otherDocs &&
             renderDocument(viewEmployee.otherDocs, "Other Documents")}
+        </DialogContent>
+      </Dialog>
+
+      {/* Report Options Dialog */}
+      <Dialog open={!!reportEmployee} onOpenChange={(o)=> !o && setReportEmployee(null)}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Generate Report</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2"><input type="checkbox" checked={reportOptions.documents} onChange={e => setReportOptions(r => ({...r, documents: e.target.checked}))} /> Include Documents</label>
+            </div>
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2"><input type="checkbox" checked={reportOptions.loans} onChange={e => setReportOptions(r => ({...r, loans: e.target.checked}))} /> Include Loans</label>
+            </div>
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2"><input type="checkbox" checked={reportOptions.breakdown} onChange={e => setReportOptions(r => ({...r, breakdown: e.target.checked}))} /> Include Breakdown (bonuses, deductions, commissions)</label>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-muted-foreground mb-1">Start</label>
+                <input type="date" className="border rounded px-2 py-1 w-full" value={reportOptions.start} onChange={e => setReportOptions(r => ({...r, start: e.target.value}))} />
+              </div>
+              <div>
+                <label className="block text-muted-foreground mb-1">End</label>
+                <input type="date" className="border rounded px-2 py-1 w-full" value={reportOptions.end} onChange={e => setReportOptions(r => ({...r, end: e.target.value}))} />
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setReportEmployee(null)}>Cancel</Button>
+            <Button variant="outline" onClick={async () => {
+              if (!reportEmployee) return;
+              await exportEmployeeReportCSV(reportEmployee.id);
+            }}>Export Excel</Button>
+            <Button onClick={() => {
+              if (!reportEmployee) return;
+              const sections = [
+                reportOptions.documents ? 'documents' : null,
+                reportOptions.loans ? 'loans' : null,
+                reportOptions.breakdown ? 'breakdown' : null,
+              ].filter(Boolean).join(',');
+              const qs: string[] = [];
+              if (sections) qs.push(`sections=${encodeURIComponent(sections)}`);
+              if (reportOptions.start) qs.push(`startDate=${encodeURIComponent(reportOptions.start)}`);
+              if (reportOptions.end) qs.push(`endDate=${encodeURIComponent(reportOptions.end)}`);
+              const url = `/employee-file?id=${encodeURIComponent(reportEmployee.id)}${qs.length ? `&${qs.join('&')}`: ''}`;
+              window.open(url, '_blank');
+              setReportEmployee(null);
+            }}>Generate</Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

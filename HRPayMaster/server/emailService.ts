@@ -4,6 +4,7 @@ import type { DocumentExpiryCheck, Employee } from '@shared/schema';
 const mailService = new MailService();
 const apiKey = process.env.SENDGRID_API_KEY;
 let sendGridConfigured = false;
+let warnedSendgridAtRuntime = false;
 
 if (!apiKey) {
   console.warn(
@@ -41,7 +42,10 @@ export async function sendEmail(params: EmailParams): Promise<boolean> {
   if (!sendGridConfigured) {
     // Mock transport when SendGrid isn't configured
     mockEmails.push(params);
-    console.error('SENDGRID_API_KEY not set or invalid. Email not sent.');
+    if (!warnedSendgridAtRuntime) {
+      console.warn('SENDGRID_API_KEY not set; email sending is disabled (mock).');
+      warnedSendgridAtRuntime = true;
+    }
     return false;
   }
 
@@ -63,14 +67,15 @@ export async function sendEmail(params: EmailParams): Promise<boolean> {
 
 export function generateExpiryWarningEmail(
   employee: Employee,
-  documentType: 'visa' | 'civil_id' | 'passport',
+  documentType: 'visa' | 'civil_id' | 'passport' | 'driving_license',
   expiryDate: string,
   daysUntilExpiry: number,
   documentNumber: string
 ) {
   const urgencyLevel = daysUntilExpiry <= 7 ? 'URGENT' : daysUntilExpiry <= 30 ? 'Important' : 'Reminder';
   const documentName = documentType === 'civil_id' ? 'Civil ID' : 
-                       documentType === 'visa' ? 'Visa' : 'Passport';
+                       documentType === 'visa' ? 'Visa' : 
+                       documentType === 'driving_license' ? 'Driving License' : 'Passport';
   
   const subject = `${urgencyLevel}: ${documentName} Expiring in ${daysUntilExpiry} days - ${employee.firstName} ${employee.lastName}`;
   

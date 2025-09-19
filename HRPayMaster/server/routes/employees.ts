@@ -14,6 +14,7 @@ import {
   insertNotificationSchema,
   insertEmailAlertSchema,
   insertEmployeeEventSchema,
+  insertAttendanceSchema,
   type InsertEmployeeEvent,
   type InsertEmployee,
   type InsertCar,
@@ -202,6 +203,46 @@ const upload = multer({ storage: multer.memoryStorage() });
       res.json(companies);
     } catch (error) {
       next(new HttpError(500, "Failed to fetch companies"));
+    }
+  });
+
+  // Current company (single-company app)
+  employeesRouter.get("/api/company", async (_req, res, next) => {
+    try {
+      const list = await storage.getCompanies();
+      if (list.length === 0) {
+        // create default company if none exists
+        const created = await storage.createCompany({ name: 'Company' });
+        return res.json(created);
+      }
+      res.json(list[0]);
+    } catch (error) {
+      next(new HttpError(500, 'Failed to fetch company'));
+    }
+  });
+  employeesRouter.put("/api/company", requireRole(['admin']), async (req, res, next) => {
+    try {
+      const list = await storage.getCompanies();
+      const id = list[0]?.id;
+      const data: any = {};
+      if (typeof req.body?.name === 'string') data.name = req.body.name;
+      if (typeof req.body?.logo === 'string') data.logo = req.body.logo;
+      if (typeof req.body?.primaryColor === 'string') data.primaryColor = req.body.primaryColor;
+      if (typeof req.body?.secondaryColor === 'string') data.secondaryColor = req.body.secondaryColor;
+      if (typeof req.body?.email === 'string') data.email = req.body.email;
+      if (typeof req.body?.phone === 'string') data.phone = req.body.phone;
+      if (typeof req.body?.website === 'string') data.website = req.body.website;
+      if (typeof req.body?.address === 'string') data.address = req.body.address;
+      if (!id) {
+        const created = await storage.createCompany(data);
+        res.json(created);
+      } else {
+        const updated = await storage.updateCompany(id, data);
+        if (!updated) return next(new HttpError(404, 'Company not found'));
+        res.json(updated);
+      }
+    } catch (error) {
+      next(new HttpError(500, 'Failed to update company'));
     }
   });
 
@@ -674,6 +715,23 @@ const upload = multer({ storage: multer.memoryStorage() });
         ...employee,
         role: employee.role || "employee",
       });
+      // Log employee creation into events for visibility in Logs
+      try {
+        const addedBy = await getAddedBy(req);
+        await storage.createEmployeeEvent({
+          employeeId: newEmployee.id,
+          eventType: "employee_added",
+          title: "Employee added",
+          description: `Employee ${newEmployee.firstName ?? ""} ${newEmployee.lastName ?? ""} added`.trim(),
+          amount: "0",
+          eventDate: new Date().toISOString().split("T")[0],
+          affectsPayroll: false,
+          ...(addedBy ? { addedBy } : {}),
+        });
+      } catch (e) {
+        // Non-fatal: creation succeeds even if event logging fails
+        console.warn("Failed to log employee creation event", e);
+      }
       res.status(201).json(newEmployee);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -854,10 +912,47 @@ const upload = multer({ storage: multer.memoryStorage() });
   employeesRouter.put("/api/vacations/:id", async (req, res, next) => {
     try {
       const updates = insertVacationRequestSchema.partial().parse(req.body);
+      // If approving a vacation, enforce department coverage threshold
+      if (updates.status === 'approved') {
+        const current = await storage.getVacationRequest(req.params.id);
+        if (!current) return next(new HttpError(404, "Vacation request not found"));
+        const employee = await storage.getEmployee(current.employeeId);
+        if (employee?.departmentId) {
+          const start = new Date(current.startDate);
+          const end = new Date(current.endDate);
+          const allVac = await storage.getVacationRequests(start, end);
+          const sameDeptApproved = allVac.filter(v => v.status === 'approved')
+            .filter(v => v.employee?.departmentId === employee.departmentId)
+            .filter(v => v.id !== current.id);
+          const maxOverlap = Number(process.env.COVERAGE_MAX_OVERLAP_PER_DEPT || '999');
+          if (sameDeptApproved.length >= maxOverlap) {
+            return next(new HttpError(409, "Department coverage conflict: too many overlapping vacations"));
+          }
+        }
+      }
+      const before = await storage.getVacationRequest(req.params.id);
       const updatedVacationRequest = await storage.updateVacationRequest(req.params.id, updates);
       if (!updatedVacationRequest) {
         return next(new HttpError(404, "Vacation request not found"));
       }
+      // Log events for vacation approvals/returns
+      try {
+        const after = updatedVacationRequest;
+        if (before?.status !== after.status && (after.status === 'approved' || after.status === 'completed')) {
+          const employeeId = after.employeeId;
+          const title = after.status === 'approved' ? `Vacation approved (${after.startDate} → ${after.endDate})` : `Vacation completed (${after.startDate} → ${after.endDate})`;
+          const event: InsertEmployeeEvent = {
+            employeeId,
+            eventType: 'vacation',
+            title,
+            description: title,
+            amount: '0',
+            eventDate: new Date().toISOString().split('T')[0],
+            affectsPayroll: true,
+          };
+          await storage.createEmployeeEvent(event);
+        }
+      } catch {}
       res.json(updatedVacationRequest);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -887,6 +982,46 @@ const upload = multer({ storage: multer.memoryStorage() });
     } catch (error) {
       next(new HttpError(500, "Failed to fetch assets"));
     }
+  });
+
+  // Asset documents
+  employeesRouter.get("/api/assets/:id/documents", async (req, res, next) => {
+    try {
+      const docs = await storage.getAssetDocuments(req.params.id);
+      res.json(docs);
+    } catch (error) {
+      next(new HttpError(500, "Failed to fetch asset documents"));
+    }
+  });
+  employeesRouter.post("/api/assets/:id/documents", async (req, res, next) => {
+    try {
+      const { title, description, documentUrl } = req.body as any;
+      if (!title || !documentUrl) return next(new HttpError(400, 'title and documentUrl are required'));
+      const doc = await storage.createAssetDocument({ assetId: req.params.id, title, description, documentUrl });
+      res.status(201).json(doc);
+    } catch (error) {
+      next(new HttpError(500, "Failed to create asset document"));
+    }
+  });
+
+  // Asset repairs
+  employeesRouter.get("/api/assets/:id/repairs", async (req, res, next) => {
+    try {
+      const rows = await storage.getAssetRepairs(req.params.id);
+      res.json(rows);
+    } catch (error) { next(new HttpError(500, 'Failed to fetch asset repairs')); }
+  });
+  employeesRouter.post("/api/assets/:id/repairs", async (req, res, next) => {
+    try {
+      const { repairDate, description, cost, vendor, documentUrl } = req.body as any;
+      if (!repairDate || !description) return next(new HttpError(400, 'repairDate and description required'));
+      const payload: any = { assetId: req.params.id, repairDate, description };
+      if (cost !== undefined) payload.cost = cost;
+      if (vendor) payload.vendor = vendor;
+      if (documentUrl) payload.documentUrl = documentUrl;
+      const row = await storage.createAssetRepair(payload);
+      res.status(201).json(row);
+    } catch (error) { next(new HttpError(500, 'Failed to create repair')); }
   });
 
   employeesRouter.get("/api/assets/:id", async (req, res, next) => {
@@ -1278,6 +1413,14 @@ const upload = multer({ storage: multer.memoryStorage() });
   employeesRouter.post("/api/car-assignments", async (req, res, next) => {
     try {
       const assignment = insertCarAssignmentSchema.parse(req.body);
+      // Prevent assignment if employee is on approved/pending vacation for assignedDate
+      if (assignment.assignedDate) {
+        const vacs = await storage.getVacationRequests(new Date(assignment.assignedDate), new Date(assignment.assignedDate));
+        const conflict = vacs.find(v => v.employeeId === assignment.employeeId && (v.status === 'approved' || v.status === 'pending'));
+        if (conflict) {
+          return next(new HttpError(409, `Employee has ${conflict.status} vacation overlapping ${assignment.assignedDate}`));
+        }
+      }
       const newAssignment = await storage.createCarAssignment(assignment);
       // ensure the car reflects its new assignment
       if (newAssignment?.carId) {
@@ -1397,7 +1540,14 @@ const upload = multer({ storage: multer.memoryStorage() });
   employeesRouter.post("/api/notifications", async (req, res, next) => {
     try {
       const notification = insertNotificationSchema.parse(req.body);
-      const newNotification = await storage.createNotification(notification);
+      // Deduplicate by employeeId+type+title+expiryDate
+      const existing = (await storage.getNotifications()).find(n =>
+        n.employeeId === notification.employeeId &&
+        n.type === notification.type &&
+        n.title === notification.title &&
+        String(n.expiryDate) === String(notification.expiryDate)
+      );
+      const newNotification = existing || await storage.createNotification(notification);
       res.status(201).json(newNotification);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -1419,6 +1569,17 @@ const upload = multer({ storage: multer.memoryStorage() });
     }
   });
 
+  employeesRouter.put("/api/notifications/:id/snooze", async (req, res, next) => {
+    try {
+      const until = (req.body?.snoozedUntil as string) || new Date(Date.now() + 7 * 86400000).toISOString();
+      const updated = await storage.updateNotification(req.params.id, { snoozedUntil: new Date(until) as any, status: 'unread' });
+      if (!updated) return next(new HttpError(404, "Notification not found"));
+      res.json({ message: "Notification snoozed", snoozedUntil: until });
+    } catch (error) {
+      next(new HttpError(500, "Failed to snooze notification"));
+    }
+  });
+
   employeesRouter.delete("/api/notifications/:id", async (req, res, next) => {
     try {
       const deleted = await storage.deleteNotification(req.params.id);
@@ -1431,6 +1592,145 @@ const upload = multer({ storage: multer.memoryStorage() });
     }
   });
 
+  // Notification approvals for documents
+  employeesRouter.put("/api/notifications/:id/approve", async (req, res, next) => {
+    try {
+      const all = await storage.getNotifications();
+      const n = all.find(n => n.id === req.params.id);
+      if (!n) return next(new HttpError(404, 'Notification not found'));
+      await storage.updateNotification(req.params.id, { status: 'read' });
+      // Log event
+      try {
+        const reason = (req.body as any)?.reason;
+        await storage.createEmployeeEvent({
+          employeeId: n.employeeId,
+          eventType: 'document_update',
+          title: `Document approved: ${n.title}`,
+          description: reason ? `${n.message} | Reason: ${reason}` : n.message,
+          amount: '0',
+          eventDate: new Date().toISOString().split('T')[0],
+          affectsPayroll: false,
+        });
+      } catch {}
+      res.json({ message: 'Approved' });
+    } catch (error) {
+      next(new HttpError(500, 'Failed to approve notification'));
+    }
+  });
+  employeesRouter.put("/api/notifications/:id/reject", async (req, res, next) => {
+    try {
+      const all = await storage.getNotifications();
+      const n = all.find(n => n.id === req.params.id);
+      if (!n) return next(new HttpError(404, 'Notification not found'));
+      await storage.updateNotification(req.params.id, { status: 'read' });
+      // Log event
+      try {
+        const reason = (req.body as any)?.reason;
+        await storage.createEmployeeEvent({
+          employeeId: n.employeeId,
+          eventType: 'document_update',
+          title: `Document rejected: ${n.title}`,
+          description: reason ? `${n.message} | Reason: ${reason}` : n.message,
+          amount: '0',
+          eventDate: new Date().toISOString().split('T')[0],
+          affectsPayroll: false,
+        });
+      } catch {}
+      res.json({ message: 'Rejected' });
+    } catch (error) {
+      next(new HttpError(500, 'Failed to reject notification'));
+    }
+  });
+
+  // Employee documents: save PDF into employee's file (as event with documentUrl)
+  employeesRouter.post("/api/employees/:id/documents", async (req, res, next) => {
+    try {
+      const { title, description, pdfDataUrl, controllerNumber, createdAt } = req.body as any;
+      if (!title || !pdfDataUrl) return next(new HttpError(400, "title and pdfDataUrl are required"));
+      const docNo = controllerNumber || `DOC-${Date.now()}-${Math.random().toString(36).slice(2,7).toUpperCase()}`;
+      const created = createdAt ? new Date(createdAt) : new Date();
+      const event: InsertEmployeeEvent = {
+        employeeId: req.params.id,
+        eventType: 'document_update',
+        title: `${title} (${docNo})`,
+        description: description ? `${description} [${docNo}]` : `${title} [${docNo}]`,
+        amount: '0',
+        eventDate: created.toISOString().split('T')[0],
+        affectsPayroll: false,
+        documentUrl: pdfDataUrl,
+      };
+      const newEvent = await storage.createEmployeeEvent(event);
+      // If non-admin, create approval notification for admins (generic implementation)
+      const role = (req.user as any)?.role || 'employee';
+      if (role !== 'admin') {
+        await storage.createNotification({
+          employeeId: req.params.id,
+          type: 'document_approval',
+          title: `Document approval needed: ${title}`,
+          message: `${description || title} | Doc#: ${docNo}`,
+          priority: 'high',
+          status: 'unread',
+          expiryDate: created.toISOString().split('T')[0],
+          daysUntilExpiry: 0,
+          emailSent: false,
+          documentEventId: newEvent.id as any,
+          documentUrl: pdfDataUrl,
+          documentControllerNumber: docNo,
+        });
+      }
+      res.status(201).json(newEvent);
+    } catch (error) {
+      next(new HttpError(500, "Failed to save employee document"));
+    }
+  });
+
+  // Generic documents management
+  employeesRouter.get("/api/documents", async (_req, res, next) => {
+    try {
+      const docs = await storage.getGenericDocuments();
+      res.json(docs);
+    } catch (error) {
+      next(new HttpError(500, "Failed to fetch documents"));
+    }
+  });
+  employeesRouter.post("/api/documents", async (req, res, next) => {
+    try {
+      const { title, description, pdfDataUrl, controllerNumber, employeeId } = req.body as any;
+      if (!title || !pdfDataUrl) return next(new HttpError(400, "title and pdfDataUrl are required"));
+      const doc = await storage.createGenericDocument({
+        title,
+        description,
+        documentUrl: pdfDataUrl,
+        controllerNumber,
+        employeeId,
+      } as any);
+      res.status(201).json(doc);
+    } catch (error) {
+      next(new HttpError(500, "Failed to save document"));
+    }
+  });
+  employeesRouter.put("/api/documents/:id", async (req, res, next) => {
+    try {
+      const updates: any = {};
+      const allowed = ["title","description","documentUrl","controllerNumber","employeeId"];
+      for (const k of allowed) if (k in req.body) updates[k] = (req.body as any)[k];
+      const updated = await storage.updateGenericDocument(req.params.id, updates);
+      if (!updated) return next(new HttpError(404, "Document not found"));
+      res.json(updated);
+    } catch (error) {
+      next(new HttpError(500, "Failed to update document"));
+    }
+  });
+  employeesRouter.delete("/api/documents/:id", async (req, res, next) => {
+    try {
+      const ok = await storage.deleteGenericDocument(req.params.id);
+      if (!ok) return next(new HttpError(404, "Document not found"));
+      res.status(204).send();
+    } catch (error) {
+      next(new HttpError(500, "Failed to delete document"));
+    }
+  });
+
   // Document expiry tracking routes
   employeesRouter.get("/api/documents/expiry-check", async (req, res, next) => {
     try {
@@ -1438,6 +1738,114 @@ const upload = multer({ storage: multer.memoryStorage() });
       res.json(expiryChecks);
     } catch (error) {
       next(new HttpError(500, "Failed to check document expiries"));
+    }
+  });
+
+  // Attendance CSV import
+  const uploadCsv = multer();
+  employeesRouter.post("/api/attendance/import", uploadCsv.single('file'), async (req, res, next) => {
+    try {
+      const buf = (req.file as any)?.buffer as Buffer | undefined;
+      if (!buf) return next(new HttpError(400, "file is required"));
+      const text = buf.toString('utf8');
+      const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+      if (lines.length === 0) return res.json({ imported: 0, failed: 0 });
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+      const idx = (name: string) => headers.findIndex(h => h === name);
+      const iEmployeeId = idx('employeeid');
+      const iEmployeeCode = (iEmployeeId === -1) ? idx('employeecode') : -1;
+      const iDate = idx('date');
+      const iIn = idx('checkin');
+      const iOut = idx('checkout');
+      const iHours = idx('hours');
+      const iSource = idx('source');
+      const iNotes = idx('notes');
+      if (iDate === -1) return next(new HttpError(400, "CSV must include date column"));
+      if (iEmployeeId === -1 && iEmployeeCode === -1) return next(new HttpError(400, "CSV must include employeeId or employeeCode column"));
+      const employees = await storage.getEmployees();
+      const codeToId = new Map<string, string>();
+      employees.forEach(e => codeToId.set(e.employeeCode, e.id));
+      let imported = 0, failed = 0;
+      for (let r = 1; r < lines.length; r++) {
+        const cols = lines[r].split(',');
+        try {
+          let employeeId = (iEmployeeId >= 0) ? cols[iEmployeeId]?.trim() : '';
+          if (!employeeId && iEmployeeCode >= 0) {
+            const code = cols[iEmployeeCode]?.trim();
+            employeeId = codeToId.get(code || '') || '';
+          }
+          if (!employeeId) throw new Error('Missing employeeId or employeeCode');
+          const dateStr = cols[iDate]?.trim();
+          if (!dateStr || isNaN(Date.parse(dateStr))) throw new Error('Invalid date');
+          const record: any = {
+            employeeId,
+            date: dateStr,
+          };
+          if (iIn >= 0 && cols[iIn]) record.checkIn = new Date(cols[iIn]).toISOString();
+          if (iOut >= 0 && cols[iOut]) record.checkOut = new Date(cols[iOut]).toISOString();
+          if (iHours >= 0 && cols[iHours]) record.hours = Number(cols[iHours]);
+          if (iSource >= 0 && cols[iSource]) record.source = String(cols[iSource]);
+          if (iNotes >= 0 && cols[iNotes]) record.notes = String(cols[iNotes]);
+          await storage.createAttendance(record);
+          imported++;
+        } catch {
+          failed++;
+        }
+      }
+      res.json({ imported, failed });
+    } catch (error) {
+      next(new HttpError(500, "Failed to import attendance"));
+    }
+  });
+
+  // Attendance CSV template
+  employeesRouter.get("/api/attendance/template", async (_req, res) => {
+    const csv = [
+      'employeeCode,date,checkIn,checkOut,hours,source,notes',
+      'E-00001,2025-01-10,2025-01-10T08:00:00,2025-01-10T17:00:00,8,device,Regular shift'
+    ].join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="attendance-template.csv"');
+    res.send(csv);
+  });
+
+  // Vacation coverage summary
+  employeesRouter.get("/api/vacations/coverage", async (req, res, next) => {
+    try {
+      const { startDate, endDate } = req.query as any;
+      const start = startDate ? new Date(startDate) : new Date();
+      const end = endDate ? new Date(endDate) : new Date(Date.now() + 30*86400000);
+      const vacs = await storage.getVacationRequests(start, end);
+      const employees = await storage.getEmployees();
+      const departments = await storage.getDepartments();
+      const deptNames = new Map<string, string>();
+      departments.forEach(d => d.id && d.name && deptNames.set(d.id, d.name));
+      const empDept = new Map<string, string | null>();
+      employees.forEach(e => {
+        if (e.departmentId) {
+          empDept.set(e.id, e.departmentId);
+        } else {
+          empDept.set(e.id, null);
+        }
+      });
+      // group by day -> deptId -> count
+      const coverage: Record<string, Record<string, number>> = {};
+      for (const v of vacs.filter(v => v.status === 'approved')) {
+        const d0 = new Date(v.startDate);
+        const d1 = new Date(v.endDate);
+        for (let d = new Date(Math.max(+d0, +start)); d <= end && d <= d1; d = new Date(d.getTime() + 86400000)) {
+          const key = d.toISOString().split('T')[0];
+          const dept = empDept.get(v.employeeId) || 'unknown';
+          coverage[key] = coverage[key] || {};
+          coverage[key][dept] = (coverage[key][dept] || 0) + 1;
+        }
+      }
+      const threshold = Number(process.env.COVERAGE_MAX_OVERLAP_PER_DEPT || '2');
+      const departmentsMap: Record<string, string> = {};
+      deptNames.forEach((name, id) => { departmentsMap[id] = name; });
+      res.json({ coverage, threshold, departments: departmentsMap });
+    } catch (error) {
+      next(new HttpError(500, "Failed to compute coverage"));
     }
   });
 
@@ -1551,6 +1959,56 @@ const upload = multer({ storage: multer.memoryStorage() });
           if (emailSent) emailsSent++;
           alerts.push({ type: 'passport', employee: check.employeeName, daysUntilExpiry: check.passport.daysUntilExpiry });
         }
+
+        // Check driving license expiry
+        // @ts-expect-error extended property from storage.checkDocumentExpiries
+        if (check.drivingLicense && shouldSendAlert(check.drivingLicense.expiryDate, check.drivingLicense.alertDays)) {
+          const emailContent = generateExpiryWarningEmail(
+            employee,
+            'driving_license',
+            // @ts-expect-error extended property
+            check.drivingLicense.expiryDate,
+            // @ts-expect-error extended property
+            check.drivingLicense.daysUntilExpiry,
+            // @ts-expect-error extended property
+            check.drivingLicense.number
+          );
+
+          await storage.createNotification({
+            employeeId: check.employeeId,
+            type: 'driving_license_expiry',
+            title: emailContent.subject,
+            message: `Driving License expires in ${
+              // @ts-expect-error extended property
+              check.drivingLicense.daysUntilExpiry
+            } days`,
+            priority:
+              // @ts-expect-error extended property
+              check.drivingLicense.daysUntilExpiry <= 7
+                ? 'critical'
+                : // @ts-expect-error extended property
+                check.drivingLicense.daysUntilExpiry <= 30
+                ? 'high'
+                : 'medium',
+            // @ts-expect-error extended property
+            expiryDate: check.drivingLicense.expiryDate,
+            // @ts-expect-error extended property
+            daysUntilExpiry: check.drivingLicense.daysUntilExpiry,
+            emailSent: false,
+          });
+
+          const emailSent = await sendEmail({
+            to: employee.email || '',
+            from: process.env.FROM_EMAIL || 'hr@company.com',
+            subject: emailContent.subject,
+            html: emailContent.html,
+            text: emailContent.text,
+          });
+
+          if (emailSent) emailsSent++;
+          // @ts-expect-error extended property
+          alerts.push({ type: 'driving_license', employee: check.employeeName, daysUntilExpiry: check.drivingLicense.daysUntilExpiry });
+        }
       }
 
       res.json({ 
@@ -1581,6 +2039,92 @@ const upload = multer({ storage: multer.memoryStorage() });
       res.json(events);
     } catch (error) {
       next(new HttpError(500, "Failed to fetch employee events"));
+    }
+  });
+
+  // Attendance routes
+  employeesRouter.get("/api/attendance", async (req, res, next) => {
+    try {
+      const { startDate, endDate } = req.query as any;
+      if (startDate && endDate) {
+        const rows = await storage.getAttendance(new Date(startDate), new Date(endDate));
+        res.json(rows);
+      } else {
+        const rows = await storage.getAttendance();
+        res.json(rows);
+      }
+    } catch (error) {
+      next(new HttpError(500, "Failed to fetch attendance"));
+    }
+  });
+  employeesRouter.get("/api/attendance/summary", async (req, res, next) => {
+    try {
+      const { startDate, endDate } = req.query as any;
+      if (!startDate || !endDate) return next(new HttpError(400, "startDate and endDate are required"));
+      const summary = await storage.getAttendanceSummary(new Date(startDate), new Date(endDate));
+      res.json(summary);
+    } catch (error) {
+      next(new HttpError(500, "Failed to summarize attendance"));
+    }
+  });
+  employeesRouter.post("/api/attendance", async (req, res, next) => {
+    try {
+      const rec = insertAttendanceSchema.parse(req.body);
+      const created = await storage.createAttendance(rec);
+      try {
+        await storage.createEmployeeEvent({
+          employeeId: created.employeeId,
+          eventType: 'employee_update',
+          title: 'Attendance recorded',
+          description: `Attendance for ${created.date}`,
+          amount: '0',
+          eventDate: created.date as any,
+          affectsPayroll: true,
+        });
+      } catch {}
+      res.status(201).json(created);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return next(new HttpError(400, "Invalid attendance data", error.errors));
+      }
+      next(new HttpError(500, "Failed to create attendance record"));
+    }
+  });
+  employeesRouter.put("/api/attendance/:id", async (req, res, next) => {
+    try {
+      const rec = insertAttendanceSchema.partial().parse(req.body);
+      const updated = await storage.updateAttendance(req.params.id, rec);
+      if (!updated) return next(new HttpError(404, "Attendance record not found"));
+      res.json(updated);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return next(new HttpError(400, "Invalid attendance data", error.errors));
+      }
+      next(new HttpError(500, "Failed to update attendance record"));
+    }
+  });
+  employeesRouter.delete("/api/attendance/:id", async (req, res, next) => {
+    try {
+      const all = await storage.getAttendance();
+      const rec = all.find(r => r.id === req.params.id);
+      const deleted = await storage.deleteAttendance(req.params.id);
+      if (!deleted) return next(new HttpError(404, "Attendance record not found"));
+      try {
+        if (rec) {
+          await storage.createEmployeeEvent({
+            employeeId: rec.employeeId,
+            eventType: 'employee_update',
+            title: 'Attendance deleted',
+            description: `Attendance removed for ${rec.date}`,
+            amount: '0',
+            eventDate: new Date().toISOString().split('T')[0],
+            affectsPayroll: true,
+          });
+        }
+      } catch {}
+      res.status(204).send();
+    } catch (error) {
+      next(new HttpError(500, "Failed to delete attendance record"));
     }
   });
 
@@ -1636,5 +2180,3 @@ const upload = multer({ storage: multer.memoryStorage() });
       next(new HttpError(500, "Failed to delete employee event"));
     }
   });
-
-

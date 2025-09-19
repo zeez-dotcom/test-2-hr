@@ -177,23 +177,33 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
       ...e,
       affectsPayroll: (e as any).affectsPayroll ?? true,
     }));
-    // Calculate number of days in this payroll period
-    const workingDays =
-      Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    // Attendance summary per employee (optional)
+    // Attendance-based deduction toggle: request body override or company setting
+    const companies = await storage.getCompanies();
+    const company = companies[0];
+    const useAttendance = (req.body?.useAttendance !== undefined)
+      ? Boolean(req.body.useAttendance)
+      : Boolean((company as any)?.useAttendanceForDeductions);
+    const attendanceSummary = useAttendance
+      ? await storage.getAttendanceSummary(start, end)
+      : {} as Record<string, number>;
 
     const payrollEntries = await Promise.all(
-      activeEmployees.map(employee =>
-        calculateEmployeePayroll({
+      activeEmployees.map(employee => {
+        const employeeWorkingDays = employee.standardWorkingDays ||
+          (Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+        return calculateEmployeePayroll({
           employee,
           loans,
           vacationRequests,
           employeeEvents,
           start,
           end,
-          workingDays,
+          workingDays: employeeWorkingDays,
+          attendanceDays: attendanceSummary[employee.id],
           config: deductionConfig,
-        }),
-      ),
+        });
+      })
     );
 
     // Create notifications for significant payroll events
@@ -341,4 +351,3 @@ payrollRouter.put("/entries/:id", async (req, res, next) => {
     next(new HttpError(500, "Failed to update payroll entry"));
   }
 });
-

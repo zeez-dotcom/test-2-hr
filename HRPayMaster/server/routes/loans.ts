@@ -36,6 +36,18 @@ loansRouter.post("/", requireRole(["admin", "hr"]), async (req, res, next) => {
     req.body.status ??= "pending";
     const loan = insertLoanSchema.parse(req.body);
     const newLoan = await storage.createLoan(loan);
+    // Log event
+    try {
+      await storage.createEmployeeEvent({
+        employeeId: newLoan.employeeId,
+        eventType: 'employee_update',
+        title: `Loan created (${newLoan.amount})`,
+        description: `Loan created with monthly deduction ${newLoan.monthlyDeduction}`,
+        amount: '0',
+        eventDate: new Date().toISOString().split('T')[0],
+        affectsPayroll: true,
+      });
+    } catch {}
     res.status(201).json(newLoan);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -54,6 +66,18 @@ loansRouter.put("/:id", requireRole(["admin", "hr"]), async (req, res, next) => 
     if (!updatedLoan) {
       return next(new HttpError(404, "Loan not found"));
     }
+    // Log event
+    try {
+      await storage.createEmployeeEvent({
+        employeeId: updatedLoan.employeeId,
+        eventType: 'employee_update',
+        title: `Loan updated`,
+        description: `Loan updated for employee`,
+        amount: '0',
+        eventDate: new Date().toISOString().split('T')[0],
+        affectsPayroll: true,
+      });
+    } catch {}
     res.json(updatedLoan);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -66,14 +90,27 @@ loansRouter.put("/:id", requireRole(["admin", "hr"]), async (req, res, next) => 
 
 loansRouter.delete("/:id", requireRole(["admin", "hr"]), async (req, res, next) => {
   try {
+    const loan = await storage.getLoan(req.params.id);
     const deleted = await storage.deleteLoan(req.params.id);
     if (!deleted) {
       return next(new HttpError(404, "Loan not found"));
     }
+    try {
+      if (loan) {
+        await storage.createEmployeeEvent({
+          employeeId: loan.employeeId,
+          eventType: 'employee_update',
+          title: `Loan deleted`,
+          description: `Loan was deleted`,
+          amount: '0',
+          eventDate: new Date().toISOString().split('T')[0],
+          affectsPayroll: false,
+        });
+      }
+    } catch {}
     res.status(204).send();
   } catch (error) {
     console.error("Failed to delete loan:", error);
     next(new HttpError(500, "Failed to delete loan", error));
   }
 });
-

@@ -56,6 +56,8 @@ export default function EmployeeForm({
   const [companyOpen, setCompanyOpen] = useState(false);
   const [newCompanyOpen, setNewCompanyOpen] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState("");
+  const [newDepartmentOpen, setNewDepartmentOpen] = useState(false);
+  const [newDepartmentName, setNewDepartmentName] = useState("");
   const [search, setSearch] = useState("");
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -78,7 +80,6 @@ export default function EmployeeForm({
       standardWorkingDays: initialData?.standardWorkingDays || 26,
       startDate: initialData?.startDate || new Date().toISOString().split('T')[0],
       status: initialData?.status || "active",
-      emergencyContact: initialData?.emergencyContact || "",
       emergencyPhone: initialData?.emergencyPhone || "",
       nationalId: initialData?.nationalId || "",
       address: initialData?.address || "",
@@ -93,8 +94,8 @@ export default function EmployeeForm({
       bankIban: initialData?.bankIban || "",
       bankName: initialData?.bankName || "",
       nationality: initialData?.nationality || "",
-      professionCode: initialData?.professionCode || "",
-      profession: initialData?.profession || "",
+      
+      // profession removed from UI (use Position instead)
       paymentMethod: initialData?.paymentMethod || "",
       transferable: initialData?.transferable ?? false,
       drivingLicenseNumber: initialData?.drivingLicenseNumber || "",
@@ -103,7 +104,7 @@ export default function EmployeeForm({
       drivingLicenseImage: initialData?.drivingLicenseImage || undefined,
       otherDocs: initialData?.otherDocs || undefined,
       additionalDocs: initialData?.additionalDocs || undefined,
-      iban: initialData?.iban || "",
+      // removed plain IBAN field; use bankIban only
       swiftCode: initialData?.swiftCode || "",
       residencyName: initialData?.residencyName || "",
       residencyOnCompany: initialData?.residencyOnCompany ?? false,
@@ -130,6 +131,24 @@ export default function EmployeeForm({
   });
 
   const residencyOnCompany = form.watch("residencyOnCompany");
+
+  const addDepartmentMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await apiPost("/api/departments", { name });
+      if (!res.ok) throw res;
+      return res.data as Department;
+    },
+    onSuccess: (data: Department) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/departments"] });
+      form.setValue("departmentId", data.id);
+      setNewDepartmentOpen(false);
+      setNewDepartmentName("");
+      toast({ title: "Department added" });
+    },
+    onError: (err) => {
+      toastApiError(err as any, "Failed to add department");
+    },
+  });
 
   const handleSubmit: SubmitHandler<FormData> = ({
     employeeCode,
@@ -365,21 +384,53 @@ export default function EmployeeForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Department</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value || undefined}>
+                <Select
+                  onValueChange={(val) => {
+                    if (val === "__create__") {
+                      setNewDepartmentOpen(true);
+                      return;
+                    }
+                    field.onChange(val);
+                  }}
+                  value={field.value || undefined}
+                >
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Select Department" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {departments.filter(dept => dept.id && dept.id.trim() !== "").map((dept) => (
-                      <SelectItem key={dept.id} value={dept.id}>
-                        {dept.name}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="__create__">+ Create Department</SelectItem>
+                    {departments
+                      .filter(dept => dept.id && dept.id.trim() !== "")
+                      .map((dept) => (
+                        <SelectItem key={dept.id} value={dept.id}>
+                          {dept.name}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
                 <FormMessage />
+                <Dialog open={newDepartmentOpen} onOpenChange={setNewDepartmentOpen}>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Add Department</DialogTitle>
+                    </DialogHeader>
+                    <div className="flex items-center space-x-2">
+                      <Input
+                        value={newDepartmentName}
+                        onChange={e => setNewDepartmentName(e.target.value)}
+                        placeholder="Department name"
+                      />
+                      <Button
+                        onClick={() => addDepartmentMutation.mutate(newDepartmentName)}
+                        disabled={addDepartmentMutation.isPending || !newDepartmentName.trim()}
+                      >
+                        {addDepartmentMutation.isPending ? "Saving..." : "Save"}
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </FormItem>
             )}
           />
@@ -531,20 +582,6 @@ export default function EmployeeForm({
 
           <FormField
             control={form.control}
-            name="emergencyContact"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Emergency Contact</FormLabel>
-                <FormControl>
-                  <Input placeholder="Contact Name" {...field} value={field.value || ""} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
             name="emergencyPhone"
             render={({ field }) => (
               <FormItem>
@@ -599,33 +636,9 @@ export default function EmployeeForm({
             )}
           />
 
-          <FormField
-            control={form.control}
-            name="professionCode"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Profession Code</FormLabel>
-                <FormControl>
-                  <Input placeholder="Code" {...field} value={field.value || ""} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          
 
-          <FormField
-            control={form.control}
-            name="profession"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Profession</FormLabel>
-                <FormControl>
-                  <Input placeholder="Profession" {...field} value={field.value || ""} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {/* Profession field removed; Position is retained */}
 
           <FormField
             control={form.control}
@@ -675,19 +688,7 @@ export default function EmployeeForm({
           />
 
 
-          <FormField
-            control={form.control}
-            name="iban"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>IBAN</FormLabel>
-                <FormControl>
-                  <Input placeholder="IBAN" {...field} value={field.value || ""} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {/* Plain IBAN field removed (keep Bank IBAN) */}
           <FormField
             control={form.control}
             name="swiftCode"

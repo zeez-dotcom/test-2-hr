@@ -12,6 +12,7 @@ const formSchema = z.object({
   taxDeduction: z.coerce.number().optional(),
   socialSecurityDeduction: z.coerce.number().optional(),
   healthInsuranceDeduction: z.coerce.number().optional(),
+  useAttendance: z.boolean().optional(),
 }).refine((data) => new Date(data.startDate) <= new Date(data.endDate), {
   message: "End date must be after start date",
   path: ["endDate"],
@@ -35,6 +36,7 @@ export default function PayrollForm({ onSubmit, isSubmitting, canGenerate }: Pay
       taxDeduction: undefined,
       socialSecurityDeduction: undefined,
       healthInsuranceDeduction: undefined,
+      useAttendance: false,
     },
     mode: "onChange",
   });
@@ -73,13 +75,14 @@ export default function PayrollForm({ onSubmit, isSubmitting, canGenerate }: Pay
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit((values) => {
-        const { period, startDate, endDate, taxDeduction, socialSecurityDeduction, healthInsuranceDeduction } = values as any;
+        const { period, startDate, endDate, taxDeduction, socialSecurityDeduction, healthInsuranceDeduction, useAttendance } = values as any;
         const deductions: Record<string, number> = {};
         if (typeof taxDeduction === 'number' && !Number.isNaN(taxDeduction)) deductions.taxDeduction = taxDeduction;
         if (typeof socialSecurityDeduction === 'number' && !Number.isNaN(socialSecurityDeduction)) deductions.socialSecurityDeduction = socialSecurityDeduction;
         if (typeof healthInsuranceDeduction === 'number' && !Number.isNaN(healthInsuranceDeduction)) deductions.healthInsuranceDeduction = healthInsuranceDeduction;
         const payload: any = { period, startDate, endDate };
         if (Object.keys(deductions).length > 0) payload.deductions = deductions;
+        if (useAttendance) payload.useAttendance = true;
         onSubmit(payload);
       })} className="space-y-6">
         <div className="space-y-4">
@@ -167,6 +170,10 @@ export default function PayrollForm({ onSubmit, isSubmitting, canGenerate }: Pay
                 </FormItem>
               )}
             />
+          </div>
+          <div className="flex items-center gap-2 mb-4">
+            <input id="useAttendance" type="checkbox" {...(form.register('useAttendance') as any)} />
+            <label htmlFor="useAttendance">Use attendance for working days</label>
           </div>
           <Button
             type="button"

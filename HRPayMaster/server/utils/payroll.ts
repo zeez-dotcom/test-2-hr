@@ -64,6 +64,7 @@ export function calculateEmployeePayroll({
   start,
   end,
   workingDays,
+  attendanceDays,
   config,
 }: {
   employee: Employee;
@@ -73,6 +74,7 @@ export function calculateEmployeePayroll({
   start: Date;
   end: Date;
   workingDays: number;
+  attendanceDays?: number;
   config?: DeductionsConfig;
 }): EmployeePayroll {
   const monthlySalary = parseFloat(employee.salary);
@@ -90,7 +92,8 @@ export function calculateEmployeePayroll({
     return total + Math.ceil((vacEnd.getTime() - vacStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
   }, 0);
 
-  const actualWorkingDays = Math.max(0, workingDays - vacationDays);
+  const baseWorking = typeof attendanceDays === 'number' ? Math.min(workingDays, attendanceDays) : workingDays;
+  const actualWorkingDays = Math.max(0, baseWorking - vacationDays);
 
   const baseSalary =
     employee.status === "active"
@@ -106,9 +109,11 @@ export function calculateEmployeePayroll({
     );
   });
 
-  const loanDeduction = employeeLoans.reduce((total, loan) => {
-    return total + Math.min(parseFloat(loan.monthlyDeduction), parseFloat(loan.remainingAmount));
-  }, 0);
+  const loanDeduction = employee.status === 'active'
+    ? employeeLoans.reduce((total, loan) => {
+        return total + Math.min(parseFloat(loan.monthlyDeduction), parseFloat(loan.remainingAmount));
+      }, 0)
+    : 0;
 
   const employeeEventsInPeriod = employeeEvents.filter(event =>
     event.employeeId === employee.id &&
@@ -120,7 +125,7 @@ export function calculateEmployeePayroll({
   );
 
   const bonusAmount = employeeEventsInPeriod
-    .filter(event => ["bonus", "allowance", "overtime"].includes(event.eventType))
+    .filter(event => ["bonus", "commission", "allowance", "overtime"].includes(event.eventType))
     .reduce((total, event) => total + parseFloat(event.amount), 0);
 
   const eventDeductions = employeeEventsInPeriod

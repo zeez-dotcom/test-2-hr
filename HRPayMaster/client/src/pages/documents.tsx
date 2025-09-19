@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +13,7 @@ import type { DocumentExpiryCheck } from "@shared/schema";
 
 export default function DocumentsPage() {
   const { toast } = useToast();
+  const { t } = useTranslation();
 
   const {
     data: expiryChecks = [],
@@ -31,12 +33,12 @@ export default function DocumentsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/documents/expiry-check"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       toast({
-        title: "Alerts Sent Successfully",
-        description: `Generated ${(res.data as any).alertsGenerated} alerts, sent ${(res.data as any).emailsSent} emails`,
+        title: t('documents.alertsSent','Alerts Sent Successfully'),
+        description: `${t('documents.generated','Generated')} ${(res.data as any).alertsGenerated} ${t('documents.alerts','alerts')}, ${t('documents.sent','sent')} ${(res.data as any).emailsSent} ${t('documents.emails','emails')}`,
       });
     },
     onError: (res) => {
-      toastApiError(res, "Failed to send alerts");
+      toastApiError(res, t('documents.sendFailed','Failed to send alerts'));
     },
   });
 
@@ -52,6 +54,8 @@ export default function DocumentsPage() {
         return <CreditCard className="w-5 h-5 text-green-600" />;
       case 'passport':
         return <BookOpen className="w-5 h-5 text-purple-600" />;
+      case 'driving_license':
+        return <AlertTriangle className="w-5 h-5 text-amber-600" />;
       default:
         return <FileText className="w-5 h-5 text-gray-600" />;
     }
@@ -103,6 +107,16 @@ export default function DocumentsPage() {
         alertDays: check.passport.alertDays,
       });
     }
+    if (check.drivingLicense) {
+      cards.push({
+        type: 'driving_license',
+        title: 'Driving License',
+        number: check.drivingLicense.number,
+        expiryDate: check.drivingLicense.expiryDate,
+        daysUntilExpiry: check.drivingLicense.daysUntilExpiry,
+        alertDays: check.drivingLicense.alertDays,
+      });
+    }
     
     return cards;
   };
@@ -110,20 +124,22 @@ export default function DocumentsPage() {
   const criticalExpiries = expiryChecks.filter((check: DocumentExpiryCheck) => 
     (check.visa && check.visa.daysUntilExpiry <= 7) ||
     (check.civilId && check.civilId.daysUntilExpiry <= 7) ||
-    (check.passport && check.passport.daysUntilExpiry <= 7)
+    (check.passport && check.passport.daysUntilExpiry <= 7) ||
+    (check.drivingLicense && check.drivingLicense.daysUntilExpiry <= 7)
   );
 
   const upcomingExpiries = expiryChecks.filter((check: DocumentExpiryCheck) => 
     (check.visa && check.visa.daysUntilExpiry <= check.visa.alertDays) ||
     (check.civilId && check.civilId.daysUntilExpiry <= check.civilId.alertDays) ||
-    (check.passport && check.passport.daysUntilExpiry <= check.passport.alertDays)
+    (check.passport && check.passport.daysUntilExpiry <= check.passport.alertDays) ||
+    (check.drivingLicense && check.drivingLicense.daysUntilExpiry <= check.drivingLicense.alertDays)
   );
 
   if (isLoading) {
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold">Document Expiry Tracking</h1>
+          <h1 className="text-3xl font-bold">{t('documents.title','Document Expiry Tracking')}</h1>
         </div>
         <div className="space-y-4">
           {[...Array(3)].map((_, i) => (
@@ -144,7 +160,7 @@ export default function DocumentsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Document Expiry Tracking</h1>
+        <h1 className="text-3xl font-bold">{t('documents.title','Document Expiry Tracking')}</h1>
         <div className="flex items-center space-x-2">
           <Button
             onClick={() => sendAlertsMutation.mutate()}
@@ -156,7 +172,7 @@ export default function DocumentsPage() {
             ) : (
               <Mail className="w-4 h-4 mr-2" />
             )}
-            Send Expiry Alerts
+            {t('documents.sendAlerts','Send Expiry Alerts')}
           </Button>
         </div>
       </div>
@@ -165,8 +181,8 @@ export default function DocumentsPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="border-red-200 bg-red-50">
           <CardHeader className="pb-3">
-            <CardTitle className="text-lg text-red-800">Critical Expiries</CardTitle>
-            <CardDescription className="text-red-600">Documents expiring within 7 days</CardDescription>
+            <CardTitle className="text-lg text-red-800">{t('documents.critical','Critical Expiries')}</CardTitle>
+            <CardDescription className="text-red-600">{t('documents.within7','Documents expiring within 7 days')}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-red-800">{criticalExpiries.length}</div>
@@ -175,8 +191,8 @@ export default function DocumentsPage() {
 
         <Card className="border-orange-200 bg-orange-50">
           <CardHeader className="pb-3">
-            <CardTitle className="text-lg text-orange-800">Upcoming Expiries</CardTitle>
-            <CardDescription className="text-orange-600">Documents requiring attention</CardDescription>
+            <CardTitle className="text-lg text-orange-800">{t('documents.upcoming','Upcoming Expiries')}</CardTitle>
+            <CardDescription className="text-orange-600">{t('documents.requireAttention','Documents requiring attention')}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-orange-800">{upcomingExpiries.length}</div>

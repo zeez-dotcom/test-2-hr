@@ -5,6 +5,7 @@ import { HttpError } from "../errorHandler";
 import { ensureAuth, requireRole } from "./auth";
 import { log } from "../vite";
 import { chatbotMonthlySummaryRequestsTotal } from "../metrics";
+import { addMonths, format } from "date-fns";
 
 export const chatbotRouter = Router();
 
@@ -15,6 +16,48 @@ chatbotRouter.post("/api/chatbot", (req, res) => {
   const intent = parseIntent(message ?? "");
   res.json(intent);
 });
+
+chatbotRouter.get(
+  "/api/chatbot/employee-summary/:id",
+  requireRole(["admin", "hr"]),
+  async (req, res, next) => {
+    try {
+      const employee = await storage.getEmployee(req.params.id);
+      if (!employee) return next(new HttpError(404, "Employee not found"));
+
+      // Assets assigned
+      const assets = (await storage.getAssetAssignments()).filter(a => a.employeeId === req.params.id && a.status === 'active');
+      const cars = (await storage.getCarAssignments()).filter(a => a.employeeId === req.params.id && a.status === 'active');
+
+      // Loans summary and forecast
+      const loans = (await storage.getLoans()).filter(l => l.employeeId === req.params.id);
+      const totalTaken = loans.reduce((s, l) => s + Number(l.amount || 0), 0);
+      const remaining = loans.reduce((s, l) => s + Number(l.remainingAmount || 0), 0);
+      const monthly = loans.filter(l => l.status === 'active' || l.status === 'approved').reduce((s, l) => s + Number(l.monthlyDeduction || 0), 0);
+      const forecasts = loans.filter(l => (Number(l.monthlyDeduction) > 0) && (Number(l.remainingAmount) > 0) && (l.status === 'active' || l.status === 'approved')).map(l => {
+        const months = Math.ceil(Number(l.remainingAmount) / Number(l.monthlyDeduction));
+        const finish = addMonths(new Date(), months);
+        return { id: l.id, months, finishDate: format(finish, 'yyyy-MM') };
+      });
+      const completionDate = forecasts.length ? forecasts.reduce((latest, f) => latest > f.finishDate ? latest : f.finishDate, forecasts[0].finishDate) : null;
+
+      res.json({
+        employee,
+        assets: assets.map(a => ({ id: a.assetId, name: a.asset?.name, assignedDate: a.assignedDate })),
+        car: cars[0] ? { id: cars[0].carId, plateNumber: cars[0].car?.plateNumber, assignedDate: cars[0].assignedDate } : null,
+        loans: {
+          totalTaken,
+          remaining,
+          monthly,
+          forecasts,
+          completionDate,
+        },
+      });
+    } catch (err) {
+      next(new HttpError(500, "Failed to fetch employee summary"));
+    }
+  }
+);
 
 chatbotRouter.get(
   "/api/chatbot/loan-status/:id",

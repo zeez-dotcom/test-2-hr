@@ -1,10 +1,19 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
+import { log } from "../vite";
 import passport from "passport";
 import { HttpError } from "../errorHandler";
 
 export const authRouter = Router();
 
 authRouter.post("/login", (req, res, next) => {
+  if (process.env.NODE_ENV !== "production") {
+    try {
+      const u = (req as any)?.body?.username ?? "(missing)";
+      log(`login attempt: ${u}`);
+    } catch {
+      // ignore logging errors
+    }
+  }
   passport.authenticate(
     "local",
     (err: unknown, user: Express.User | false, info: unknown) => {
@@ -58,6 +67,5 @@ export const requireRole = (roles: string[]) => (
 authRouter.get("/api/me", ensureAuth, (req, res) => {
   res.json(req.user);
 });
-
 
 

@@ -14,6 +14,7 @@ import { queryClient } from "@/lib/queryClient";
 import { apiPost } from "@/lib/http";
 import { toastApiError } from "@/lib/toastError";
 import { CheckCircle, Users, AlertTriangle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import {
   insertAssetSchema,
@@ -28,6 +29,7 @@ export default function Assets() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isAssignOpen, setIsAssignOpen] = useState(false);
   const { toast } = useToast();
+  const { t } = useTranslation();
 
   const {
     data: assets = [],
@@ -47,6 +49,34 @@ export default function Assets() {
     queryKey: ["/api/employees"],
   });
 
+  // Upload document dialog state
+  const [docAssetId, setDocAssetId] = useState<string | null>(null);
+  const [docTitle, setDocTitle] = useState("");
+  const [docFile, setDocFile] = useState<File | null>(null);
+  const [repairsAsset, setRepairsAsset] = useState<any | null>(null);
+  const repairsQuery = useQuery<any[]>({ queryKey: repairsAsset ? ["/api/assets", repairsAsset.id, "repairs"] : ["noop"], queryFn: async()=>{ const r = await fetch(`/api/assets/${repairsAsset!.id}/repairs`, { credentials:'include' }); return r.json(); }, enabled: !!repairsAsset });
+  const [repairForm, setRepairForm] = useState({ repairDate: new Date().toISOString().split('T')[0], description: '', cost: '', vendor: '' });
+  const addRepair = useMutation({ mutationFn: async () => { if (!repairsAsset) return; const payload:any = { ...repairForm }; if (!payload.cost) delete payload.cost; const res = await apiPost(`/api/assets/${repairsAsset.id}/repairs`, payload); if (!(res as any).ok) throw res; }, onSuccess: ()=>{ queryClient.invalidateQueries({ queryKey:["/api/assets", repairsAsset!.id, "repairs"]}); setRepairForm({ repairDate: new Date().toISOString().split('T')[0], description:'', cost:'', vendor:'' }); } });
+  const uploadDoc = useMutation({
+    mutationFn: async () => {
+      if (!docAssetId || !docTitle || !docFile) throw new Error('Missing fields');
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(docFile);
+      });
+      const res = await apiPost(`/api/assets/${docAssetId}/documents`, { title: docTitle, documentUrl: dataUrl });
+      if (!res.ok) throw res;
+      return res.data;
+    },
+    onSuccess: () => {
+      setDocAssetId(null); setDocFile(null); setDocTitle("");
+      toast({ title: t('assets.documentUploaded','Document uploaded') });
+    },
+    onError: (err) => toastApiError(err as any, t('assets.uploadFailed','Failed to upload document')),
+  });
+
   const createAsset = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiPost("/api/assets", data);
@@ -59,20 +89,16 @@ export default function Assets() {
         queryClient.invalidateQueries({ queryKey: ["/api/assets", data.id] });
       }
       setIsCreateOpen(false);
-      toast({ title: "Asset created" });
+      toast({ title: t('assets.created','Asset created') });
     },
-    onError: (err) => toastApiError(err as any, "Failed to create asset"),
+    onError: (err) => toastApiError(err as any, t('assets.createFailed','Failed to create asset')),
   });
 
   const assignAsset = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiPost("/api/asset-assignments", data);
       if (!res.ok) {
-        toast({
-          title: "Failed to assign asset",
-          description: res.error,
-          variant: "destructive",
-        });
+        toast({ title: t('assets.assignFailed','Failed to assign asset'), description: res.error, variant: "destructive" });
         throw res;
       }
       return data;
@@ -85,7 +111,7 @@ export default function Assets() {
       }
       queryClient.invalidateQueries({ queryKey: ["/api/asset-assignments"] });
       setIsAssignOpen(false);
-      toast({ title: "Asset assigned" });
+      toast({ title: t('assets.assigned','Asset assigned') });
     },
   });
 
@@ -274,10 +300,60 @@ export default function Assets() {
                 Assigned to: {asset.currentAssignment.employee?.firstName} {asset.currentAssignment.employee?.lastName}
               </div>
             )}
+            <div>
+              <Button size="sm" variant="outline" onClick={() => window.open(`/asset-file?id=${encodeURIComponent(asset.id)}`, '_blank')}>Print</Button>
+              <Button size="sm" variant="outline" className="ml-2" onClick={() => setDocAssetId(asset.id)}>Add Document</Button>
+              <Button size="sm" variant="outline" className="ml-2" onClick={() => setRepairsAsset(asset)}>Repairs</Button>
+            </div>
           </div>
         ))}
       </div>
+
+      {/* Upload document dialog */}
+      <Dialog open={!!docAssetId} onOpenChange={(o)=>!o&&setDocAssetId(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Upload Asset Document</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input placeholder="Title" value={docTitle} onChange={e=>setDocTitle(e.target.value)} />
+            <Input type="file" onChange={e=> setDocFile(e.target.files?.[0] || null)} />
+            <div className="flex justify-end">
+              <Button onClick={()=>uploadDoc.mutate()} disabled={uploadDoc.isPending || !docTitle || !docFile}>Upload</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Repairs dialog */}
+      <Dialog open={!!repairsAsset} onOpenChange={(o)=> !o && setRepairsAsset(null)}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader><DialogTitle>Repairs - {repairsAsset?.name}</DialogTitle></DialogHeader>
+          <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+            {(repairsQuery?.data || []).map((r:any)=>(
+              <div key={r.id} className="border rounded p-2 text-sm">
+                <div className="flex justify-between">
+                  <div className="font-medium">{r.vendor || 'Repair'}</div>
+                  <div>{r.repairDate}</div>
+                </div>
+                <div className="mt-1">{r.description}</div>
+                <div className="text-muted-foreground">Cost: {r.cost ?? 'N/A'}</div>
+                {r.documentUrl && (<a className="text-blue-600 underline" href={r.documentUrl} target="_blank">View</a>)}
+              </div>
+            ))}
+            <div className="border-t pt-3">
+              <div className="text-sm font-medium mb-2">Add Repair</div>
+              <div className="grid grid-cols-2 gap-2">
+                <Input type="date" value={repairForm.repairDate} onChange={e=> setRepairForm(s=> ({...s, repairDate: e.target.value}))} />
+                <Input placeholder="Vendor" value={repairForm.vendor} onChange={e=> setRepairForm(s=> ({...s, vendor: e.target.value}))} />
+                <Input className="col-span-2" placeholder="Description" value={repairForm.description} onChange={e=> setRepairForm(s=> ({...s, description: e.target.value}))} />
+                <Input placeholder="Cost" value={repairForm.cost} onChange={e=> setRepairForm(s=> ({...s, cost: e.target.value}))} />
+                <div className="flex justify-end col-span-2"><Button size="sm" onClick={()=> addRepair.mutate()} disabled={addRepair.isPending || !repairForm.description}>Save</Button></div>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-

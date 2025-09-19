@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useQuery, useMutation } from "@tanstack/react-query";
 
 import EmployeeTable from "@/components/employees/employee-table";
@@ -11,12 +12,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Plus, Search } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import { apiPost, apiPut, apiDelete } from "@/lib/http";
+import { buildBilingualActionReceipt, buildAndEncodePdf } from "@/lib/pdf";
 import { useToast } from "@/hooks/use-toast";
 import { toastApiError } from "@/lib/toastError";
 import type { EmployeeWithDepartment, Department, InsertEmployee, Company } from "@shared/schema";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
 
 export default function Employees() {
+  const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -119,7 +122,7 @@ export default function Employees() {
   if (employeesError || departmentsError || companiesError) {
     return (
       <div>
-        <p>Error loading employees</p>
+        <p>{t('errors.general')}</p>
         <Button
           onClick={() => {
             refetchEmployees();
@@ -127,7 +130,7 @@ export default function Employees() {
             refetchCompanies();
           }}
         >
-          Retry
+          {t('actions.save')}
         </Button>
       </div>
     );
@@ -187,20 +190,20 @@ export default function Employees() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Employees</h1>
-        <p className="text-muted-foreground">Manage your team members and their information</p>
+        <h1 className="text-3xl font-bold tracking-tight">{t('nav.employees')}</h1>
+        <p className="text-muted-foreground">{t('employeesPage.subtitle', 'Manage your team members and their information')}</p>
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="px-6 py-4 border-b border-gray-200">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
-            <h3 className="text-lg font-medium text-gray-900">Employee Directory</h3>
+            <h3 className="text-lg font-medium text-gray-900">{t('employeesPage.directoryTitle', 'Employee Directory')}</h3>
             
             <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
               <div className="relative">
                 <Input
                   type="text"
-                  placeholder="Search employees..."
+                  placeholder={t('employeesPage.searchPlaceholder', 'Search employees...')}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full sm:w-64 pl-10"
@@ -210,10 +213,10 @@ export default function Employees() {
               
               <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
                 <SelectTrigger className="w-full sm:w-48">
-                  <SelectValue placeholder="All Departments" />
+                  <SelectValue placeholder={t('employeesPage.allDepartments', 'All Departments')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Departments</SelectItem>
+                  <SelectItem value="all">{t('employeesPage.allDepartments', 'All Departments')}</SelectItem>
                   {departments?.filter(dept => dept.id && dept.id.trim() !== "").map((dept) => (
                     <SelectItem key={dept.id} value={dept.id}>
                       {dept.name}
@@ -226,12 +229,12 @@ export default function Employees() {
                 <DialogTrigger asChild>
                   <Button className="bg-primary text-white hover:bg-blue-700">
                     <Plus className="mr-2" size={16} />
-                    Add Employee
+                    {t('employeesPage.addEmployee', 'Add Employee')}
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
-                    <DialogTitle>Add New Employee</DialogTitle>
+                    <DialogTitle>{t('employeesPage.addEmployee', 'Add New Employee')}</DialogTitle>
                   </DialogHeader>
                   <EmployeeForm
                     departments={departments || []}
@@ -258,7 +261,7 @@ export default function Employees() {
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Edit Employee</DialogTitle>
+              <DialogTitle>{t('actions.edit')} {t('nav.employees')}</DialogTitle>
             </DialogHeader>
               {editingEmployee && (() => {
                 const { department, company, ...rest } = editingEmployee;
@@ -284,14 +287,35 @@ export default function Employees() {
                   />
                 );
               })()}
+              {editingEmployee && (
+                <div className="flex justify-end mt-4">
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      const doc = buildBilingualActionReceipt({
+                        titleEn: 'Employee Update', titleAr: 'تحديث الموظف',
+                        employee: { id: editingEmployee.id, firstName: editingEmployee.firstName, lastName: editingEmployee.lastName },
+                        detailsEn: [ `Position: ${editingEmployee.position}`, `Department: ${editingEmployee.department?.name || ''}`],
+                        detailsAr: [ `الوظيفة: ${editingEmployee.position}`, `القسم: ${editingEmployee.department?.name || ''}`],
+                        // logo will be injected from company settings via pdf brand helper
+                        logo: null,
+                      });
+                      const pdfDataUrl = await buildAndEncodePdf(doc);
+                      await apiPost(`/api/employees/${editingEmployee.id}/documents`, { title: 'Employee Update', description: 'Employee update receipt', pdfDataUrl });
+                    }}
+                  >
+                    {t('employeesPage.saveUpdateDoc', 'Save Update Document')}
+                  </Button>
+                </div>
+              )}
             </DialogContent>
           </Dialog>
         <ConfirmDialog
           open={isConfirmOpen}
           onOpenChange={handleConfirmOpenChange}
-          title="Delete Employee"
-          description="Are you sure you want to delete this employee?"
-          confirmText="Delete"
+          title={t('employeesPage.deleteEmployee', 'Delete Employee')}
+          description={t('employeesPage.deleteDesc', 'Are you sure you want to delete this employee?')}
+          confirmText={t('actions.delete')}
           onConfirm={confirmDeleteEmployee}
         />
       </div>

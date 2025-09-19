@@ -6,6 +6,8 @@ import createMemoryStore from "memorystore";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { errorHandler } from "./errorHandler";
+import { storage } from "./storage";
+import { generateExpiryWarningEmail, shouldSendAlert, sendEmail } from "./emailService";
 
 interface User {
   id: string;
@@ -92,7 +94,8 @@ app.use((req, res, next) => {
 
   res.on("finish", () => {
     const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
+    // Log API routes and auth endpoints for better visibility
+    if (path.startsWith("/api") || path === "/login" || path === "/logout") {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
@@ -136,10 +139,89 @@ app.use((req, res, next) => {
 
   if (process.platform !== "win32") {
     listenOptions.host = "0.0.0.0";
-    listenOptions.reusePort = true;
   }
 
   server.listen(listenOptions, () => {
     log(`serving on port ${port}`);
   });
+
+  // Background: process document expiry alerts on startup and periodically
+  const processDocumentExpiryAlerts = async () => {
+    try {
+      const checks = await storage.checkDocumentExpiries();
+      for (const check of checks) {
+        const employee = await storage.getEmployee(check.employeeId);
+        if (!employee) continue;
+
+        if (check.visa && shouldSendAlert(check.visa.expiryDate, check.visa.alertDays)) {
+          const email = generateExpiryWarningEmail(employee, 'visa', check.visa.expiryDate, check.visa.daysUntilExpiry, check.visa.number);
+          await storage.createNotification({
+            employeeId: check.employeeId,
+            type: 'visa_expiry',
+            title: email.subject,
+            message: `Visa expires in ${check.visa.daysUntilExpiry} days`,
+            priority: check.visa.daysUntilExpiry <= 7 ? 'critical' : check.visa.daysUntilExpiry <= 30 ? 'high' : 'medium',
+            expiryDate: check.visa.expiryDate,
+            daysUntilExpiry: check.visa.daysUntilExpiry,
+            emailSent: false,
+          });
+          await sendEmail({ to: employee.email || '', from: process.env.FROM_EMAIL || 'hr@company.com', subject: email.subject, html: email.html, text: email.text });
+        }
+        if (check.civilId && shouldSendAlert(check.civilId.expiryDate, check.civilId.alertDays)) {
+          const email = generateExpiryWarningEmail(employee, 'civil_id', check.civilId.expiryDate, check.civilId.daysUntilExpiry, check.civilId.number);
+          await storage.createNotification({
+            employeeId: check.employeeId,
+            type: 'civil_id_expiry',
+            title: email.subject,
+            message: `Civil ID expires in ${check.civilId.daysUntilExpiry} days`,
+            priority: check.civilId.daysUntilExpiry <= 7 ? 'critical' : check.civilId.daysUntilExpiry <= 30 ? 'high' : 'medium',
+            expiryDate: check.civilId.expiryDate,
+            daysUntilExpiry: check.civilId.daysUntilExpiry,
+            emailSent: false,
+          });
+          await sendEmail({ to: employee.email || '', from: process.env.FROM_EMAIL || 'hr@company.com', subject: email.subject, html: email.html, text: email.text });
+        }
+        if (check.passport && shouldSendAlert(check.passport.expiryDate, check.passport.alertDays)) {
+          const email = generateExpiryWarningEmail(employee, 'passport', check.passport.expiryDate, check.passport.daysUntilExpiry, check.passport.number);
+          await storage.createNotification({
+            employeeId: check.employeeId,
+            type: 'passport_expiry',
+            title: email.subject,
+            message: `Passport expires in ${check.passport.daysUntilExpiry} days`,
+            priority: check.passport.daysUntilExpiry <= 7 ? 'critical' : check.passport.daysUntilExpiry <= 30 ? 'high' : 'medium',
+            expiryDate: check.passport.expiryDate,
+            daysUntilExpiry: check.passport.daysUntilExpiry,
+            emailSent: false,
+          });
+          await sendEmail({ to: employee.email || '', from: process.env.FROM_EMAIL || 'hr@company.com', subject: email.subject, html: email.html, text: email.text });
+        }
+        // @ts-expect-error extension from storage
+        if (check.drivingLicense && shouldSendAlert(check.drivingLicense.expiryDate, check.drivingLicense.alertDays)) {
+          // @ts-expect-error extension from storage
+          const email = generateExpiryWarningEmail(employee, 'driving_license', check.drivingLicense.expiryDate, check.drivingLicense.daysUntilExpiry, check.drivingLicense.number);
+          await storage.createNotification({
+            employeeId: check.employeeId,
+            type: 'driving_license_expiry',
+            title: email.subject,
+            // @ts-expect-error
+            message: `Driving License expires in ${check.drivingLicense.daysUntilExpiry} days`,
+            // @ts-expect-error
+            priority: check.drivingLicense.daysUntilExpiry <= 7 ? 'critical' : check.drivingLicense.daysUntilExpiry <= 30 ? 'high' : 'medium',
+            // @ts-expect-error
+            expiryDate: check.drivingLicense.expiryDate,
+            // @ts-expect-error
+            daysUntilExpiry: check.drivingLicense.daysUntilExpiry,
+            emailSent: false,
+          });
+          await sendEmail({ to: employee.email || '', from: process.env.FROM_EMAIL || 'hr@company.com', subject: email.subject, html: email.html, text: email.text });
+        }
+      }
+    } catch (err) {
+      log(`warning: failed processing document expiry alerts: ${String(err)}`);
+    }
+  };
+
+  // Run once after start and then every 12 hours
+  processDocumentExpiryAlerts();
+  setInterval(processDocumentExpiryAlerts, 12 * 60 * 60 * 1000);
 })();

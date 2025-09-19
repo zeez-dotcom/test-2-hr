@@ -42,9 +42,9 @@
 
    - Requires the `DATABASE_URL` environment variable.
    - Run this step whenever you pull changes that modify the database schema.
-   - This will create the `users` table and seed a default `admin` account
-     with username `admin`, email `admin1@gmail.com`, and the password
-     `admin` hashed via bcrypt.
+   - This will create the `users` table and seed a default admin account.
+     Note: the running server uses an in-memory super admin for local login
+     with username `admin`, email `admin1@gmail.com`, and password `admin`.
 
 5. **Start the application**
    - Development: `npm run dev`
@@ -122,7 +122,6 @@ Employees → Import screen or the `/api/employees/import/template` endpoint.
 | status | Employment status (active, inactive, etc.) |
 | bankIban | Bank account IBAN |
 | bankName | Bank name |
-| emergencyContact | Emergency contact name |
 | emergencyPhone | Emergency contact phone |
 | nationalId | National identification number |
 | address | Residential address |
@@ -146,8 +145,6 @@ Employees → Import screen or the `/api/employees/import/template` endpoint.
 | passportImage | Passport document image |
 | standardWorkingDays | Standard working days per month |
 | nationality | Employee nationality |
-| professionCode | Profession code |
-| profession | Profession name |
 | paymentMethod | Payment method |
 | transferable | Whether the employee is transferable |
 | drivingLicenseNumber | Driving license number |
@@ -155,10 +152,7 @@ Employees → Import screen or the `/api/employees/import/template` endpoint.
 | drivingLicenseExpiryDate | Driving license expiry date |
 | drivingLicenseImage | Driving license document image |
 | otherDocs | Other documents |
-| iban | IBAN |
 | swiftCode | Bank SWIFT code |
 | residencyName | Residency name |
 | residencyOnCompany | Residency on company |
 | professionCategory | Profession category |
-
-

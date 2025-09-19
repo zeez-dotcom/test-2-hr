@@ -1,10 +1,11 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { format } from "date-fns";
-import { DollarSign, Calendar, CheckCircle, XCircle, Plus, Trash2, Edit, TrendingUp } from "lucide-react";
+import { format, addMonths } from "date-fns";
+import { DollarSign, Calendar, CheckCircle, XCircle, Plus, Trash2, Edit, TrendingUp, PauseCircle, HelpCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 
 import { insertLoanSchema, type LoanWithEmployee } from "@shared/schema";
@@ -33,6 +35,7 @@ const schema = insertLoanSchema
   });
 
 export default function Loans() {
+  const { t } = useTranslation();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const { toast } = useToast();
 
@@ -46,6 +49,10 @@ export default function Loans() {
 
   const { data: employees = [], error: employeesError } = useQuery({
     queryKey: ["/api/employees"]
+  });
+
+  const { data: vacations = [] } = useQuery<any[]>({
+    queryKey: ["/api/vacations"],
   });
 
   const createMutation = useMutation({
@@ -156,36 +163,94 @@ export default function Loans() {
     }
   };
 
-  const calculateMonthsRemaining = (amount: string, monthlyDeduction: string, startDate: string) => {
-    const total = parseFloat(amount);
-    const monthly = parseFloat(monthlyDeduction);
+  const calculateMonthsRemaining = (remainingAmount: string, monthlyDeduction: string) => {
+    const remaining = Math.max(0, parseFloat(remainingAmount || '0'));
+    const monthly = Math.max(0, parseFloat(monthlyDeduction || '0'));
     if (monthly <= 0) return 0;
-    
-    const monthsTotal = Math.ceil(total / monthly);
-    const monthsElapsed = Math.floor((new Date().getTime() - new Date(startDate).getTime()) / (30 * 24 * 60 * 60 * 1000));
-    return Math.max(0, monthsTotal - monthsElapsed);
+    return Math.ceil(remaining / monthly);
+  };
+
+  const forecastPayoffDate = (loan: any) => {
+    const status = (loan.status || '').toLowerCase();
+    if (status === 'paused') return 'Paused';
+    if (!(status === 'active' || status === 'approved')) return 'N/A';
+    const months = calculateMonthsRemaining(loan.remainingAmount ?? loan.amount, loan.monthlyDeduction);
+    if (months === 0) return format(new Date(), 'MMM yyyy');
+    // Count months to skip due to approved vacations that requested pause
+    const now = new Date();
+    const myVac = (vacations as any[]).filter(v => v.employeeId === loan.employeeId && v.status === 'approved');
+    const skipMonths = new Set<string>();
+    for (const v of myVac) {
+      const wantsPause = String(v.reason || '').includes('[pause-loans]');
+      if (!wantsPause) continue;
+      const s = new Date(v.startDate);
+      const e = new Date(v.endDate);
+      // only consider future/ongoing vacations
+      if (e < now) continue;
+      const start = new Date(Math.max(s.getTime(), now.getTime()));
+      const yearMonth = (d: Date) => `${d.getFullYear()}-${d.getMonth()}`;
+      const cur = new Date(start.getFullYear(), start.getMonth(), 1);
+      const end = new Date(e.getFullYear(), e.getMonth(), 1);
+      while (cur <= end) {
+        skipMonths.add(yearMonth(cur));
+        cur.setMonth(cur.getMonth() + 1);
+      }
+    }
+    const totalMonths = months + skipMonths.size;
+    const endDate = addMonths(new Date(), totalMonths);
+    return format(endDate, 'MMM yyyy');
+  };
+
+  const loanForecastMeta = (loan: any) => {
+    const status = (loan.status || '').toLowerCase();
+    const now = new Date();
+    const monthsRemaining = calculateMonthsRemaining(loan.remainingAmount ?? loan.amount, loan.monthlyDeduction);
+    const baselineEnd = addMonths(now, monthsRemaining);
+    // paused months via approved vacations with pause marker (future/ongoing)
+    const myVac = (vacations as any[]).filter(v => v.employeeId === loan.employeeId && v.status === 'approved');
+    const yearMonth = (d: Date) => `${d.getFullYear()}-${d.getMonth()}`;
+    const skipMonths = new Set<string>();
+    for (const v of myVac) {
+      const wantsPause = String(v.reason || '').includes('[pause-loans]');
+      if (!wantsPause) continue;
+      const s = new Date(v.startDate);
+      const e = new Date(v.endDate);
+      if (e < now) continue;
+      const start = new Date(Math.max(s.getTime(), now.getTime()));
+      const cur = new Date(start.getFullYear(), start.getMonth(), 1);
+      const end = new Date(e.getFullYear(), e.getMonth(), 1);
+      while (cur <= end) {
+        skipMonths.add(yearMonth(cur));
+        cur.setMonth(cur.getMonth() + 1);
+      }
+    }
+    const pausedMonths = skipMonths.size;
+    const adjustedEnd = addMonths(now, monthsRemaining + pausedMonths);
+    const baselineLabel = format(baselineEnd, 'MMM yyyy');
+    const adjustedLabel = format(adjustedEnd, 'MMM yyyy');
+    const willCompleteThisMonth = adjustedEnd.getFullYear() === now.getFullYear() && adjustedEnd.getMonth() === now.getMonth();
+    return { status, monthsRemaining, pausedMonths, baselineLabel, adjustedLabel, willCompleteThisMonth };
   };
 
   return (
+    <>
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Employee Loans</h1>
-          <p className="text-muted-foreground">Manage employee loan requests and track payroll deductions</p>
+          <h1 className="text-3xl font-bold tracking-tight">{t('nav.loans')}</h1>
+          <p className="text-muted-foreground">{t('loansPage.subtitle', 'Manage employee loan requests and track payroll deductions')}</p>
         </div>
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="w-4 h-4 mr-2" />
-              New Loan
+              {t('loansPage.newLoan', 'New Loan')}
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Create Employee Loan</DialogTitle>
-              <DialogDescription>
-                Create a new loan for an employee with automatic payroll deductions.
-              </DialogDescription>
+              <DialogTitle>{t('loansPage.newLoan', 'Create Employee Loan')}</DialogTitle>
+              <DialogDescription>{t('loansPage.subtitle', 'Create a new loan for an employee with automatic payroll deductions.')}</DialogDescription>
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -196,7 +261,7 @@ export default function Loans() {
                   rules={{ required: true }}
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Employee</FormLabel>
+                        <FormLabel>{t('docgen.employee')}</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value || undefined}>
                         <FormControl>
                           <SelectTrigger>
@@ -223,7 +288,7 @@ export default function Loans() {
                     rules={{ required: true }}
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Loan Amount</FormLabel>
+                        <FormLabel>{t('loansPage.loanAmount', 'Loan Amount')}</FormLabel>
                         <FormControl>
                           <Input type="number" placeholder="5000" required {...field} />
                         </FormControl>
@@ -238,7 +303,7 @@ export default function Loans() {
                     rules={{ required: true }}
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Monthly Deduction</FormLabel>
+                        <FormLabel>{t('loansPage.monthlyDeduction', 'Monthly Deduction')}</FormLabel>
                         <FormControl>
                           <Input type="number" placeholder="500" required {...field} />
                         </FormControl>
@@ -255,7 +320,7 @@ export default function Loans() {
                     rules={{ required: true }}
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Start Date</FormLabel>
+                        <FormLabel>{t('loansPage.startDate', 'Start Date')}</FormLabel>
                         <FormControl>
                           <Input type="date" required {...field} value={field.value || ""} />
                         </FormControl>
@@ -269,7 +334,7 @@ export default function Loans() {
                     name="interestRate"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Interest Rate (%)</FormLabel>
+                        <FormLabel>{t('loansPage.interestRate', 'Interest Rate (%)')}</FormLabel>
                         <FormControl>
                           <Input type="number" placeholder="0" {...field} />
                         </FormControl>
@@ -284,7 +349,7 @@ export default function Loans() {
                   name="reason"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Purpose</FormLabel>
+                      <FormLabel>{t('loansPage.purpose', 'Purpose')}</FormLabel>
                       <FormControl>
                         <Textarea 
                           placeholder="Loan purpose or reason..."
@@ -299,7 +364,7 @@ export default function Loans() {
 
                 <DialogFooter>
                   <Button type="submit" disabled={createMutation.isPending || !form.formState.isValid}>
-                    {createMutation.isPending ? "Creating..." : "Create Loan"}
+                    {createMutation.isPending ? t('loansPage.creating','Creating...') : t('loansPage.newLoan','Create Loan')}
                   </Button>
                 </DialogFooter>
               </form>
@@ -349,6 +414,33 @@ export default function Loans() {
                     </div>
                     <div className="flex items-center space-x-2">
                       {getStatusBadge(loan.status)}
+                      {loan.status === 'paused' && (
+                        <Badge variant="secondary" className="flex items-center gap-1">
+                          <PauseCircle className="w-3 h-3" /> Paused
+                        </Badge>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setEditingLoan(loan as any);
+                          editForm.reset({
+                            employeeId: loan.employeeId,
+                            amount: Number(loan.amount),
+                            monthlyDeduction: Number(loan.monthlyDeduction),
+                            remainingAmount: loan.remainingAmount ? Number(loan.remainingAmount) : undefined,
+                            startDate: loan.startDate,
+                            endDate: loan.endDate || '',
+                            interestRate: loan.interestRate ? Number(loan.interestRate) : undefined,
+                            reason: loan.reason || '',
+                            status: loan.status,
+                          } as any);
+                          setIsEditDialogOpen(true);
+                        }}
+                        className="text-blue-600 hover:text-blue-700"
+                      >
+                        <Edit className="w-3 h-3" />
+                      </Button>
                       {loan.status === "pending" && (
                         <div className="flex space-x-1">
                           <Button 
@@ -396,7 +488,7 @@ export default function Loans() {
                       <span className="text-muted-foreground">Months Remaining</span>
                       <p className="font-medium">
                         {(loan.status === "active" || loan.status === "approved") 
-                          ? calculateMonthsRemaining(loan.amount, loan.monthlyDeduction, loan.startDate)
+                          ? calculateMonthsRemaining(loan.remainingAmount ?? loan.amount, loan.monthlyDeduction)
                           : "N/A"
                         }
                       </p>
@@ -407,6 +499,35 @@ export default function Loans() {
                         {Math.ceil(parseFloat(loan.amount) / parseFloat(loan.monthlyDeduction))} months
                       </p>
                     </div>
+                    {(() => {
+                      const meta = loanForecastMeta(loan);
+                      return (
+                        <div>
+                          <span className="text-muted-foreground flex items-center gap-1">
+                            Forecast Payoff
+                            <TooltipProvider delayDuration={100}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <div className="max-w-xs space-y-1">
+                                    <div><strong>Now:</strong> {meta.adjustedLabel} {meta.willCompleteThisMonth ? '(this month)' : ''}</div>
+                                    <div><strong>Before:</strong> {meta.baselineLabel}</div>
+                                    <div><strong>Months remaining:</strong> {meta.monthsRemaining} {meta.pausedMonths > 0 ? `(+${meta.pausedMonths} paused)` : ''}</div>
+                                    <div className="text-xs text-muted-foreground">Adds one month for each approved vacation that requested loan pause.</div>
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </span>
+                          <p className="font-medium">
+                            {meta.adjustedLabel}
+                          </p>
+                          <p className="text-xs text-muted-foreground">{meta.monthsRemaining} months {meta.pausedMonths > 0 ? `(+${meta.pausedMonths} paused)` : ''}</p>
+                        </div>
+                      );
+                    })()}
                   </div>
                   {loan.reason && (
                     <div className="mt-4 pt-4 border-t">
@@ -421,5 +542,95 @@ export default function Loans() {
         </div>
       )}
     </div>
+
+    {/* Edit Loan Dialog */}
+    <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+      <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit Loan</DialogTitle>
+          <DialogDescription>Update loan details for {editingLoan?.employee?.firstName} {editingLoan?.employee?.lastName}</DialogDescription>
+        </DialogHeader>
+        <Form {...editForm}>
+          <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <FormField control={editForm.control} name="amount" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Loan Amount</FormLabel>
+                  <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={editForm.control} name="monthlyDeduction" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Monthly Deduction</FormLabel>
+                  <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <FormField control={editForm.control} name="remainingAmount" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Remaining Amount</FormLabel>
+                  <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={editForm.control} name="interestRate" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Interest Rate (%)</FormLabel>
+                  <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <FormField control={editForm.control} name="startDate" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Start Date</FormLabel>
+                  <FormControl><Input type="date" {...field} value={field.value || ''} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={editForm.control} name="endDate" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>End Date</FormLabel>
+                  <FormControl><Input type="date" {...field} value={field.value || ''} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            </div>
+            <FormField control={editForm.control} name="status" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Status</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value as any}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select Status" /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="paused">Paused</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )} />
+            <FormField control={editForm.control} name="reason" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Purpose / Notes</FormLabel>
+                <FormControl><Textarea placeholder="Notes..." {...field} value={field.value || ''} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" type="button" onClick={()=> setIsEditDialogOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={updateMutation.isPending || !editForm.formState.isValid}>Save</Button>
+            </div>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

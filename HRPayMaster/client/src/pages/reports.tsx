@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -55,6 +56,7 @@ import { sanitizeImageSrc } from "@/lib/sanitizeImageSrc";
 const dataUrlPattern = /^data:image\/[^;]+;base64,/;
 
 export default function Reports() {
+  const { t } = useTranslation();
   const currentYear = new Date().getFullYear();
   const initialRange = {
     from: new Date(currentYear, 0, 1),
@@ -310,23 +312,21 @@ export default function Reports() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Reports & Analytics</h1>
-          <p className="text-muted-foreground">
-            Comprehensive employee history and salary reports
-          </p>
+          <h1 className="text-3xl font-bold tracking-tight">{t('nav.reports')}</h1>
+          <p className="text-muted-foreground">{t('reportsPage.subtitle','Comprehensive employee history and salary reports')}</p>
         </div>
       </div>
 
       {/* Quick Filters */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
-          <label className="block text-sm font-medium mb-2">Work Location</label>
+          <label className="block text-sm font-medium mb-2">{t('reportsPage.workLocation','Work Location')}</label>
           <Select value={selectedWorkLocation} onValueChange={setSelectedWorkLocation}>
             <SelectTrigger>
-              <SelectValue placeholder="All locations" />
+              <SelectValue placeholder={t('reportsPage.allLocations','All locations')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="all">{t('reportsPage.all','All')}</SelectItem>
               {Array.from(new Set((employees || []).map(emp => emp.workLocation || 'Office'))).map((loc) => (
                 <SelectItem key={loc || 'Office'} value={loc || 'Office'}>
                   {loc || 'Office'}
@@ -337,13 +337,13 @@ export default function Reports() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-2">Department</label>
+          <label className="block text-sm font-medium mb-2">{t('nav.departments')}</label>
           <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
             <SelectTrigger>
-              <SelectValue placeholder="All departments" />
+              <SelectValue placeholder={t('employeesPage.allDepartments','All Departments')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="all">{t('reportsPage.all','All')}</SelectItem>
               {(departments || []).map(d => (
                 <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
               ))}
@@ -356,31 +356,31 @@ export default function Reports() {
         <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="employee-history" className="flex items-center gap-2">
             <History className="h-4 w-4" />
-            Employee History
+            {t('reportsPage.employeeHistory','Employee History')}
           </TabsTrigger>
           <TabsTrigger value="salary-reports" className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4" />
-            Salary Reports
+            {t('reports.salaryReports','Salary Reports')}
           </TabsTrigger>
           <TabsTrigger value="analytics" className="flex items-center gap-2">
             <PieChart className="h-4 w-4" />
-            Analytics
+            {t('reports.analytics','Analytics')}
           </TabsTrigger>
           <TabsTrigger value="payroll-summary" className="flex items-center gap-2">
             <Building className="h-4 w-4" />
-            Payroll Summary
+            {t('reports.payrollSummary','Payroll Summary')}
           </TabsTrigger>
           <TabsTrigger value="loan-balances" className="flex items-center gap-2">
             <DollarSign className="h-4 w-4" />
-            Loan Balances
+            {t('reports.loanBalances','Loan Balances')}
           </TabsTrigger>
           <TabsTrigger value="dept-summary" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
-            Dept Summary
+            {t('reports.byDepartment','By Department')}
           </TabsTrigger>
           <TabsTrigger value="asset-usage" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
-            Asset Usage
+            {t('reports.assetUsage','Asset Usage')}
           </TabsTrigger>
         </TabsList>
 
@@ -390,19 +390,19 @@ export default function Reports() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Filter className="h-5 w-5" />
-                Report Filters
+                {t('reports.filters','Report Filters')}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-2">Employee</label>
+                  <label className="block text-sm font-medium mb-2">{t('reports.employee','Employee')}</label>
                   <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select employee" />
+                      <SelectValue placeholder={t('reports.selectEmployee','Select employee')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Employees</SelectItem>
+                      <SelectItem value="all">{t('reports.allEmployees','All Employees')}</SelectItem>
                       {employees?.map(employee => (
                         <SelectItem key={employee.id} value={employee.id}>
                           {employee.firstName} {employee.lastName}
@@ -413,13 +413,13 @@ export default function Reports() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-2">Year</label>
+                  <label className="block text-sm font-medium mb-2">{t('reports.year','Year')}</label>
                   <Select value={selectedYear} onValueChange={setSelectedYear}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select year" />
+                      <SelectValue placeholder={t('reports.selectYear','Select year')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Years</SelectItem>
+                      <SelectItem value="all">{t('reports.allYears','All Years')}</SelectItem>
                       {yearOptions.map(year => (
                         <SelectItem key={year} value={year.toString()}>
                           {year}
@@ -430,13 +430,13 @@ export default function Reports() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-2">Month</label>
+                  <label className="block text-sm font-medium mb-2">{t('reports.month','Month')}</label>
                   <Select value={selectedMonth} onValueChange={setSelectedMonth}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select month" />
+                      <SelectValue placeholder={t('reports.selectMonth','Select month')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Months</SelectItem>
+                      <SelectItem value="all">{t('reports.allMonths','All Months')}</SelectItem>
                       {Array.from({ length: 12 }, (_, i) => (
                         <SelectItem key={i + 1} value={(i + 1).toString()}>
                           {new Date(2000, i, 1).toLocaleString('default', { month: 'long' })}
@@ -447,13 +447,13 @@ export default function Reports() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-2">Work Location</label>
+                  <label className="block text-sm font-medium mb-2">{t('reportsPage.workLocation','Work Location')}</label>
                   <Select value={selectedWorkLocation} onValueChange={setSelectedWorkLocation}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select location" />
+                      <SelectValue placeholder={t('reports.selectLocation','Select location')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Locations</SelectItem>
+                      <SelectItem value="all">{t('reportsPage.allLocations','All locations')}</SelectItem>
                       {workLocations.map(location => (
                         <SelectItem key={location} value={location}>
                           {location}
@@ -465,11 +465,11 @@ export default function Reports() {
               </div>
 
               <div className="mt-4">
-                <label className="block text-sm font-medium mb-2">Search</label>
+                <label className="block text-sm font-medium mb-2">{t('reports.search','Search')}</label>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                   <Input
-                    placeholder="Search by employee name, position, or event..."
+                    placeholder={t('reports.searchPlaceholder','Search by employee name, position, or event...')}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-10"
@@ -479,13 +479,13 @@ export default function Reports() {
 
               <div className="flex justify-between items-center mt-6 pt-4 border-t">
                 <div className="flex items-center space-x-4 text-sm text-gray-600">
-                  <span>Found {filteredEvents.length} events</span>
+                  <span>{t('reports.foundEvents','Found')} {filteredEvents.length} {t('reports.events','events')}</span>
                   <span>•</span>
-                  <span>{selectedEmployee === "all" ? employees?.length || 0 : 1} employees</span>
+                  <span>{selectedEmployee === "all" ? employees?.length || 0 : 1} {t('reports.employees','employees')}</span>
                 </div>
                 <Button onClick={generateEmployeeHistoryReport} className="flex items-center gap-2">
                   <FileText className="h-4 w-4" />
-                  Generate Report
+                  {t('reports.generateReport','Generate Report')}
                 </Button>
               </div>
             </CardContent>
@@ -676,7 +676,7 @@ export default function Reports() {
               ) : (
                 <div className="text-center py-8 text-gray-500">
                   <History className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>No events found matching the selected criteria</p>
+                  <p>{t('reports.noEventsForCriteria','No events found matching the selected criteria')}</p>
                 </div>
               )}
             </CardContent>
@@ -688,7 +688,7 @@ export default function Reports() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users className="h-5 w-5" />
-                Payroll by Department
+                {t('reports.payrollByDepartment','Payroll by Department')}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -697,17 +697,17 @@ export default function Reports() {
                   <table className="min-w-full text-sm">
                     <thead>
                       <tr className="text-left">
-                        <th className="py-2 pr-4">Period</th>
-                        <th className="py-2 pr-4">Department</th>
-                        <th className="py-2 pr-4">Gross Pay</th>
-                        <th className="py-2">Net Pay</th>
+                        <th className="py-2 pr-4">{t('reports.period','Period')}</th>
+                        <th className="py-2 pr-4">{t('reports.department','Department')}</th>
+                        <th className="py-2 pr-4">{t('reports.grossPay','Gross Pay')}</th>
+                        <th className="py-2">{t('reports.netPay','Net Pay')}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {payrollByDept.map((row, idx) => (
                         <tr key={idx} className="border-t">
                           <td className="py-2 pr-4">{row.period}</td>
-                          <td className="py-2 pr-4">{row.departmentName || 'Unassigned'}</td>
+                          <td className="py-2 pr-4">{row.departmentName || t('reports.unassigned','Unassigned')}</td>
                           <td className="py-2 pr-4">{formatCurrency(row.totals.grossPay)}</td>
                           <td className="py-2">{formatCurrency(row.totals.netPay)}</td>
                         </tr>
@@ -716,7 +716,7 @@ export default function Reports() {
                   </table>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No department payroll data available</p>
+                <p className="text-sm text-muted-foreground">{t('reports.noDeptPayrollData','No department payroll data available')}</p>
               )}
             </CardContent>
           </Card>
@@ -727,20 +727,20 @@ export default function Reports() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <BarChart3 className="h-5 w-5" />
-                Salary Trends & Analysis
+                {t('reports.salaryTrends','Salary Trends & Analysis')}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <Button onClick={generateSalaryReport}>Generate Salary Report</Button>
+                <Button onClick={generateSalaryReport}>{t('reports.generateSalaryReport','Generate Salary Report')}</Button>
                 {salaryReport ? (
                   <div className="overflow-x-auto">
                     <table className="min-w-full text-sm">
                       <thead>
                         <tr className="text-left">
-                          <th className="py-2 pr-4">Period</th>
-                          <th className="py-2 pr-4">Net Pay</th>
-                          <th className="py-2">Change</th>
+                          <th className="py-2 pr-4">{t('reports.period','Period')}</th>
+                          <th className="py-2 pr-4">{t('reports.netPay','Net Pay')}</th>
+                          <th className="py-2">{t('reports.change','Change')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -764,7 +764,7 @@ export default function Reports() {
                 ) : (
                   <div className="text-center py-12 text-gray-500">
                     <TrendingUp className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                    <p>No salary report generated</p>
+                    <p>{t('reports.noSalaryReport','No salary report generated')}</p>
                   </div>
                 )}
               </div>
@@ -777,7 +777,7 @@ export default function Reports() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <BarChart3 className="h-5 w-5" />
-                Payroll Overview
+                {t('reports.payrollOverview','Payroll Overview')}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -795,7 +795,7 @@ export default function Reports() {
                   </BarChart>
                 </ChartContainer>
               ) : (
-                <p className="text-sm text-muted-foreground">No payroll data available</p>
+                <p className="text-sm text-muted-foreground">{t('reports.noPayrollData','No payroll data available')}</p>
               )}
             </CardContent>
           </Card>
@@ -804,7 +804,7 @@ export default function Reports() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <PieChart className="h-5 w-5" />
-                Employee Events by Type
+                {t('reports.employeeEventsByType','Employee Events by Type')}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -813,9 +813,9 @@ export default function Reports() {
                   <table className="min-w-full text-sm">
                     <thead>
                       <tr className="text-left">
-                        <th className="py-2 pr-4">Event Type</th>
-                        <th className="py-2 pr-4">Count</th>
-                        <th className="py-2">Total Amount</th>
+                        <th className="py-2 pr-4">{t('reports.eventType','Event Type')}</th>
+                        <th className="py-2 pr-4">{t('reports.count','Count')}</th>
+                        <th className="py-2">{t('reports.totalAmount','Total Amount')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -830,7 +830,7 @@ export default function Reports() {
                   </table>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No employee event data available</p>
+                <p className="text-sm text-muted-foreground">{t('reports.noEventData','No employee event data available')}</p>
               )}
             </CardContent>
           </Card>
@@ -841,7 +841,7 @@ export default function Reports() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Building className="h-5 w-5" />
-                Payroll Summary
+                {t('reports.payrollSummary','Payroll Summary')}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -850,9 +850,9 @@ export default function Reports() {
                   <table className="min-w-full text-sm">
                     <thead>
                       <tr className="text-left">
-                        <th className="py-2 pr-4">Period</th>
-                        <th className="py-2 pr-4">Gross Pay</th>
-                        <th className="py-2">Net Pay</th>
+                        <th className="py-2 pr-4">{t('reports.period','Period')}</th>
+                        <th className="py-2 pr-4">{t('reports.grossPay','Gross Pay')}</th>
+                        <th className="py-2">{t('reports.netPay','Net Pay')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -867,7 +867,7 @@ export default function Reports() {
                   </table>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No payroll data available</p>
+                <p className="text-sm text-muted-foreground">{t('reports.noPayrollData','No payroll data available')}</p>
               )}
             </CardContent>
           </Card>
@@ -877,7 +877,7 @@ export default function Reports() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <BarChart3 className="h-5 w-5" />
-                Department Breakdown (latest period)
+                {t('reports.departmentBreakdownLatest','Department Breakdown (latest period)')}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -885,7 +885,7 @@ export default function Reports() {
                 (() => {
                   const latestPeriod = payrollByDept[payrollByDept.length - 1]?.period;
                   const rows = payrollByDept.filter(r => r.period === latestPeriod);
-                  const data = rows.map(r => ({ name: r.departmentName || 'Unassigned', net: r.totals.netPay }));
+                  const data = rows.map(r => ({ name: r.departmentName || t('reports.unassigned','Unassigned'), net: r.totals.netPay }));
                   return (
                     <ChartContainer
                       config={{}}
@@ -902,7 +902,7 @@ export default function Reports() {
                   );
                 })()
               ) : (
-                <p className="text-sm text-muted-foreground">No department data</p>
+                <p className="text-sm text-muted-foreground">{t('reports.noDeptData','No department data')}</p>
               )}
             </CardContent>
           </Card>
@@ -913,7 +913,7 @@ export default function Reports() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <DollarSign className="h-5 w-5" />
-                Loan Balances
+                {t('reports.loanBalances','Loan Balances')}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -922,8 +922,8 @@ export default function Reports() {
                   <table className="min-w-full text-sm">
                     <thead>
                       <tr className="text-left">
-                        <th className="py-2 pr-4">Employee</th>
-                        <th className="py-2">Balance</th>
+                        <th className="py-2 pr-4">{t('reports.employee','Employee')}</th>
+                        <th className="py-2">{t('reports.balance','Balance')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -943,7 +943,7 @@ export default function Reports() {
                   </table>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No loan data available</p>
+                <p className="text-sm text-muted-foreground">{t('reports.noLoanData','No loan data available')}</p>
               )}
             </CardContent>
           </Card>
@@ -954,7 +954,7 @@ export default function Reports() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users className="h-5 w-5" />
-                Asset Usage
+                {t('reports.assetUsage','Asset Usage')}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -963,8 +963,8 @@ export default function Reports() {
                   <table className="min-w-full text-sm">
                     <thead>
                       <tr className="text-left">
-                        <th className="py-2 pr-4">Asset</th>
-                        <th className="py-2">Assignments</th>
+                        <th className="py-2 pr-4">{t('reports.asset','Asset')}</th>
+                        <th className="py-2">{t('reports.assignments','Assignments')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -978,7 +978,7 @@ export default function Reports() {
                   </table>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No asset usage data available</p>
+                <p className="text-sm text-muted-foreground">{t('reports.noAssetData','No asset usage data available')}</p>
               )}
             </CardContent>
           </Card>

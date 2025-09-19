@@ -30,8 +30,10 @@ export default function Cars() {
   const [isAssignCarDialogOpen, setIsAssignCarDialogOpen] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [registrationPreview, setRegistrationPreview] = useState<string | null>(null);
+  const [carImagePreview, setCarImagePreview] = useState<string | null>(null);
   const [editingCar, setEditingCar] = useState<CarWithAssignment | null>(null);
   const { toast } = useToast();
+  const [repairDialogCarId, setRepairDialogCarId] = useState<string | null>(null);
 
   const {
     data: cars = [],
@@ -51,6 +53,10 @@ export default function Cars() {
 
   const { data: employees = [], error: employeesError } = useQuery({
     queryKey: ["/api/employees"]
+  });
+
+  const { data: vacations = [] } = useQuery<any[]>({
+    queryKey: ["/api/vacations"],
   });
 
   const createCarMutation = useMutation({
@@ -86,8 +92,9 @@ export default function Cars() {
       setIsAssignCarDialogOpen(false);
       toast({ title: "Car assigned successfully" });
     },
-    onError: () => {
-      toast({ title: "Failed to assign car", variant: "destructive" });
+    onError: (err: any) => {
+      const msg = err?.message || 'Failed to assign car';
+      toast({ title: "Failed to assign car", description: msg, variant: "destructive" });
     }
   });
 
@@ -144,6 +151,63 @@ export default function Cars() {
     }
   });
 
+  const repairSchema = z.object({
+    repairDate: z.string().min(1, 'Repair date is required'),
+    description: z.string().min(1, 'Description is required'),
+    cost: z.preprocess(v => v === '' || v === undefined ? undefined : Number(v), z.number().nonnegative().optional()),
+    vendor: z.string().optional(),
+    document: z.any().optional(),
+  });
+
+  const repairForm = useForm<z.infer<typeof repairSchema>>({
+    resolver: zodResolver(repairSchema),
+    defaultValues: {
+      repairDate: new Date().toISOString().split('T')[0],
+      description: '',
+      cost: undefined as any,
+      vendor: '',
+      document: undefined as any,
+    },
+  });
+
+  const addRepairMutation = useMutation({
+    mutationFn: async (data: any) => {
+      if (!repairDialogCarId) throw new Error('No car selected');
+      const form = new FormData();
+      Object.entries(data).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '') {
+          form.append(k, v instanceof File ? v : String(v));
+        }
+      });
+      const res = await apiUpload(`/api/cars/${repairDialogCarId}/repairs`, form);
+      if (!res.ok) throw res;
+    },
+    onSuccess: () => {
+      toast({ title: 'Repair logged successfully' });
+      setRepairDialogCarId(null);
+      repairForm.reset({
+        repairDate: new Date().toISOString().split('T')[0],
+        description: '',
+        cost: undefined as any,
+        vendor: '',
+        document: undefined as any,
+      });
+    },
+    onError: (err) => {
+      toastApiError(err as any, 'Failed to log repair');
+    }
+  });
+
+  const [repairsDialogCar, setRepairsDialogCar] = useState<CarWithAssignment | null>(null);
+  const repairsQuery = useQuery<any[]>({
+    queryKey: repairsDialogCar ? ["/api/cars", repairsDialogCar.id, "repairs"] : ["/noop"],
+    queryFn: async () => {
+      const res = await fetch(`/api/cars/${repairsDialogCar!.id}/repairs`, { credentials: 'include' });
+      return res.json();
+    },
+    enabled: !!repairsDialogCar,
+  });
+
   const carSchema = insertCarSchema.extend({
     plateNumber: z.string().min(1, "Plate number is required"),
     registrationOwner: z.string().min(1, "Registration owner is required"),
@@ -168,6 +232,9 @@ export default function Cars() {
       registrationOwner: "",
       registrationExpiry: "",
       registrationDocumentImage: undefined,
+      carImage: undefined as any,
+      registrationVideo: undefined as any,
+      spareTireCount: 0 as any,
     },
   });
 
@@ -205,12 +272,24 @@ export default function Cars() {
   };
 
   const onSubmitAssignment = (data: any) => {
+    const empId = data?.employeeId;
+    const asgDate = new Date(data?.assignedDate || new Date().toISOString().split('T')[0]);
+    const overlap = (vacations as any[]).some(v => v.employeeId === empId &&
+      // consider approved or pending requests
+      (v.status === 'approved' || v.status === 'pending') &&
+      new Date(v.startDate) <= asgDate && new Date(v.endDate) >= asgDate
+    );
+    if (overlap) {
+      const proceed = window.confirm('This employee has a vacation overlapping the assignment date. Proceed with assigning the car?');
+      if (!proceed) return;
+    }
     assignCarMutation.mutate(data);
   };
 
   const handleEditCar = (car: CarWithAssignment) => {
     setEditingCar(car);
     setRegistrationPreview(car.registrationDocumentImage ?? null);
+    setCarImagePreview((car as any).carImage ?? null);
     editCarForm.reset({
       make: car.make,
       model: car.model,
@@ -223,6 +302,9 @@ export default function Cars() {
         ? car.registrationExpiry.split("T")[0]
         : "",
       registrationDocumentImage: car.registrationDocumentImage ?? undefined,
+      carImage: (car as any).carImage ?? undefined,
+      registrationVideo: (car as any).registrationVideo ?? undefined,
+      spareTireCount: (car as any).spareTireCount ?? 0,
     });
   };
 
@@ -509,6 +591,49 @@ export default function Cars() {
 
                   <FormField
                     control={carForm.control}
+                    name="spareTireCount" as={undefined as any}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Spare Tires (count)</FormLabel>
+                        <FormControl>
+                          <Input type="number" min={0} {...field} onChange={e => field.onChange(Number(e.target.value))} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={carForm.control}
+                    name="carImage"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Car Image</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="file"
+                            accept="image/*"
+                            onChange={e => {
+                              const file = e.target.files?.[0];
+                              field.onChange(file);
+                              setCarImagePreview(file ? URL.createObjectURL(file) : null);
+                            }}
+                          />
+                        </FormControl>
+                        {carImagePreview && (
+                          <img
+                            src={sanitizeImageSrc(carImagePreview)}
+                            alt="Car preview"
+                            className="h-32 mt-2 rounded-md object-cover"
+                          />
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={carForm.control}
                     name="registrationDocumentImage"
                     render={({ field }) => (
                       <FormItem>
@@ -531,6 +656,27 @@ export default function Cars() {
                             className="h-32 mt-2 rounded-md object-cover"
                           />
                         )}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={carForm.control}
+                    name="registrationVideo"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Registration Video (optional)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="file"
+                            accept="video/*"
+                            onChange={e => {
+                              const file = e.target.files?.[0];
+                              field.onChange(file);
+                            }}
+                          />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -689,6 +835,49 @@ export default function Cars() {
 
                   <FormField
                     control={editCarForm.control}
+                    name="spareTireCount" as={undefined as any}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Spare Tires (count)</FormLabel>
+                        <FormControl>
+                          <Input type="number" min={0} {...field} onChange={e => field.onChange(Number(e.target.value))} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={editCarForm.control}
+                    name="carImage"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Car Image</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="file"
+                            accept="image/*"
+                            onChange={e => {
+                              const file = e.target.files?.[0];
+                              field.onChange(file);
+                              setCarImagePreview(file ? URL.createObjectURL(file) : null);
+                            }}
+                          />
+                        </FormControl>
+                        {(carImagePreview || typeof field.value === "string") && (
+                          <img
+                            src={sanitizeImageSrc(carImagePreview || (field.value as string))}
+                            alt="Car preview"
+                            className="h-32 mt-2 rounded-md object-cover"
+                          />
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={editCarForm.control}
                     name="registrationDocumentImage"
                     render={({ field }) => (
                       <FormItem>
@@ -711,6 +900,27 @@ export default function Cars() {
                             className="h-32 mt-2 rounded-md object-cover"
                           />
                         )}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={editCarForm.control}
+                    name="registrationVideo"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Registration Video (optional)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="file"
+                            accept="video/*"
+                            onChange={e => {
+                              const file = e.target.files?.[0];
+                              field.onChange(file);
+                            }}
+                          />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -781,6 +991,12 @@ export default function Cars() {
                           >
                             <Trash2 className="w-3 h-3" />
                           </Button>
+                          <Button size="sm" variant="outline" onClick={() => setRepairDialogCarId(car.id)}>
+                            Repair
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => setRepairsDialogCar(car)}>
+                            Repairs
+                          </Button>
                         </div>
                       </div>
                       <CardDescription>{car.plateNumber}</CardDescription>
@@ -789,7 +1005,10 @@ export default function Cars() {
                       <div className="space-y-2">
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Status</span>
-                          {getStatusBadge(car.status)}
+                          <div className="flex items-center gap-2">
+                            {getStatusBadge(car.status)}
+                            <Badge variant="outline">Spare Tires: {(car as any).spareTireCount ?? 0}</Badge>
+                          </div>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Mileage</span>
@@ -799,6 +1018,15 @@ export default function Cars() {
                           <div className="flex justify-between items-center">
                             <span className="text-sm text-muted-foreground">Owner</span>
                             <span className="text-sm font-medium">{car.registrationOwner}</span>
+                          </div>
+                        )}
+                        {(car as any).carImage && (
+                          <div className="mt-2">
+                            <img
+                              src={sanitizeImageSrc((car as any).carImage)}
+                              alt="Car image"
+                              className="h-32 w-full object-cover rounded-md"
+                            />
                           </div>
                         )}
                         {car.registrationDocumentImage && (
@@ -934,6 +1162,120 @@ export default function Cars() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Repair Dialog */}
+      <Dialog open={!!repairDialogCarId} onOpenChange={(open) => !open && setRepairDialogCarId(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Log Car Repair</DialogTitle>
+            <DialogDescription>Track maintenance and repair activity.</DialogDescription>
+          </DialogHeader>
+          <Form {...repairForm}>
+            <form onSubmit={repairForm.handleSubmit((data) => addRepairMutation.mutate(data))} className="space-y-4">
+              <FormField
+                control={repairForm.control}
+                name="repairDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Repair Date</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={repairForm.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description</FormLabel>
+                    <FormControl>
+                      <Textarea placeholder="What was repaired?" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={repairForm.control}
+                  name="cost"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Cost (optional)</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" {...field} onChange={e => field.onChange(e.target.value)} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={repairForm.control}
+                  name="vendor"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Vendor (optional)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Workshop name" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <FormField
+                control={repairForm.control}
+                name="document"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Receipt/Document (optional)</FormLabel>
+                    <FormControl>
+                      <Input type="file" accept="image/*,application/pdf" onChange={e => field.onChange(e.target.files?.[0])} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button type="submit" disabled={addRepairMutation.isPending}>{addRepairMutation.isPending ? 'Saving...' : 'Save Repair'}</Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Repairs List Dialog */}
+      <Dialog open={!!repairsDialogCar} onOpenChange={(open) => !open && setRepairsDialogCar(null)}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Repairs - {repairsDialogCar?.make} {repairsDialogCar?.model}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+            {repairsQuery.isLoading ? (
+              <div>Loading repairs…</div>
+            ) : (repairsQuery.data || []).length === 0 ? (
+              <div className="text-sm text-muted-foreground">No repairs found.</div>
+            ) : (
+              (repairsQuery.data || []).map((r: any) => (
+                <div key={r.id} className="border rounded p-3 text-sm">
+                  <div className="flex justify-between">
+                    <div className="font-medium">{r.vendor || 'Repair'}</div>
+                    <div>{new Date(r.repairDate).toLocaleDateString()}</div>
+                  </div>
+                  <div className="mt-1">{r.description}</div>
+                  <div className="mt-1 text-muted-foreground">Cost: {r.cost ?? 'N/A'}</div>
+                  {r.documentUrl && (
+                    <div className="mt-1"><a className="text-blue-600 underline" href={r.documentUrl} target="_blank">View Document</a></div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useQuery, useMutation } from "@tanstack/react-query";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,10 +19,12 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import type { Department, InsertDepartment, EmployeeWithDepartment } from "@shared/schema";
 import { z } from "zod";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
+import { useSearch, useLocation } from "wouter";
 
 type DepartmentFormData = z.infer<typeof insertDepartmentSchema>;
 
 export default function Departments() {
+  const { t } = useTranslation();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
@@ -55,6 +58,20 @@ export default function Departments() {
       description: "",
     },
   });
+
+  // URL search params and navigation
+  const search = useSearch();
+  const [, navigate] = useLocation();
+  const params = useMemo(() => new URLSearchParams(search), [search]);
+  const filterDeptId = params.get('deptId') || '';
+
+  // Scroll to filtered department when param present
+  useEffect(() => {
+    if (!filterDeptId) return;
+    if (typeof window === 'undefined') return;
+    const el = document.getElementById(`dept-${filterDeptId}`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [filterDeptId]);
 
   const addDepartmentMutation = useMutation({
     mutationFn: async (department: InsertDepartment) => {
@@ -192,8 +209,8 @@ export default function Departments() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Departments</h1>
-          <p className="text-muted-foreground">Manage your organization's departments</p>
+          <h1 className="text-3xl font-bold tracking-tight">{t('nav.departments')}</h1>
+          <p className="text-muted-foreground">{t('departmentsPage.subtitle','Manage your organization\'s departments')}</p>
         </div>
         <div className="animate-pulse">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -212,6 +229,7 @@ export default function Departments() {
 
   return (
     <div className="space-y-6">
+      {/* Content header */}
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Departments</h1>
@@ -222,12 +240,12 @@ export default function Departments() {
           <DialogTrigger asChild>
             <Button className="bg-primary text-white hover:bg-blue-700">
               <Plus className="mr-2" size={16} />
-              Add Department
+              {t('departmentsPage.addDepartment','Add Department')}
             </Button>
           </DialogTrigger>
           <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Add New Department</DialogTitle>
+              <DialogTitle>{t('departmentsPage.addDepartment','Add New Department')}</DialogTitle>
             </DialogHeader>
             <Form {...addForm}>
               <form onSubmit={addForm.handleSubmit(handleAddDepartment)} className="space-y-4">
@@ -236,9 +254,9 @@ export default function Departments() {
                   name="name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Department Name</FormLabel>
+                      <FormLabel>{t('departmentsPage.departmentName','Department Name')}</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g., Engineering" {...field} />
+                        <Input placeholder={t('departmentsPage.namePlaceholder','e.g., Engineering')} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -250,10 +268,10 @@ export default function Departments() {
                   name="description"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Description</FormLabel>
+                      <FormLabel>{t('departmentsPage.description','Description')}</FormLabel>
                       <FormControl>
                         <Textarea 
-                          placeholder="Brief description of the department"
+                          placeholder={t('departmentsPage.descriptionPlaceholder','Brief description of the department')}
                           {...field}
                           value={field.value || ""}
                         />
@@ -269,14 +287,14 @@ export default function Departments() {
                     variant="outline"
                     onClick={() => setIsAddDialogOpen(false)}
                   >
-                    Cancel
+                    {t('actions.cancel')}
                   </Button>
                   <Button 
                     type="submit" 
                     disabled={addDepartmentMutation.isPending}
                     className="bg-primary text-white hover:bg-blue-700"
                   >
-                    {addDepartmentMutation.isPending ? "Adding..." : "Add Department"}
+                    {addDepartmentMutation.isPending ? t('actions.save') : t('departmentsPage.addDepartment','Add Department')}
                   </Button>
                 </div>
               </form>
@@ -289,14 +307,14 @@ export default function Departments() {
         <Card>
           <CardContent className="text-center py-12">
             <Building className="mx-auto h-12 w-12 text-gray-300" />
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No departments</h3>
-            <p className="mt-1 text-sm text-gray-500">Get started by creating your first department.</p>
+            <h3 className="mt-2 text-sm font-medium text-gray-900">{t('departmentsPage.none','No departments')}</h3>
+            <p className="mt-1 text-sm text-gray-500">{t('departmentsPage.getStarted','Get started by creating your first department.')}</p>
             <div className="mt-6">
               <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
                 <DialogTrigger asChild>
                   <Button className="bg-primary text-white hover:bg-blue-700">
                     <Plus className="mr-2" size={16} />
-                    Add Department
+                    {t('departmentsPage.addDepartment','Add Department')}
                   </Button>
                 </DialogTrigger>
               </Dialog>
@@ -304,9 +322,16 @@ export default function Departments() {
           </CardContent>
         </Card>
       ) : (
+        <>
+        {filterDeptId && (
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">{t('departmentsPage.filtered','Filtered by department')}</div>
+            <Button variant="outline" size="sm" onClick={() => navigate('/people?tab=departments')}>{t('departmentsPage.clearFilter','Clear filter')}</Button>
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {departments.map((department) => (
-            <Card key={department.id}>
+          {(departments.filter(d => !filterDeptId || d.id === filterDeptId)).map((department) => (
+            <Card key={department.id} id={`dept-${department.id}`}>
               <CardHeader className="pb-4">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center">
@@ -342,24 +367,25 @@ export default function Departments() {
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-gray-600 mb-4 min-h-[2.5rem]">
-                  {department.description || "No description provided"}
+                  {department.description || t('departmentsPage.noDescription','No description provided')}
                 </p>
                 
                 <div className="flex items-center text-sm text-gray-500">
                   <Users size={16} className="mr-1" />
-                  <span>{getEmployeeCount(department.id)} employee(s)</span>
+                  <span>{getEmployeeCount(department.id)} {t('departmentsPage.employees','employee(s)')}</span>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
+        </>
       )}
 
       {/* Edit Department Dialog */}
       <Dialog open={!!editingDepartment} onOpenChange={() => setEditingDepartment(null)}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit Department</DialogTitle>
+            <DialogTitle>{t('actions.edit')} {t('nav.departments')}</DialogTitle>
           </DialogHeader>
           <Form {...editForm}>
             <form onSubmit={editForm.handleSubmit(handleEditDepartment)} className="space-y-4">
@@ -368,9 +394,9 @@ export default function Departments() {
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Department Name</FormLabel>
+                    <FormLabel>{t('departmentsPage.departmentName','Department Name')}</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., Engineering" {...field} />
+                      <Input placeholder={t('departmentsPage.namePlaceholder','e.g., Engineering')} {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -382,10 +408,10 @@ export default function Departments() {
                 name="description"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Description</FormLabel>
+                    <FormLabel>{t('departmentsPage.description','Description')}</FormLabel>
                     <FormControl>
                       <Textarea 
-                        placeholder="Brief description of the department"
+                        placeholder={t('departmentsPage.descriptionPlaceholder','Brief description of the department')}
                         {...field}
                         value={field.value || ""}
                       />
@@ -401,14 +427,14 @@ export default function Departments() {
                   variant="outline"
                   onClick={() => setEditingDepartment(null)}
                 >
-                  Cancel
+                  {t('actions.cancel')}
                 </Button>
                 <Button 
                   type="submit" 
                   disabled={updateDepartmentMutation.isPending}
                   className="bg-primary text-white hover:bg-blue-700"
                 >
-                  {updateDepartmentMutation.isPending ? "Updating..." : "Update Department"}
+                  {updateDepartmentMutation.isPending ? t('actions.save') : t('departmentsPage.updateDepartment','Update Department')}
                 </Button>
               </div>
             </form>
@@ -418,9 +444,9 @@ export default function Departments() {
       <ConfirmDialog
         open={isConfirmOpen}
         onOpenChange={handleConfirmOpenChange}
-        title="Delete Department"
-        description="Are you sure you want to delete this department?"
-        confirmText="Delete"
+        title={t('departmentsPage.deleteDepartment','Delete Department')}
+        description={t('departmentsPage.deleteDesc','Are you sure you want to delete this department?')}
+        confirmText={t('actions.delete')}
         onConfirm={confirmDeleteDepartment}
       />
     </div>

@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +13,7 @@ import type { NotificationWithEmployee } from "@shared/schema";
 
 export default function NotificationsPage() {
   const { toast } = useToast();
+  const { t } = useTranslation();
 
   const {
     data: notifications = [],
@@ -36,10 +38,7 @@ export default function NotificationsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread"] });
-      toast({
-        title: "Success",
-        description: "Notification marked as read",
-      });
+      toast({ title: t('actions.save','Success'), description: t('notifications.read','Notification marked as read') });
     },
     onError: () => {
       toast({
@@ -58,10 +57,7 @@ export default function NotificationsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread"] });
-      toast({
-        title: "Success",
-        description: "Notification deleted",
-      });
+      toast({ title: t('notifications.deleted','Notification deleted') });
     },
     onError: () => {
       toast({
@@ -72,8 +68,23 @@ export default function NotificationsPage() {
     },
   });
 
+  const snoozeMutation = useMutation({
+    mutationFn: async ({ id, days }: { id: string; days: number }) => {
+      const until = new Date(Date.now() + days * 86400000).toISOString();
+      const res = await apiPut(`/api/notifications/${id}/snooze`, { snoozedUntil: until });
+      if (!res.ok) throw new Error(res.error || "Failed to snooze notification");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      toast({ title: t('notifications.snoozed','Snoozed'), description: t('notifications.snoozedDesc','Notification snoozed') });
+    },
+    onError: () => {
+      toast({ title: t('errors.errorTitle','Error'), description: t('notifications.snoozeFailed','Failed to snooze notification'), variant: "destructive" });
+    }
+  });
+
   if (notificationsError || unreadError) {
-    return <div>Error loading notifications</div>;
+    return <div>{t('errors.general')}</div>;
   }
 
   const getPriorityBadge = (priority: string) => {
@@ -106,6 +117,8 @@ export default function NotificationsPage() {
         return <CreditCard className="w-5 h-5 text-green-600" />;
       case 'passport_expiry':
         return <BookOpen className="w-5 h-5 text-purple-600" />;
+      case 'driving_license_expiry':
+        return <AlertTriangle className="w-5 h-5 text-amber-600" />;
       default:
         return <Bell className="w-5 h-5 text-gray-600" />;
     }
@@ -119,6 +132,8 @@ export default function NotificationsPage() {
         return 'Civil ID Expiry';
       case 'passport_expiry':
         return 'Passport Expiry';
+      case 'driving_license_expiry':
+        return 'Driving License Expiry';
       default:
         return 'Notification';
     }
@@ -242,6 +257,14 @@ export default function NotificationsPage() {
                           Mark as Read
                         </Button>
                       )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => snoozeMutation.mutate({ id: notification.id, days: 7 })}
+                        disabled={snoozeMutation.isPending}
+                      >
+                        Snooze 7d
+                      </Button>
                       <Button
                         size="sm"
                         variant="outline"

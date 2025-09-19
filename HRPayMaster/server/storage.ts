@@ -21,6 +21,12 @@ import {
   type AssetAssignment,
   type InsertAssetAssignment,
   type AssetAssignmentWithDetails,
+  assetDocuments,
+  type AssetDocument,
+  type InsertAssetDocument,
+  assetRepairs,
+  type AssetRepair,
+  type InsertAssetRepair,
   type Car,
   type InsertCar,
   type CarWithAssignment,
@@ -35,6 +41,8 @@ import {
   type EmployeeEvent,
   type InsertEmployeeEvent,
   type DocumentExpiryCheck,
+  type CarRepair,
+  type InsertCarRepair,
   type EmployeeCustomField,
   type InsertEmployeeCustomField,
   type EmployeeCustomValue,
@@ -56,7 +64,11 @@ import {
   carAssignments,
   notifications,
   emailAlerts,
-  employeeEvents
+  employeeEvents,
+  carRepairs,
+  attendance,
+  type Attendance,
+  type InsertAttendance
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, sql, type AnyColumn } from "drizzle-orm";
@@ -114,6 +126,17 @@ export interface IStorage {
   createCompany(company: InsertCompany): Promise<Company>;
   updateCompany(id: string, company: Partial<InsertCompany>): Promise<Company | undefined>;
   deleteCompany(id: string): Promise<boolean>;
+
+  // Generic documents
+  getGenericDocuments(): Promise<import("@shared/schema").GenericDocument[]>;
+  createGenericDocument(doc: import("@shared/schema").InsertGenericDocument): Promise<import("@shared/schema").GenericDocument>;
+  updateGenericDocument(id: string, doc: Partial<import("@shared/schema").InsertGenericDocument>): Promise<import("@shared/schema").GenericDocument | undefined>;
+  deleteGenericDocument(id: string): Promise<boolean>;
+
+  // Templates
+  getTemplates(): Promise<import("@shared/schema").Template[]>;
+  getTemplateByKey(key: string): Promise<import("@shared/schema").Template | undefined>;
+  upsertTemplate(key: string, data: { en: string; ar: string }): Promise<import("@shared/schema").Template>;
 
   // Employee methods
   getEmployees(): Promise<EmployeeWithDepartment[]>;
@@ -195,6 +218,9 @@ export interface IStorage {
   createCar(car: InsertCar): Promise<Car>;
   updateCar(id: string, car: Partial<InsertCar>): Promise<Car | undefined>;
   deleteCar(id: string): Promise<boolean>;
+  // Car repair methods
+  getCarRepairs(carId: string): Promise<CarRepair[]>;
+  createCarRepair(repair: InsertCarRepair): Promise<CarRepair>;
 
   // Car assignment methods
   getCarAssignments(): Promise<CarAssignmentWithDetails[]>;
@@ -243,9 +269,21 @@ export interface IStorage {
   ): Promise<PayrollDepartmentSummaryRow[]>;
   getLoanBalances(): Promise<LoanBalance[]>;
   getAssetUsage(): Promise<AssetUsage[]>;
+  getAssetDocuments(assetId: string): Promise<AssetDocument[]>;
+  createAssetDocument(doc: InsertAssetDocument): Promise<AssetDocument>;
+  getAssetRepairs(assetId: string): Promise<AssetRepair[]>;
+  createAssetRepair(repair: InsertAssetRepair): Promise<AssetRepair>;
 
   // Document expiry check methods
   checkDocumentExpiries(): Promise<DocumentExpiryCheck[]>;
+
+  // Attendance methods
+  getAttendance(start?: Date, end?: Date): Promise<Attendance[]>;
+  getAttendanceForEmployee(employeeId: string, start?: Date, end?: Date): Promise<Attendance[]>;
+  createAttendance(record: InsertAttendance): Promise<Attendance>;
+  updateAttendance(id: string, record: Partial<InsertAttendance>): Promise<Attendance | undefined>;
+  deleteAttendance(id: string): Promise<boolean>;
+  getAttendanceSummary(start: Date, end: Date): Promise<Record<string, number>>; // employeeId -> present days
 }
 
 export class DatabaseStorage implements IStorage {
@@ -285,10 +323,50 @@ export class DatabaseStorage implements IStorage {
   async getCompanies(): Promise<Company[]> {
     return await db.select().from(companies);
   }
+  async getGenericDocuments(): Promise<import("@shared/schema").GenericDocument[]> {
+    return await db.select().from((await import("@shared/schema")).genericDocuments);
+  }
+  async createGenericDocument(doc: import("@shared/schema").InsertGenericDocument): Promise<import("@shared/schema").GenericDocument> {
+    const { genericDocuments } = await import("@shared/schema");
+    const [row] = await db.insert(genericDocuments).values(doc).returning();
+    return row;
+  }
+  async updateGenericDocument(id: string, doc: Partial<import("@shared/schema").InsertGenericDocument>): Promise<import("@shared/schema").GenericDocument | undefined> {
+    const { genericDocuments } = await import("@shared/schema");
+    const [row] = await db.update(genericDocuments).set(doc).where(eq(genericDocuments.id, id)).returning();
+    return row || undefined;
+  }
+  async deleteGenericDocument(id: string): Promise<boolean> {
+    const { genericDocuments } = await import("@shared/schema");
+    const result = await db.delete(genericDocuments).where(eq(genericDocuments.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
 
   async getCompany(id: string): Promise<Company | undefined> {
     const [company] = await db.select().from(companies).where(eq(companies.id, id));
     return company || undefined;
+  }
+
+  async getTemplates(): Promise<import("@shared/schema").Template[]> {
+    const { templates } = await import("@shared/schema");
+    return await db.select().from(templates);
+  }
+
+  async getTemplateByKey(key: string): Promise<import("@shared/schema").Template | undefined> {
+    const { templates } = await import("@shared/schema");
+    const [row] = await db.select().from(templates).where(eq(templates.key, key));
+    return row || undefined;
+  }
+
+  async upsertTemplate(key: string, data: { en: string; ar: string }): Promise<import("@shared/schema").Template> {
+    const { templates } = await import("@shared/schema");
+    const existing = await this.getTemplateByKey(key);
+    if (existing) {
+      const [row] = await db.update(templates).set({ en: data.en, ar: data.ar, updatedAt: sql`now()` }).where(eq(templates.key, key)).returning();
+      return row!;
+    }
+    const [row] = await db.insert(templates).values({ key, en: data.en, ar: data.ar }).returning();
+    return row!;
   }
 
   async createCompany(company: InsertCompany): Promise<Company> {
@@ -1034,6 +1112,75 @@ export class DatabaseStorage implements IStorage {
     return (result.rowCount ?? 0) > 0;
   }
 
+  // Car repair methods
+  async getCarRepairs(carId: string): Promise<CarRepair[]> {
+    return await db.query.carRepairs.findMany({
+      where: eq(carRepairs.carId, carId),
+      orderBy: desc(carRepairs.repairDate),
+    });
+  }
+
+  async createCarRepair(repair: InsertCarRepair): Promise<CarRepair> {
+    const [newRepair] = await db
+      .insert(carRepairs)
+      .values({
+        ...repair,
+        cost: repair.cost ? repair.cost.toString() : undefined,
+      })
+      .returning();
+    return newRepair;
+  }
+
+  // Attendance methods
+  async getAttendance(start?: Date, end?: Date): Promise<Attendance[]> {
+    if (!start || !end) return await db.select().from(attendance);
+    const s = start.toISOString().split('T')[0];
+    const e = end.toISOString().split('T')[0];
+    return await db.query.attendance.findMany({
+      where: (att, { gte, lte, and }) => and(gte(att.date, s), lte(att.date, e)),
+    });
+  }
+
+  async getAttendanceForEmployee(employeeId: string, start?: Date, end?: Date): Promise<Attendance[]> {
+    if (!start || !end) return await db.query.attendance.findMany({ where: (att, { eq }) => eq(att.employeeId, employeeId) });
+    const s = start.toISOString().split('T')[0];
+    const e = end.toISOString().split('T')[0];
+    return await db.query.attendance.findMany({
+      where: (att, { gte, lte, and, eq }) => and(eq(att.employeeId, employeeId), gte(att.date, s), lte(att.date, e)),
+    });
+  }
+
+  async createAttendance(record: InsertAttendance): Promise<Attendance> {
+    const [row] = await db.insert(attendance).values(record).returning();
+    return row;
+  }
+
+  async updateAttendance(id: string, record: Partial<InsertAttendance>): Promise<Attendance | undefined> {
+    const [row] = await db.update(attendance).set(record).where(eq(attendance.id, id)).returning();
+    return row || undefined;
+  }
+
+  async deleteAttendance(id: string): Promise<boolean> {
+    const result = await db.delete(attendance).where(eq(attendance.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async getAttendanceSummary(start: Date, end: Date): Promise<Record<string, number>> {
+    const rows = await this.getAttendance(start, end);
+    const present: Record<string, Set<string>> = {};
+    for (const r of rows) {
+      if (!r.checkIn || !r.checkOut) continue;
+      const d = (r.date as any as string);
+      if (!present[r.employeeId]) present[r.employeeId] = new Set();
+      present[r.employeeId].add(d);
+    }
+    const summary: Record<string, number> = {};
+    for (const [emp, days] of Object.entries(present)) {
+      summary[emp] = days.size;
+    }
+    return summary;
+  }
+
   // Car assignment methods
   async getCarAssignments(): Promise<CarAssignmentWithDetails[]> {
     const assignments = await db.query.carAssignments.findMany({
@@ -1116,6 +1263,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createNotification(notification: InsertNotification): Promise<Notification> {
+    // Deduplicate by employeeId+type+title+expiryDate
+    const existing = await db.query.notifications.findFirst({
+      where: (n, { and, eq }) => and(
+        eq(n.employeeId, notification.employeeId),
+        eq(n.type, notification.type),
+        eq(n.title, notification.title),
+        eq(n.expiryDate, notification.expiryDate as any)
+      ),
+    });
+    if (existing) return existing;
     const [newNotification] = await db
       .insert(notifications)
       .values({
@@ -1148,6 +1305,21 @@ export class DatabaseStorage implements IStorage {
   async deleteNotification(id: string): Promise<boolean> {
     const result = await db.delete(notifications).where(eq(notifications.id, id));
     return (result.rowCount ?? 0) > 0;
+  }
+
+  async getAssetDocuments(assetId: string): Promise<AssetDocument[]> {
+    return await db.query.assetDocuments.findMany({ where: (t, { eq }) => eq(t.assetId, assetId), orderBy: desc(assetDocuments.createdAt) });
+  }
+  async createAssetDocument(doc: InsertAssetDocument): Promise<AssetDocument> {
+    const [row] = await db.insert(assetDocuments).values(doc).returning();
+    return row;
+  }
+  async getAssetRepairs(assetId: string): Promise<AssetRepair[]> {
+    return await db.query.assetRepairs.findMany({ where: (t,{eq}) => eq(t.assetId, assetId), orderBy: desc(assetRepairs.repairDate) });
+  }
+  async createAssetRepair(repair: InsertAssetRepair): Promise<AssetRepair> {
+    const [row] = await db.insert(assetRepairs).values(repair).returning();
+    return row;
   }
 
   // Email alert methods
@@ -1541,7 +1713,7 @@ export class DatabaseStorage implements IStorage {
       }
 
       // Only add if employee has at least one document to track
-      if (check.visa || check.civilId || check.passport) {
+      if (check.visa || check.civilId || check.passport || (check as any).drivingLicense) {
         checks.push(check);
       }
     });
@@ -1558,4 +1730,4 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-  export const storage = new DatabaseStorage();
+export const storage = new DatabaseStorage();

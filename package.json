@@ -10,7 +10,9 @@
     "dev": "npm run dev --prefix HRPayMaster",
     "test": "npm test --prefix HRPayMaster && npx playwright test",
     "test:coverage": "npm run test:coverage --prefix HRPayMaster && npx playwright test",
-    "db:push": "npm run db:push --prefix HRPayMaster"
+    "db:push": "npm run db:push --prefix HRPayMaster",
+    "db:seed": "npm run db:seed --prefix HRPayMaster",
+    "db:unseed": "npm run db:unseed --prefix HRPayMaster"
   },
   "keywords": [],
   "author": "",

@@ -22,7 +22,7 @@ import type { EmployeeEvent, Employee, InsertEmployeeEvent } from "@shared/schem
 import { insertEmployeeEventSchema } from "@shared/schema";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
 
-const financialEventTypes = ["bonus", "deduction", "allowance", "overtime", "penalty"] as const;
+const financialEventTypes = ["bonus", "commission", "deduction", "allowance", "overtime", "penalty"] as const;
 
 export default function EmployeeEvents() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -321,6 +321,7 @@ export default function EmployeeEvents() {
                           </FormControl>
                           <SelectContent>
                             <SelectItem value="bonus">Bonus</SelectItem>
+                            <SelectItem value="commission">Commission</SelectItem>
                             <SelectItem value="deduction">Deduction</SelectItem>
                             <SelectItem value="allowance">Allowance</SelectItem>
                             <SelectItem value="overtime">Overtime</SelectItem>
