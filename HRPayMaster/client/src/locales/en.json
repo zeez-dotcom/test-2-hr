@@ -311,7 +311,28 @@
     "totalEmployees": "Total Employees",
     "monthlyPayroll": "Monthly Payroll",
     "pendingReviews": "Pending Reviews",
+    "activeEmployees": "Active Employees",
+    "forecastedPayroll": "Forecasted Payroll",
+    "gross": "Gross",
+    "net": "Net",
+    "netOnly": "Net only",
+    "onVacation": "On Vacation (This Month)",
+    "forecastedDeductions": "Forecasted Deductions (This Month)",
+    "forecastedLoanReturns": "Forecasted Loan Returns (This Month)",
+    "tooltip": {
+      "totalEmployees": "All employees regardless of status",
+      "activeEmployees": "Employees with status set to active",
+      "forecastedPayroll": "Gross = sum of salary + additions for active employees. Net = Gross − forecasted deductions − forecasted loan returns.",
+      "forecastedDeductions": "Sum of current-month payroll events of type deduction/penalty that affect payroll",
+      "forecastedLoanReturns": "Sum of monthlyDeduction on active loans overlapping this month",
+      "onVacation": "Unique employees with approved vacations overlapping this month"
+    },
     "recentEmployees": "Recent Employees",
     "noEmployees": "No employees found"
+  }
+  ,
+  "common": {
+    "view": "View",
+    "viewDetails": "View details"
   }
 }

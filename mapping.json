@@ -1,0 +1,15 @@
+{
+  "additions": "additions",
+  "phone": "phone",
+  "civil id pic": "civilIdImage",
+  "passport pic": "passportImage",
+  "driving license": "drivingLicenseImage",
+  "other docs": "otherDocs",
+  "iban": "iban",
+  "SWIFTCODE": "swiftCode",
+  "company ": "company",
+  "vacation return date": "vacationReturnDate",
+  "residency on company or not": "residencyOnCompany",
+  "profession category": "professionCategory",
+  "driving license expiry date": "drivingLicenseExpiryDate"
+}

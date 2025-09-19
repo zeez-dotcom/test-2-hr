@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
   Users,
   DollarSign,
@@ -10,23 +11,31 @@ import {
   Plus,
   ArrowRight,
   User,
-  Calculator
+  Calculator,
+  Info
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import type { EmployeeWithDepartment, PayrollRun } from "@shared/schema";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
+import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import React from "react";
 
 interface DashboardStats {
   totalEmployees: number;
-  monthlyPayroll: number;
+  activeEmployees: number;
   departments: number;
-  pendingReviews: number;
+  forecastPayroll: { gross: number; net: number; breakdown?: { salaries: number; additions: number; deductions: number; deductionsByType?: Record<string, number>; loanReturns: number } };
+  forecastDeductions: number;
+  forecastLoanReturns: number;
+  onVacation: number;
 }
 
 export default function Dashboard() {
   const { t } = useTranslation();
   const [, navigate] = useLocation();
+  const [netOnly, setNetOnly] = React.useState(false);
   const {
     data: stats,
     isLoading: statsLoading,
@@ -54,6 +63,8 @@ export default function Dashboard() {
   const recentEmployees = employees?.slice(0, 3) || [];
   const recentPayrolls = payrollRuns?.slice(0, 3) || [];
   const latestPayroll = payrollRuns?.[0];
+  const now = new Date();
+  const monthYYYYMM = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
 
 
   if (statsLoading || employeesLoading || payrollLoading) {
@@ -94,13 +105,62 @@ export default function Dashboard() {
           <CardContent className="p-6">
             <div className="flex items-center">
               <div className="flex-shrink-0">
+                <div className="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center">
+                  <Users className="text-blue-700" size={24} />
+                </div>
+              </div>
+              <div className="ml-4">
+                <div className="flex items-center space-x-2">
+                  <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">{t('dashboard.totalEmployees','Total Employees')}</p>
+                  <TooltipProvider delayDuration={150}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info size={14} className="text-gray-400 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {t('dashboard.tooltip.totalEmployees','All employees regardless of status')}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <div className="flex items-end space-x-4">
+                  <p className="text-3xl font-bold text-gray-900 mt-1">{stats?.totalEmployees || 0}</p>
+                  <Link href={`/employees`}>
+                    <Button variant="link" className="p-0 text-primary">{t('common.view','View')}</Button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="hover:shadow-lg transition-shadow">
+          <CardContent className="p-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
                 <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
                   <Users className="text-blue-600" size={24} />
                 </div>
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">{t('dashboard.totalEmployees','Total Employees')}</p>
-                <p className="text-3xl font-bold text-gray-900 mt-1">{stats?.totalEmployees || 0}</p>
+                <div className="flex items-center space-x-2">
+                  <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">{t('dashboard.activeEmployees','Active Employees')}</p>
+                  <TooltipProvider delayDuration={150}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info size={14} className="text-gray-400 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {t('dashboard.tooltip.activeEmployees','Employees with status set to active')}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <div className="flex items-end space-x-4">
+                  <p className="text-3xl font-bold text-gray-900 mt-1">{stats?.activeEmployees || 0}</p>
+                  <Link href={`/employees?status=active`}>
+                    <Button variant="link" className="p-0 text-primary">{t('common.view','View')}</Button>
+                  </Link>
+                </div>
               </div>
             </div>
           </CardContent>
@@ -108,17 +168,78 @@ export default function Dashboard() {
 
         <Card className="hover:shadow-lg transition-shadow">
           <CardContent className="p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <DollarSign className="text-green-600" size={24} />
+            <div className="flex items-start justify-between">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                    <DollarSign className="text-green-600" size={24} />
+                  </div>
+                </div>
+                <div className="ml-4">
+                  <div className="flex items-center space-x-2">
+                    <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">{t('dashboard.forecastedPayroll','Forecasted Payroll')}</p>
+                    <TooltipProvider delayDuration={150}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info size={14} className="text-gray-400 cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {t('dashboard.tooltip.forecastedPayroll','Gross = sum of salary + additions for active employees. Net = Gross − forecasted deductions − forecasted loan returns.')}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                  {!netOnly ? (
+                    <>
+                      <div className="mt-1">
+                        <div className="text-xs text-gray-500">{t('dashboard.gross','Gross')}</div>
+                        <div className="text-lg font-semibold text-gray-900">{formatCurrency(stats?.forecastPayroll?.gross || 0)}</div>
+                      </div>
+                      <div className="mt-2">
+                        <div className="text-xs text-gray-500">{t('dashboard.net','Net')}</div>
+                        <div className="text-lg font-semibold text-gray-900">{formatCurrency(stats?.forecastPayroll?.net || 0)}</div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="mt-1">
+                      <div className="text-xs text-gray-500">{t('dashboard.net','Net')}</div>
+                      <div className="text-2xl font-semibold text-gray-900">{formatCurrency(stats?.forecastPayroll?.net || 0)}</div>
+                    </div>
+                  )}
                 </div>
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">{t('dashboard.monthlyPayroll','Monthly Payroll')}</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {formatCurrency(stats?.monthlyPayroll || 0)}
-                </p>
+              <div className="ml-4 text-right">
+                <label htmlFor="net-only" className="block text-xs text-gray-500 mb-1">{t('dashboard.netOnly','Net only')}</label>
+                <Switch id="net-only" checked={netOnly} onCheckedChange={setNetOnly} />
+                <div className="mt-3">
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button variant="link" className="p-0 text-primary">{t('common.viewDetails','View details')}</Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>{t('dashboard.forecastedPayroll','Forecasted Payroll')}</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between"><span>{t('dashboard.gross','Gross')}:</span><span className="font-medium">{formatCurrency(stats?.forecastPayroll?.gross || 0)}</span></div>
+                        <div className="flex justify-between"><span>{t('dashboard.net','Net')}:</span><span className="font-medium">{formatCurrency(stats?.forecastPayroll?.net || 0)}</span></div>
+                      <div className="pt-2 text-gray-700">{t('dashboard.breakdown','Breakdown')}</div>
+                      <div className="flex justify-between"><span>{t('dashboard.salaries','Salaries')}:</span><span>{formatCurrency(stats?.forecastPayroll?.breakdown?.salaries || 0)}</span></div>
+                      <div className="flex justify-between"><span>{t('dashboard.additions','Additions')}:</span><span>{formatCurrency(stats?.forecastPayroll?.breakdown?.additions || 0)}</span></div>
+                      <div className="flex justify-between"><span>{t('dashboard.forecastedDeductions','Forecasted Deductions (This Month)')}:</span><span>{formatCurrency(stats?.forecastPayroll?.breakdown?.deductions || 0)}</span></div>
+                      <div className="flex justify-between"><span>{t('dashboard.forecastedLoanReturns','Forecasted Loan Returns (This Month)')}:</span><span>{formatCurrency(stats?.forecastPayroll?.breakdown?.loanReturns || 0)}</span></div>
+                      {stats?.forecastPayroll?.breakdown?.deductionsByType && (
+                        <div className="mt-3">
+                          <div className="text-xs text-gray-500 mb-1">{t('dashboard.deductionsByType','Deductions by type')}</div>
+                          {Object.entries(stats.forecastPayroll.breakdown.deductionsByType).map(([k,v]) => (
+                            <div key={k} className="flex justify-between"><span>{k.charAt(0).toUpperCase()+k.slice(1)}:</span><span>{formatCurrency(v || 0)}</span></div>
+                          ))}
+                        </div>
+                      )}
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
               </div>
             </div>
           </CardContent>
@@ -149,8 +270,93 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">{t('dashboard.pendingReviews','Pending Reviews')}</p>
-                <p className="text-3xl font-bold text-gray-900 mt-1">{stats?.pendingReviews || 0}</p>
+                <div className="flex items-center space-x-2">
+                  <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">{t('dashboard.onVacation','On Vacation (This Month)')}</p>
+                  <TooltipProvider delayDuration={150}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info size={14} className="text-gray-400 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {t('dashboard.tooltip.onVacation','Unique employees with approved vacations overlapping this month')}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <p className="text-3xl font-bold text-gray-900 mt-1">{stats?.onVacation || 0}</p>
+                <div>
+                  <Link href={`/vacations?month=${monthYYYYMM}&status=approved`}>
+                    <Button variant="link" className="p-0 text-primary">{t('common.view','View')}</Button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Additional Forecast Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-6">
+        <Card className="hover:shadow-lg transition-shadow">
+          <CardContent className="p-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                  <DollarSign className="text-red-600" size={24} />
+                </div>
+              </div>
+              <div className="ml-4">
+                <div className="flex items-center space-x-2">
+                  <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">{t('dashboard.forecastedDeductions','Forecasted Deductions (This Month)')}</p>
+                  <TooltipProvider delayDuration={150}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info size={14} className="text-gray-400 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {t('dashboard.tooltip.forecastedDeductions','Sum of current-month payroll events of type deduction/penalty that affect payroll')}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(stats?.forecastDeductions || 0)}</p>
+                <div>
+                  <Link href={`/employee-events?month=${monthYYYYMM}&types=deduction,penalty`}>
+                    <Button variant="link" className="p-0 text-primary">{t('common.view','View')}</Button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="hover:shadow-lg transition-shadow">
+          <CardContent className="p-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                  <DollarSign className="text-yellow-600" size={24} />
+                </div>
+              </div>
+              <div className="ml-4">
+                <div className="flex items-center space-x-2">
+                  <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">{t('dashboard.forecastedLoanReturns','Forecasted Loan Returns (This Month)')}</p>
+                  <TooltipProvider delayDuration={150}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info size={14} className="text-gray-400 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {t('dashboard.tooltip.forecastedLoanReturns','Sum of monthlyDeduction on active loans overlapping this month')}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(stats?.forecastLoanReturns || 0)}</p>
+                <div>
+                  <Link href={`/loans?month=${monthYYYYMM}`}>
+                    <Button variant="link" className="p-0 text-primary">{t('common.view','View')}</Button>
+                  </Link>
+                </div>
               </div>
             </div>
           </CardContent>
@@ -159,7 +365,7 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
         {/* Recent Employees */}
-        <Card className="shadow-sm border-0 bg-white">
+        <Card className="shadow-sm border-0">
           <CardHeader className="pb-6 border-b border-gray-100">
             <div className="flex items-center justify-between">
               <CardTitle className="text-xl font-semibold text-gray-900">{t('dashboard.recentEmployees','Recent Employees')}</CardTitle>
@@ -214,7 +420,7 @@ export default function Dashboard() {
         </Card>
 
         {/* Payroll Overview */}
-        <Card className="shadow-sm border-0 bg-white">
+        <Card className="shadow-sm border-0">
           <CardHeader className="pb-6 border-b border-gray-100">
             <div className="flex items-center justify-between">
               <CardTitle className="text-xl font-semibold text-gray-900">Payroll Overview</CardTitle>

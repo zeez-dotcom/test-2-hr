@@ -591,7 +591,7 @@ export default function Cars() {
 
                   <FormField
                     control={carForm.control}
-                    name="spareTireCount" as={undefined as any}
+                    name="spareTireCount"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Spare Tires (count)</FormLabel>
@@ -835,7 +835,7 @@ export default function Cars() {
 
                   <FormField
                     control={editCarForm.control}
-                    name="spareTireCount" as={undefined as any}
+                    name="spareTireCount"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Spare Tires (count)</FormLabel>

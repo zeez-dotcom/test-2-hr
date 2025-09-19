@@ -29,6 +29,12 @@ interface PendingIntent {
     startDate?: string;
     endDate?: string;
     period?: string;
+    monthlyDeduction?: number;
+    assetId?: string;
+    carId?: string;
+    title?: string;
+    field?: string;
+    value?: string;
   };
   confirm?: boolean;
 }

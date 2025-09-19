@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format } from "date-fns";
 import { Calendar, CalendarDays, Clock, CheckCircle, XCircle, Plus, Trash2 } from "lucide-react";
+import { useLocation } from "wouter";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,6 +53,20 @@ export default function Vacations() {
     error: vacationError,
   } = useQuery<VacationRequestWithEmployee[]>({
     queryKey: ["/api/vacations"]
+  });
+  const [location] = useLocation();
+  const params = new URLSearchParams(location.split('?')[1] || '');
+  const monthParam = params.get('month');
+  const statusParam = params.get('status');
+  const filteredVacations = vacationRequests.filter((v) => {
+    const statusOk = statusParam ? (v.status || '').toLowerCase() === statusParam.toLowerCase() : true;
+    if (!monthParam) return statusOk;
+    const [y, m] = monthParam.split('-').map(Number);
+    const start = new Date(Date.UTC(y, m - 1, 1));
+    const end = new Date(Date.UTC(y, m, 0));
+    const vs = new Date(v.startDate);
+    const ve = new Date(v.endDate);
+    return statusOk && vs <= end && ve >= start;
   });
 
   const { data: employees = [], error: employeesError } = useQuery({
@@ -461,13 +476,13 @@ export default function Vacations() {
               ))}
               {Array.from({ length: monthEnd.getDate() }, (_, i) => i + 1).map(day => {
                 const dateStr = new Date(monthStart.getFullYear(), monthStart.getMonth(), day).toISOString().split('T')[0];
-                const byDept = monthCoverage.coverage?.[dateStr] || {};
-                const total = Object.values(byDept).reduce((a: any, b: any) => a + (b as number), 0);
+                const byDept = monthCoverage.coverage?.[dateStr] || {} as any;
+                const total: number = Object.values(byDept as any).reduce((a: number, b: any) => a + (b as number), 0);
                 const over = total >= monthCoverage.threshold;
                 return (
-                  <div key={dateStr} className={`border rounded p-2 h-20 flex flex-col items-center justify-between ${over ? 'bg-red-50 border-red-200' : 'bg-white'}`}>
+                  <div key={dateStr} className={`border rounded p-2 h-20 flex flex-col items-center justify-between ${over ? 'bg-red-50 border-red-200' : 'bg-card'}`}>
                     <div className="text-xs font-medium">{day}</div>
-                    <div className={`text-xs ${over ? 'text-red-600 font-semibold' : 'text-gray-600'}`}>{total} on leave</div>
+                    <div className={`text-xs ${over ? 'text-red-600 font-semibold' : 'text-muted-foreground'}`}>{total} on leave</div>
                   </div>
                 );
               })}
@@ -491,7 +506,7 @@ export default function Vacations() {
         </div>
       ) : (
         <div className="space-y-4">
-          {vacationRequests.length === 0 ? (
+          {filteredVacations.length === 0 ? (
             <Card>
               <CardContent className="p-6 text-center">
                 <Calendar className="mx-auto h-12 w-12 text-gray-400 mb-4" />
@@ -500,7 +515,7 @@ export default function Vacations() {
               </CardContent>
             </Card>
           ) : (
-            vacationRequests.map((request) => (
+            filteredVacations.map((request) => (
               <Card key={request.id}>
                 <CardHeader className="pb-4">
                   <div className="flex items-center justify-between">

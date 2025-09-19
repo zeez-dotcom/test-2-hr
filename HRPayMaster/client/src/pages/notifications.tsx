@@ -214,7 +214,7 @@ export default function NotificationsPage() {
               
               <CardContent className="pt-0">
                 <div className="space-y-4">
-                  <div className="bg-white rounded-lg p-4 border">
+                  <div className="rounded-lg p-4 border bg-card text-card-foreground">
                     <p className="text-gray-700 mb-3">{notification.message}</p>
                     
                     <div className="grid grid-cols-2 gap-4 text-sm">

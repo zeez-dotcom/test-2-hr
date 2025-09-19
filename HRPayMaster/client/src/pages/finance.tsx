@@ -3,8 +3,10 @@ import { useLocation, useSearch } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Payroll from "@/pages/payroll";
 import Loans from "@/pages/loans";
+import { useTranslation } from "react-i18next";
 
 export default function Finance() {
+  const { t } = useTranslation();
   const allowed = ["payroll", "loans"] as const;
   const defaultTab = "payroll" as const;
   const [location, navigate] = useLocation();
@@ -27,11 +29,11 @@ export default function Finance() {
   };
   return (
     <div className="space-y-4">
-      <h1 className="text-3xl font-bold tracking-tight">Finance</h1>
+      <h1 className="text-3xl font-bold tracking-tight">{t('nav.finance','Finance')}</h1>
       <Tabs value={tab} onValueChange={onTabChange} className="space-y-4">
         <TabsList>
-          <TabsTrigger value="payroll">Payroll</TabsTrigger>
-          <TabsTrigger value="loans">Loans</TabsTrigger>
+          <TabsTrigger value="payroll">{t('nav.payroll','Payroll')}</TabsTrigger>
+          <TabsTrigger value="loans">{t('nav.loans','Loans')}</TabsTrigger>
         </TabsList>
         <TabsContent value="payroll">
           <Payroll />

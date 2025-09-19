@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,19 @@ export default function EmployeeEvents() {
     error: eventsError,
   } = useQuery<(EmployeeEvent & { employee: Employee })[]>({
     queryKey: ["/api/employee-events"],
+  });
+  const [location] = useLocation();
+  const params = new URLSearchParams(location.split('?')[1] || '');
+  const monthParam = params.get('month'); // YYYY-MM
+  const typesParam = params.get('types'); // comma-separated types
+  const typeSet = new Set((typesParam || '').split(',').map(s => s.trim()).filter(Boolean));
+  const viewEvents = (events || []).filter(ev => {
+    const typeOk = typeSet.size ? typeSet.has(ev.eventType) : true;
+    if (!monthParam) return typeOk;
+    const [y, m] = monthParam.split('-').map(Number);
+    const d = new Date(ev.eventDate);
+    const ok = d.getFullYear() === y && (d.getMonth()+1) === m;
+    return typeOk && ok;
   });
 
   const { data: employees, error: employeesError } = useQuery<Employee[]>({
@@ -536,7 +550,7 @@ export default function EmployeeEvents() {
             </div>
           ) : (
             <div className="space-y-4">
-              {events.map((event) => (
+              {viewEvents.map((event) => (
                 <div key={event.id} className="border rounded-lg p-4 hover:bg-gray-50">
                   <div className="flex items-start justify-between">
                     <div className="flex items-start space-x-4">

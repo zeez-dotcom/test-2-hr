@@ -185,7 +185,13 @@ export const headerDictionary: Record<string, string> = {
 };
 
 export function mapHeader(header: string): string | undefined {
-  const key = header.trim().toLowerCase();
-  return headerDictionary[key];
+  const raw = header.trim();
+  const candidates = [raw, ...raw.split('/'), ...raw.split('|')]
+    .map(s => s.trim().toLowerCase())
+    .filter(Boolean);
+  for (const key of candidates) {
+    const mapped = headerDictionary[key];
+    if (mapped) return mapped;
+  }
+  return undefined;
 }
-

@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format, addMonths } from "date-fns";
 import { DollarSign, Calendar, CheckCircle, XCircle, Plus, Trash2, Edit, TrendingUp, PauseCircle, HelpCircle } from "lucide-react";
+import { useLocation } from "wouter";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,6 +46,18 @@ export default function Loans() {
     error: loansError,
   } = useQuery<LoanWithEmployee[]>({
     queryKey: ["/api/loans"]
+  });
+  const [location] = useLocation();
+  const params = new URLSearchParams(location.split('?')[1] || '');
+  const monthParam = params.get('month');
+  const filteredLoans = (loans || []).filter((l) => {
+    if (!monthParam) return true;
+    const [y, m] = monthParam.split('-').map(Number);
+    const start = new Date(Date.UTC(y, m - 1, 1));
+    const end = new Date(Date.UTC(y, m, 0));
+    const loanStart = new Date(l.startDate);
+    const loanEnd = l.endDate ? new Date(l.endDate) : null;
+    return loanStart <= end && (!loanEnd || loanEnd >= start);
   });
 
   const { data: employees = [], error: employeesError } = useQuery({
@@ -125,6 +138,28 @@ export default function Loans() {
   form.register("amount", { required: true });
   form.register("monthlyDeduction", { required: true });
   form.register("startDate", { required: true });
+
+  // Edit dialog state + form
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingLoan, setEditingLoan] = useState<LoanWithEmployee | null>(null);
+  const editForm = useForm<any>({
+    defaultValues: {
+      amount: undefined,
+      monthlyDeduction: undefined,
+      remainingAmount: undefined,
+      startDate: '',
+      endDate: '',
+      interestRate: undefined,
+      reason: '',
+      status: 'pending',
+    },
+    mode: 'onChange'
+  });
+  const onEditSubmit = (data: any) => {
+    if (!editingLoan) return;
+    updateMutation.mutate({ id: editingLoan.id, data });
+    setIsEditDialogOpen(false);
+  };
 
   if (loansError || employeesError) {
     return <div>Error loading loans</div>;
@@ -388,7 +423,7 @@ export default function Loans() {
         </div>
       ) : (
         <div className="space-y-4">
-          {loans.length === 0 ? (
+          {filteredLoans.length === 0 ? (
             <Card>
               <CardContent className="p-6 text-center">
                 <DollarSign className="mx-auto h-12 w-12 text-gray-400 mb-4" />
@@ -397,7 +432,7 @@ export default function Loans() {
               </CardContent>
             </Card>
           ) : (
-            loans.map((loan) => (
+            filteredLoans.map((loan) => (
               <Card key={loan.id}>
                 <CardHeader className="pb-4">
                   <div className="flex items-center justify-between">

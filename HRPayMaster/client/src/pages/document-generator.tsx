@@ -265,7 +265,7 @@ export default function DocumentGenerator() {
             </div>
           </div>
 
-          <div className="border rounded-md p-3 bg-white">
+          <div className="border rounded-md p-3 bg-card text-card-foreground">
             <div className="flex items-center justify-between">
               <div className="text-lg font-semibold">{title || templates[template]?.title || 'Preview'}</div>
               <div className="text-xs text-muted-foreground">{nowPreview.toLocaleString()}</div>
@@ -444,7 +444,7 @@ function EmployeesDrawer({ employees }: { employees: any[] }) {
       </div>
 
       {employeeId && (
-        <div className="border rounded-md bg-white">
+        <div className="border rounded-md bg-card text-card-foreground">
           <div className="p-4 border-b flex items-center justify-between">
             <div>
               <div className="text-lg font-semibold">{emp.firstName} {emp.lastName}</div>

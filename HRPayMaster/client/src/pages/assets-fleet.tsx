@@ -3,8 +3,10 @@ import { useLocation, useSearch } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Assets from "@/pages/assets";
 import Cars from "@/pages/cars";
+import { useTranslation } from "react-i18next";
 
 export default function AssetsFleet() {
+  const { t } = useTranslation();
   const allowed = ["fleet", "assets"] as const;
   const defaultTab = "fleet" as const;
   const [location, navigate] = useLocation();
@@ -27,11 +29,11 @@ export default function AssetsFleet() {
   };
   return (
     <div className="space-y-4">
-      <h1 className="text-3xl font-bold tracking-tight">Assets & Fleet</h1>
+      <h1 className="text-3xl font-bold tracking-tight">{t('nav.assetsFleet','Assets & Fleet')}</h1>
       <Tabs value={tab} onValueChange={onTabChange} className="space-y-4">
         <TabsList>
-          <TabsTrigger value="fleet">Fleet</TabsTrigger>
-          <TabsTrigger value="assets">Assets</TabsTrigger>
+          <TabsTrigger value="fleet">{t('nav.cars','Fleet')}</TabsTrigger>
+          <TabsTrigger value="assets">{t('nav.assets','Assets')}</TabsTrigger>
         </TabsList>
         <TabsContent value="fleet">
           <Cars />

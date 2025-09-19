@@ -202,7 +202,8 @@ const upload = multer({ storage: multer.memoryStorage() });
       const companies = await storage.getCompanies();
       res.json(companies);
     } catch (error) {
-      next(new HttpError(500, "Failed to fetch companies"));
+      // Include original error for better diagnostics in development
+      next(new HttpError(500, "Failed to fetch companies", error));
     }
   });
 
@@ -217,7 +218,7 @@ const upload = multer({ storage: multer.memoryStorage() });
       }
       res.json(list[0]);
     } catch (error) {
-      next(new HttpError(500, 'Failed to fetch company'));
+      next(new HttpError(500, 'Failed to fetch company', error));
     }
   });
   employeesRouter.put("/api/company", requireRole(['admin']), async (req, res, next) => {
@@ -233,6 +234,11 @@ const upload = multer({ storage: multer.memoryStorage() });
       if (typeof req.body?.phone === 'string') data.phone = req.body.phone;
       if (typeof req.body?.website === 'string') data.website = req.body.website;
       if (typeof req.body?.address === 'string') data.address = req.body.address;
+      if (typeof req.body?.payrollSettings === 'object' || typeof req.body?.payrollSettings === 'string') {
+        try {
+          data.payrollSettings = typeof req.body.payrollSettings === 'string' ? req.body.payrollSettings : JSON.stringify(req.body.payrollSettings);
+        } catch {}
+      }
       if (!id) {
         const created = await storage.createCompany(data);
         res.json(created);
@@ -242,7 +248,7 @@ const upload = multer({ storage: multer.memoryStorage() });
         res.json(updated);
       }
     } catch (error) {
-      next(new HttpError(500, 'Failed to update company'));
+      next(new HttpError(500, 'Failed to update company', error));
     }
   });
 
@@ -378,10 +384,22 @@ const upload = multer({ storage: multer.memoryStorage() });
     }
     try {
       const workbook = XLSX.read(file.buffer, { type: "buffer", cellDates: true });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const sheetPref = (req.body as any)?.sheet || (req.body as any)?.sheetName;
+      const sheetName = typeof sheetPref === 'string' && sheetPref.trim()
+        ? sheetPref.trim()
+        : workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      if (!sheet) {
+        return next(new HttpError(400, `Sheet '${sheetName}' not found in workbook`));
+      }
       const headerRow = (XLSX.utils.sheet_to_json(sheet, { header: 1 })[0] || []) as string[];
       const mappingRaw = (req.body as any)?.mapping;
       const basicOnlyRaw = (req.body as any)?.basicOnly;
+      const dateFormatPrefRaw = (req.body as any)?.dateFormat;
+      const envDatePref = (process.env.IMPORT_DATE_FORMAT || process.env.HR_IMPORT_DATE_FORMAT || '').toUpperCase();
+      const dateFormatPref = typeof dateFormatPrefRaw === 'string'
+        ? dateFormatPrefRaw.trim().toUpperCase()
+        : (envDatePref || undefined); // expected values: 'DMY' | 'MDY' | 'YMD'
       const basicOnly =
         typeof basicOnlyRaw === 'string'
           ? ['1','true','yes','on'].includes(basicOnlyRaw.toLowerCase())
@@ -533,6 +551,49 @@ const upload = multer({ storage: multer.memoryStorage() });
         }
 
         let parseError = false;
+        const requiredSet = new Set<string>(["startDate", "salary", "position", "firstName"]);
+        const fieldLabel = (f: string): string => {
+          const map: Record<string, string> = {
+            firstName: 'Name',
+            lastName: 'Last Name',
+            englishName: 'English Name',
+            fullName: 'Name',
+            position: 'Position/Profession',
+            salary: 'Salary',
+            startDate: 'Employment Date',
+            civilId: 'Civil ID Number',
+            civilIdIssueDate: 'Civil ID Issue Date',
+            civilIdExpiryDate: 'Civil ID Expiry Date',
+            passportNumber: 'Passport Number',
+            passportIssueDate: 'Passport Issue Date',
+            passportExpiryDate: 'Passport Expiry Date',
+            drivingLicenseExpiryDate: 'Driving License Expiry Date',
+          };
+          return map[f] || f;
+        };
+
+        function preferAmbiguousDate(value: unknown): { value: string | null; error: string | null } {
+          const r = parseDateToISO(value as any);
+          if (r.error !== 'Ambiguous date format' || typeof value !== 'string') return r;
+
+          const t = value.trim();
+          const m = t.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+          if (!m) return r;
+          let [_, a, b, c] = m;
+          if (c.length === 2) c = '20' + c;
+          const isoDMY = `${c.padStart(4, '0')}-${b.padStart(2, '0')}-${a.padStart(2, '0')}`;
+          const isoMDY = `${c.padStart(4, '0')}-${a.padStart(2, '0')}-${b.padStart(2, '0')}`;
+          const validDMY = !isNaN(Date.parse(isoDMY));
+          const validMDY = !isNaN(Date.parse(isoMDY));
+          const pref = (dateFormatPref === 'MDY' || dateFormatPref === 'YMD') ? 'MDY' : 'DMY';
+          if (validDMY && validMDY && isoDMY !== isoMDY) {
+            return { value: pref === 'MDY' ? isoMDY : isoDMY, error: null };
+          }
+          // If only one is valid, return it; otherwise keep original error
+          if (validDMY && !validMDY) return { value: isoDMY, error: null };
+          if (validMDY && !validDMY) return { value: isoMDY, error: null };
+          return r;
+        }
 
         const dateFields = [
           "startDate",
@@ -549,16 +610,19 @@ const upload = multer({ storage: multer.memoryStorage() });
         for (const f of dateFields) {
           if (f in base) {
             const original = base[f];
-            const { value, error } = parseField(parseDateToISO, original, "date");
+            const { value, error } = parseField(preferAmbiguousDate as any, original, "date");
             base[f] = value;
             if (error) {
+              const needsAttention = requiredSet.has(f);
+              const friendly = `${fieldLabel(f)} needs attention (missing or invalid)`;
               errors.push({
                 row: idx + 2,
                 column: f,
                 value: original,
                 reason: error,
+                ...(needsAttention ? { message: friendly } : {}),
               });
-              parseError = true;
+              if (needsAttention) parseError = true;
             }
           }
         }
@@ -578,13 +642,16 @@ const upload = multer({ storage: multer.memoryStorage() });
             const { value, error } = parseField(parseNumber, original, "number");
             base[f] = value;
             if (error) {
+              const needsAttention = requiredSet.has(f);
+              const friendly = `${fieldLabel(f)} needs attention (missing or invalid)`;
               errors.push({
                 row: idx + 2,
                 column: f,
                 value: original,
                 reason: error,
+                ...(needsAttention ? { message: friendly } : {}),
               });
-              parseError = true;
+              if (needsAttention) parseError = true;
             }
           }
         }
@@ -606,7 +673,7 @@ const upload = multer({ storage: multer.memoryStorage() });
                 value: original,
                 reason: error,
               });
-              parseError = true;
+              // booleans are optional here; do not mark fatal
             }
           }
         }
@@ -650,7 +717,14 @@ const upload = multer({ storage: multer.memoryStorage() });
           customValues.push(custom);
         } catch (err) {
           if (err instanceof z.ZodError) {
-            const message = err.errors.map(i => i.message).join(", ");
+            const parts = err.errors.map(i => {
+              const key = Array.isArray(i.path) && i.path.length ? String(i.path[0]) : '';
+              if (key && requiredSet.has(key)) {
+                return `${fieldLabel(key)} needs attention (missing or invalid)`;
+              }
+              return (i.path?.length ? `[${i.path.join('.')}] ` : '') + i.message;
+            });
+            const message = Array.from(new Set(parts)).join(', ');
             errors.push({ row: idx + 2, message });
           } else {
             errors.push({ row: idx + 2, message: "Invalid data" });
@@ -847,30 +921,73 @@ const upload = multer({ storage: multer.memoryStorage() });
   });
 
   // Dashboard stats route
-  employeesRouter.get("/api/dashboard/stats", async (req, res, next) => {
+  employeesRouter.get("/api/dashboard/stats", async (_req, res, next) => {
     try {
-      const employees = await storage.getEmployees();
-      const payrollRuns = await storage.getPayrollRuns();
-      const departments = await storage.getDepartments();
+      const [allEmployees, departments] = await Promise.all([
+        storage.getEmployees(),
+        storage.getDepartments(),
+      ]);
 
-      const totalEmployees = employees.length;
-      const activeDepartments = departments.length;
-      
-      // Get latest payroll run for monthly payroll
-      const latestPayroll = payrollRuns[0];
-      const monthlyPayroll = latestPayroll ? parseFloat(latestPayroll.grossAmount) : 0;
-      
-      // Count pending reviews (employees with status 'on_leave' for this example)
-      const pendingReviews = employees.filter(emp => emp.status === "on_leave").length;
+      const activeEmployees = allEmployees.filter(e => (e.status || '').toLowerCase() === 'active');
+      const activeEmployeeCount = activeEmployees.length;
+
+      // Month range
+      const now = new Date();
+      const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+      const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0));
+
+      // Forecasted gross = sum of active salaries + additions
+      const forecastGross = activeEmployees.reduce((sum, e) => sum + Number(e.salary || 0) + Number((e as any).additions || 0), 0);
+
+      // Forecasted deductions from employee events (deduction/penalty) this month
+      const events = await storage.getEmployeeEvents(start, end);
+      const deductionTypes = new Set(['deduction', 'penalty']);
+      const dedEvents = events.filter(ev => (ev as any).affectsPayroll !== false && deductionTypes.has((ev as any).eventType));
+      const forecastDeductions = dedEvents.reduce((sum, ev) => sum + Number((ev as any).amount || 0), 0);
+      const deductionsByType: Record<string, number> = { deduction: 0, penalty: 0 };
+      for (const ev of dedEvents) {
+        const t = (ev as any).eventType;
+        deductionsByType[t] = (deductionsByType[t] || 0) + Number((ev as any).amount || 0);
+      }
+
+      // Forecasted loan returns = sum of active loans' monthlyDeduction in range
+      const loans = await storage.getLoans(start, end);
+      const forecastLoanReturns = loans
+        .filter(l => (l.status || '').toLowerCase() === 'active')
+        .reduce((sum, l) => sum + Number(l.monthlyDeduction || 0), 0);
+
+      // Forecasted net = gross - deductions - loan returns
+      const forecastNet = Math.max(0, forecastGross - forecastDeductions - forecastLoanReturns);
+
+      // Vacations overlapping this month (approved)
+      const vacations = await storage.getVacationRequests(start, end);
+      const onVacation = new Set(
+        vacations
+          .filter(v => (v.status || '').toLowerCase() === 'approved')
+          .map(v => v.employeeId)
+      ).size;
 
       res.json({
-        totalEmployees,
-        monthlyPayroll,
-        departments: activeDepartments,
-        pendingReviews
+        totalEmployees: allEmployees.length,
+        activeEmployees: activeEmployeeCount,
+        departments: departments.length,
+        forecastPayroll: {
+          gross: forecastGross,
+          net: forecastNet,
+          breakdown: {
+            salaries: activeEmployees.reduce((s, e) => s + Number(e.salary || 0), 0),
+            additions: activeEmployees.reduce((s, e) => s + Number((e as any).additions || 0), 0),
+            deductions: forecastDeductions,
+            deductionsByType,
+            loanReturns: forecastLoanReturns,
+          }
+        },
+        forecastDeductions,
+        forecastLoanReturns,
+        onVacation,
       });
     } catch (error) {
-      next(new HttpError(500, "Failed to fetch dashboard stats"));
+      next(new HttpError(500, "Failed to fetch dashboard stats", error));
     }
   });
 
@@ -1675,7 +1792,6 @@ const upload = multer({ storage: multer.memoryStorage() });
           emailSent: false,
           documentEventId: newEvent.id as any,
           documentUrl: pdfDataUrl,
-          documentControllerNumber: docNo,
         });
       }
       res.status(201).json(newEvent);
@@ -1960,40 +2076,29 @@ const upload = multer({ storage: multer.memoryStorage() });
           alerts.push({ type: 'passport', employee: check.employeeName, daysUntilExpiry: check.passport.daysUntilExpiry });
         }
 
-        // Check driving license expiry
-        // @ts-expect-error extended property from storage.checkDocumentExpiries
-        if (check.drivingLicense && shouldSendAlert(check.drivingLicense.expiryDate, check.drivingLicense.alertDays)) {
+        // Check driving license expiry (optional property populated by storage)
+        if ((check as any).drivingLicense && shouldSendAlert((check as any).drivingLicense.expiryDate, (check as any).drivingLicense.alertDays)) {
           const emailContent = generateExpiryWarningEmail(
             employee,
             'driving_license',
-            // @ts-expect-error extended property
-            check.drivingLicense.expiryDate,
-            // @ts-expect-error extended property
-            check.drivingLicense.daysUntilExpiry,
-            // @ts-expect-error extended property
-            check.drivingLicense.number
+            (check as any).drivingLicense.expiryDate,
+            (check as any).drivingLicense.daysUntilExpiry,
+            (check as any).drivingLicense.number
           );
 
           await storage.createNotification({
             employeeId: check.employeeId,
             type: 'driving_license_expiry',
             title: emailContent.subject,
-            message: `Driving License expires in ${
-              // @ts-expect-error extended property
-              check.drivingLicense.daysUntilExpiry
-            } days`,
+            message: `Driving License expires in ${(check as any).drivingLicense.daysUntilExpiry} days`,
             priority:
-              // @ts-expect-error extended property
-              check.drivingLicense.daysUntilExpiry <= 7
+              (check as any).drivingLicense.daysUntilExpiry <= 7
                 ? 'critical'
-                : // @ts-expect-error extended property
-                check.drivingLicense.daysUntilExpiry <= 30
+                : (check as any).drivingLicense.daysUntilExpiry <= 30
                 ? 'high'
                 : 'medium',
-            // @ts-expect-error extended property
-            expiryDate: check.drivingLicense.expiryDate,
-            // @ts-expect-error extended property
-            daysUntilExpiry: check.drivingLicense.daysUntilExpiry,
+            expiryDate: (check as any).drivingLicense.expiryDate,
+            daysUntilExpiry: (check as any).drivingLicense.daysUntilExpiry,
             emailSent: false,
           });
 
@@ -2006,8 +2111,7 @@ const upload = multer({ storage: multer.memoryStorage() });
           });
 
           if (emailSent) emailsSent++;
-          // @ts-expect-error extended property
-          alerts.push({ type: 'driving_license', employee: check.employeeName, daysUntilExpiry: check.drivingLicense.daysUntilExpiry });
+          alerts.push({ type: 'driving_license', employee: check.employeeName, daysUntilExpiry: (check as any).drivingLicense.daysUntilExpiry });
         }
       }
 

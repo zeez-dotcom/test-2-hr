@@ -16,6 +16,7 @@ import { buildBilingualActionReceipt, buildAndEncodePdf } from "@/lib/pdf";
 import { useToast } from "@/hooks/use-toast";
 import { toastApiError } from "@/lib/toastError";
 import type { EmployeeWithDepartment, Department, InsertEmployee, Company } from "@shared/schema";
+import { useLocation } from "wouter";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
 
 export default function Employees() {
@@ -37,6 +38,9 @@ export default function Employees() {
   } = useQuery<EmployeeWithDepartment[]>({
     queryKey: ["/api/employees"],
   });
+  const [location] = useLocation();
+  const params = new URLSearchParams(location.split('?')[1] || '');
+  const statusFilterParam = params.get('status');
 
   const {
     data: departments,
@@ -144,8 +148,9 @@ export default function Employees() {
       employee.position.toLowerCase().includes(searchQuery.toLowerCase());
     
     const matchesDepartment = departmentFilter === "" || departmentFilter === "all" || employee.departmentId === departmentFilter;
+    const matchesStatus = statusFilterParam ? (employee.status || '').toLowerCase() === statusFilterParam.toLowerCase() : true;
     
-    return matchesSearch && matchesDepartment;
+    return matchesSearch && matchesDepartment && matchesStatus;
   }) || [];
 
   const handleDeleteEmployee = (employeeId: string) => {
@@ -194,7 +199,7 @@ export default function Employees() {
         <p className="text-muted-foreground">{t('employeesPage.subtitle', 'Manage your team members and their information')}</p>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+      <div className="rounded-lg shadow-sm border border-gray-200 bg-card text-card-foreground">
         <div className="px-6 py-4 border-b border-gray-200">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
             <h3 className="text-lg font-medium text-gray-900">{t('employeesPage.directoryTitle', 'Employee Directory')}</h3>
@@ -294,7 +299,7 @@ export default function Employees() {
                     onClick={async () => {
                       const doc = buildBilingualActionReceipt({
                         titleEn: 'Employee Update', titleAr: 'تحديث الموظف',
-                        employee: { id: editingEmployee.id, firstName: editingEmployee.firstName, lastName: editingEmployee.lastName },
+                        employee: { id: editingEmployee.id, firstName: editingEmployee.firstName || '', lastName: editingEmployee.lastName || '' },
                         detailsEn: [ `Position: ${editingEmployee.position}`, `Department: ${editingEmployee.department?.name || ''}`],
                         detailsAr: [ `الوظيفة: ${editingEmployee.position}`, `القسم: ${editingEmployee.department?.name || ''}`],
                         // logo will be injected from company settings via pdf brand helper

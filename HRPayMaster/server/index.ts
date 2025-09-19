@@ -195,21 +195,15 @@ app.use((req, res, next) => {
           });
           await sendEmail({ to: employee.email || '', from: process.env.FROM_EMAIL || 'hr@company.com', subject: email.subject, html: email.html, text: email.text });
         }
-        // @ts-expect-error extension from storage
         if (check.drivingLicense && shouldSendAlert(check.drivingLicense.expiryDate, check.drivingLicense.alertDays)) {
-          // @ts-expect-error extension from storage
           const email = generateExpiryWarningEmail(employee, 'driving_license', check.drivingLicense.expiryDate, check.drivingLicense.daysUntilExpiry, check.drivingLicense.number);
           await storage.createNotification({
             employeeId: check.employeeId,
             type: 'driving_license_expiry',
             title: email.subject,
-            // @ts-expect-error
             message: `Driving License expires in ${check.drivingLicense.daysUntilExpiry} days`,
-            // @ts-expect-error
             priority: check.drivingLicense.daysUntilExpiry <= 7 ? 'critical' : check.drivingLicense.daysUntilExpiry <= 30 ? 'high' : 'medium',
-            // @ts-expect-error
             expiryDate: check.drivingLicense.expiryDate,
-            // @ts-expect-error
             daysUntilExpiry: check.drivingLicense.daysUntilExpiry,
             emailSent: false,
           });

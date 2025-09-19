@@ -37,6 +37,7 @@ export const companies = pgTable("companies", {
   website: text("website"),
   address: text("address"),
   useAttendanceForDeductions: boolean("use_attendance_for_deductions").notNull().default(false),
+  payrollSettings: text("payroll_settings"),
 });
 
 export const employees = pgTable("employees", {
