@@ -108,22 +108,20 @@ describe('getLoanReportDetails', () => {
       .mockReturnValueOnce({
         from: () => ({
           leftJoin: () => ({
-            leftJoin: () => ({
-              where: async () => [
-                {
-                  loanId: 'l1',
-                  amount: '100',
-                  paidAt: '2024-01-15',
-                  payrollDate: null,
-                },
-                {
-                  loanId: 'l1',
-                  amount: '50',
-                  paidAt: null,
-                  payrollDate: '2023-12-15',
-                },
-              ],
-            }),
+            where: async () => [
+              {
+                loanId: 'l1',
+                amount: '100',
+                appliedDate: '2024-01-15',
+                payrollDate: null,
+              },
+              {
+                loanId: 'l1',
+                amount: '50',
+                appliedDate: null,
+                payrollDate: '2023-12-15',
+              },
+            ],
           }),
         }),
       })

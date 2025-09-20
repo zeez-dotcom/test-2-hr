@@ -16,6 +16,8 @@ import {
   type InsertLoan,
   type LoanWithEmployee,
   loanPayments,
+  type LoanPayment,
+  type InsertLoanPayment,
   type Asset,
   type InsertAsset,
   type AssetWithAssignment,
@@ -72,7 +74,7 @@ import {
   type InsertAttendance
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, gte, lte, sql, inArray, type AnyColumn } from "drizzle-orm";
+import { eq, desc, asc, and, gte, lte, sql, inArray, type AnyColumn } from "drizzle-orm";
 
 export class DuplicateEmployeeCodeError extends Error {
   constructor(code: string) {
@@ -213,6 +215,10 @@ export interface IStorage {
   createLoan(loan: InsertLoan): Promise<Loan>;
   updateLoan(id: string, loan: Partial<InsertLoan>): Promise<Loan | undefined>;
   deleteLoan(id: string): Promise<boolean>;
+  createLoanPayment(payment: InsertLoanPayment): Promise<LoanPayment>;
+  createLoanPayments(payments: InsertLoanPayment[]): Promise<LoanPayment[]>;
+  getLoanPaymentsByLoan(loanId: string): Promise<LoanPayment[]>;
+  getLoanPaymentsForPayroll(payrollRunId: string): Promise<LoanPayment[]>;
   getLoanReportDetails(range: { startDate: string; endDate: string }): Promise<LoanReportDetail[]>;
 
   // Asset methods
@@ -304,6 +310,17 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  private formatLoanPaymentForInsert(payment: InsertLoanPayment): typeof loanPayments.$inferInsert {
+    return {
+      loanId: payment.loanId,
+      payrollRunId: payment.payrollRunId,
+      employeeId: payment.employeeId,
+      amount: payment.amount.toString(),
+      appliedDate: payment.appliedDate ?? undefined,
+      source: payment.source ?? "payroll",
+    };
+  }
+
   // Department methods
   async getDepartments(): Promise<Department[]> {
     return await db.select().from(departments);
@@ -914,6 +931,38 @@ export class DatabaseStorage implements IStorage {
   async deleteLoan(id: string): Promise<boolean> {
     const result = await db.delete(loans).where(eq(loans.id, id));
     return (result.rowCount ?? 0) > 0;
+  }
+
+  async createLoanPayment(payment: InsertLoanPayment): Promise<LoanPayment> {
+    const [created] = await db
+      .insert(loanPayments)
+      .values(this.formatLoanPaymentForInsert(payment))
+      .returning();
+    return created;
+  }
+
+  async createLoanPayments(payments: InsertLoanPayment[]): Promise<LoanPayment[]> {
+    if (payments.length === 0) {
+      return [];
+    }
+    return await db
+      .insert(loanPayments)
+      .values(payments.map(payment => this.formatLoanPaymentForInsert(payment)))
+      .returning();
+  }
+
+  async getLoanPaymentsByLoan(loanId: string): Promise<LoanPayment[]> {
+    return await db.query.loanPayments.findMany({
+      where: eq(loanPayments.loanId, loanId),
+      orderBy: asc(loanPayments.appliedDate),
+    });
+  }
+
+  async getLoanPaymentsForPayroll(payrollRunId: string): Promise<LoanPayment[]> {
+    return await db.query.loanPayments.findMany({
+      where: eq(loanPayments.payrollRunId, payrollRunId),
+      orderBy: asc(loanPayments.appliedDate),
+    });
   }
 
   // Asset methods
@@ -1674,12 +1723,11 @@ export class DatabaseStorage implements IStorage {
           .select({
             loanId: loanPayments.loanId,
             amount: loanPayments.amount,
-            paidAt: loanPayments.paidAt,
+            appliedDate: loanPayments.appliedDate,
             payrollDate: payrollRuns.startDate,
           })
           .from(loanPayments)
-          .leftJoin(payrollEntries, eq(loanPayments.payrollEntryId, payrollEntries.id))
-          .leftJoin(payrollRuns, eq(payrollEntries.payrollRunId, payrollRuns.id))
+          .leftJoin(payrollRuns, eq(loanPayments.payrollRunId, payrollRuns.id))
           .where(inArray(loanPayments.loanId, loanIds))
       : [];
 
@@ -1693,7 +1741,7 @@ export class DatabaseStorage implements IStorage {
 
       totalPaid.set(row.loanId, (totalPaid.get(row.loanId) ?? 0) + amount);
 
-      const rawDate = (row.paidAt ?? row.payrollDate) as string | null;
+      const rawDate = (row.appliedDate ?? row.payrollDate) as string | null;
       if (!rawDate) continue;
 
       const paymentDate = new Date(rawDate);

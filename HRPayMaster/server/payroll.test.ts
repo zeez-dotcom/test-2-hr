@@ -5,6 +5,12 @@ import { registerRoutes } from './routes';
 import { errorHandler } from './errorHandler';
 import { storage } from './storage';
 import { db } from './db';
+import {
+  payrollRuns,
+  payrollEntries as payrollEntriesTable,
+  loanPayments as loanPaymentsTable,
+  loans as loansTable,
+} from '@shared/schema';
 
 vi.mock('./storage', () => ({
   storage: {
@@ -12,6 +18,7 @@ vi.mock('./storage', () => ({
     getLoans: vi.fn(),
     getVacationRequests: vi.fn(),
     getEmployeeEvents: vi.fn(),
+    getCompanies: vi.fn(),
     createNotification: vi.fn(),
   },
 }));
@@ -48,9 +55,12 @@ describe('payroll generate', () => {
     vi.mocked(storage.getLoans).mockReset();
     vi.mocked(storage.getVacationRequests).mockReset();
     vi.mocked(storage.getEmployeeEvents).mockReset();
+    vi.mocked(storage.getCompanies).mockReset();
     vi.mocked(storage.createNotification).mockReset();
     vi.mocked(db.query.payrollRuns.findFirst).mockReset();
     vi.mocked(db.transaction).mockReset();
+
+    vi.mocked(storage.getCompanies).mockResolvedValue([] as any);
   });
 
   it('returns 409 when overlapping payroll run exists', async () => {
@@ -83,20 +93,24 @@ describe('payroll generate', () => {
 
     const loanData = [
       {
+        id: 'loan-1',
         employeeId: 'e1',
         status: 'active',
-        remainingAmount: '500',
+        remainingAmount: '90',
         monthlyDeduction: '100',
-        startDate: '2024-01-01',
+        startDate: '2023-12-01',
         endDate: '2024-06-01',
+        createdAt: '2023-12-15T00:00:00.000Z',
       },
       {
+        id: 'loan-2',
         employeeId: 'e1',
         status: 'active',
-        remainingAmount: '300',
-        monthlyDeduction: '50',
-        startDate: '2024-02-01',
+        remainingAmount: '200',
+        monthlyDeduction: '75',
+        startDate: '2023-11-15',
         endDate: '2024-05-01',
+        createdAt: '2023-11-20T00:00:00.000Z',
       },
     ] as any;
     vi.mocked(storage.getLoans).mockImplementation(async (start, end) =>
@@ -144,10 +158,48 @@ describe('payroll generate', () => {
       ),
     );
 
-    const insert = vi.fn().mockImplementation(() => ({
-      values: vi.fn().mockImplementation((vals) => ({ returning: vi.fn().mockResolvedValue([{ id: 'run1', ...vals }]) })),
-    }));
-    const update = vi.fn().mockReturnValue({ set: vi.fn().mockReturnValue({ where: vi.fn() }) });
+    const insertedLoanPayments: any[] = [];
+    const updateSetCalls: any[] = [];
+
+    const insert = vi.fn().mockImplementation((table) => {
+      if (table === payrollRuns) {
+        return {
+          values: (vals: any) => ({
+            returning: vi.fn().mockResolvedValue([{ id: 'run1', ...vals }]),
+          }),
+        };
+      }
+      if (table === payrollEntriesTable) {
+        return {
+          values: vi.fn().mockResolvedValue(undefined),
+        };
+      }
+      if (table === loanPaymentsTable) {
+        return {
+          values: vi.fn().mockImplementation((vals: any) => {
+            if (Array.isArray(vals)) {
+              insertedLoanPayments.push(...vals);
+            } else {
+              insertedLoanPayments.push(vals);
+            }
+            return Promise.resolve();
+          }),
+        };
+      }
+      throw new Error('Unexpected insert table');
+    });
+
+    const update = vi.fn().mockImplementation((table) => {
+      if (table !== loansTable) {
+        throw new Error('Unexpected update table');
+      }
+      return {
+        set: (vals: any) => {
+          updateSetCalls.push(vals);
+          return { where: vi.fn().mockResolvedValue(undefined) };
+        },
+      };
+    });
     const tx = { insert, update, rollback: vi.fn() } as any;
     vi.mocked(db.transaction).mockImplementation(async cb => cb(tx));
 
@@ -157,8 +209,8 @@ describe('payroll generate', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.grossAmount).toBe('3000');
-    expect(res.body.totalDeductions).toBe('100');
-    expect(res.body.netAmount).toBe('2900');
+    expect(res.body.totalDeductions).toBe('165');
+    expect(res.body.netAmount).toBe('2835');
     expect(storage.getLoans).toHaveBeenCalledWith(
       new Date('2024-01-01'),
       new Date('2024-01-30'),
@@ -178,6 +230,30 @@ describe('payroll generate', () => {
     expect(storage.createNotification).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'loan_deduction' }),
     );
+
+    expect(updateSetCalls).toEqual([
+      { remainingAmount: '125.00', status: 'active' },
+      { remainingAmount: '0.00', status: 'completed' },
+    ]);
+
+    expect(insertedLoanPayments).toEqual([
+      {
+        loanId: 'loan-2',
+        payrollRunId: 'run1',
+        employeeId: 'e1',
+        amount: '75.00',
+        appliedDate: '2024-01-30',
+        source: 'payroll',
+      },
+      {
+        loanId: 'loan-1',
+        payrollRunId: 'run1',
+        employeeId: 'e1',
+        amount: '90.00',
+        appliedDate: '2024-01-30',
+        source: 'payroll',
+      },
+    ]);
   });
 
   it('rolls back transaction on failure', async () => {

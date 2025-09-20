@@ -7,6 +7,7 @@ import {
   payrollRuns,
   payrollEntries as payrollEntriesTable,
   loans as loansTable,
+  loanPayments as loanPaymentsTable,
 } from "@shared/schema";
 import { z } from "zod";
 import { db } from "../db";
@@ -21,6 +22,17 @@ const deductionsSchema = z.object({
   socialSecurityDeduction: z.number().optional(),
   healthInsuranceDeduction: z.number().optional(),
 });
+
+const toComparableTime = (value: unknown) => {
+  if (!value) return Number.POSITIVE_INFINITY;
+  if (value instanceof Date) {
+    const time = value.getTime();
+    return Number.isNaN(time) ? Number.POSITIVE_INFINITY : time;
+  }
+  const date = new Date(String(value));
+  const time = date.getTime();
+  return Number.isNaN(time) ? Number.POSITIVE_INFINITY : time;
+};
 
 payrollRouter.get("/", async (req, res, next) => {
   try {
@@ -206,6 +218,34 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
       })
     );
 
+    const entriesByEmployee = new Map<string, (typeof payrollEntries)[number]>();
+    for (const entry of payrollEntries) {
+      entriesByEmployee.set(entry.employeeId, entry);
+    }
+
+    const activeLoansByEmployee = new Map<string, typeof loans[number][]>();
+    for (const loan of loans) {
+      if (loan.status !== "active") continue;
+      const remaining = Number.parseFloat(String(loan.remainingAmount ?? 0));
+      if (!(remaining > 0)) continue;
+      const bucket = activeLoansByEmployee.get(loan.employeeId);
+      if (bucket) {
+        bucket.push(loan);
+      } else {
+        activeLoansByEmployee.set(loan.employeeId, [loan]);
+      }
+    }
+
+    for (const loanList of activeLoansByEmployee.values()) {
+      loanList.sort((a, b) => {
+        const startDiff = toComparableTime(a.startDate) - toComparableTime(b.startDate);
+        if (startDiff !== 0) return startDiff;
+        const createdDiff = toComparableTime(a.createdAt) - toComparableTime(b.createdAt);
+        if (createdDiff !== 0) return createdDiff;
+        return a.id.localeCompare(b.id);
+      });
+    }
+
     // Create notifications for significant payroll events
     for (const entry of payrollEntries) {
       if (entry.vacationDays > 0) {
@@ -274,22 +314,70 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
           });
         }
 
-        for (const loan of loans.filter(l => l.status === "active")) {
-          const loanDeduction = payrollEntries.find(
-            entry => entry.employeeId === loan.employeeId,
-          )?.loanDeduction;
-          if (loanDeduction && loanDeduction > 0) {
-            const newRemaining = Math.max(
-              0,
-              parseFloat(loan.remainingAmount) - loanDeduction,
-            );
+        for (const [employeeId, entry] of entriesByEmployee.entries()) {
+          let remainingDeduction = entry.loanDeduction;
+          if (!remainingDeduction || remainingDeduction <= 0) continue;
+
+          const employeeLoans = activeLoansByEmployee.get(employeeId);
+          if (!employeeLoans || employeeLoans.length === 0) continue;
+
+          const paymentsToInsert: Array<{
+            loanId: string;
+            payrollRunId: string;
+            employeeId: string;
+            amount: string;
+            appliedDate: string;
+            source: string;
+          }> = [];
+
+          for (const loan of employeeLoans) {
+            if (remainingDeduction <= 0) {
+              break;
+            }
+
+            const remainingAmount = Number.parseFloat(String(loan.remainingAmount ?? 0));
+            const monthlyCap = Number.parseFloat(String(loan.monthlyDeduction ?? 0));
+
+            if (!Number.isFinite(remainingAmount) || remainingAmount <= 0) {
+              continue;
+            }
+            if (!Number.isFinite(monthlyCap) || monthlyCap <= 0) {
+              continue;
+            }
+
+            const appliedAmount = Math.min(remainingAmount, monthlyCap, remainingDeduction);
+            if (!(appliedAmount > 0)) {
+              continue;
+            }
+
+            const newRemaining = Math.max(0, remainingAmount - appliedAmount);
+
             await tx
               .update(loansTable)
               .set({
-                remainingAmount: newRemaining.toString(),
+                remainingAmount: newRemaining.toFixed(2),
                 status: newRemaining <= 0 ? "completed" : "active",
               })
               .where(eq(loansTable.id, loan.id));
+
+            paymentsToInsert.push({
+              loanId: loan.id,
+              payrollRunId: newRun.id,
+              employeeId,
+              amount: appliedAmount.toFixed(2),
+              appliedDate: endDate,
+              source: "payroll",
+            });
+
+            remainingDeduction = Math.max(0, remainingDeduction - appliedAmount);
+            loan.remainingAmount = newRemaining.toFixed(2) as any;
+            if (newRemaining <= 0) {
+              loan.status = "completed" as any;
+            }
+          }
+
+          if (paymentsToInsert.length > 0) {
+            await tx.insert(loanPaymentsTable).values(paymentsToInsert);
           }
         }
 
