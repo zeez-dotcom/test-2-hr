@@ -321,12 +321,11 @@ export const payrollEntries = pgTable(
 export const loanPayments = pgTable("loan_payments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   loanId: varchar("loan_id").references(() => loans.id).notNull(),
+  payrollRunId: varchar("payroll_run_id").references(() => payrollRuns.id).notNull(),
   employeeId: varchar("employee_id").references(() => employees.id).notNull(),
-  payrollEntryId: varchar("payroll_entry_id").references(() => payrollEntries.id),
   amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
-  paidAt: date("paid_at").default(sql`CURRENT_DATE`),
+  appliedDate: date("applied_date").default(sql`CURRENT_DATE`).notNull(),
   source: text("source").notNull().default("payroll"),
-  notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -592,6 +591,23 @@ export const insertLoanSchema = createInsertSchema(loans)
     }, z.string().optional()),
   });
 
+export const insertLoanPaymentSchema = createInsertSchema(loanPayments)
+  .omit({
+    id: true,
+    createdAt: true,
+  })
+  .extend({
+    loanId: z.preprocess(normalizeBigId, z.string()),
+    payrollRunId: z.preprocess(normalizeBigId, z.string()),
+    employeeId: z.preprocess(normalizeBigId, z.string()),
+    amount: z.preprocess(parseNumber, z.number()),
+    appliedDate: z.preprocess(v => {
+      const val = parseDate(v);
+      return val === null ? undefined : val;
+    }, z.string().optional()),
+    source: z.preprocess(v => emptyToUndef(v), z.string().optional()),
+  });
+
 export const insertCarSchema = createInsertSchema(cars)
   .omit({
     id: true,
@@ -742,6 +758,7 @@ export type InsertVacationRequest = z.infer<typeof insertVacationRequestSchema>;
 export type Loan = typeof loans.$inferSelect;
 export type InsertLoan = z.infer<typeof insertLoanSchema>;
 export type LoanPayment = typeof loanPayments.$inferSelect;
+export type InsertLoanPayment = z.infer<typeof insertLoanPaymentSchema>;
 
 export type Asset = typeof assets.$inferSelect;
 export type InsertAsset = z.infer<typeof insertAssetSchema>;
@@ -953,9 +970,9 @@ export const loanPaymentsRelations = relations(loanPayments, ({ one }) => ({
     fields: [loanPayments.employeeId],
     references: [employees.id],
   }),
-  payrollEntry: one(payrollEntries, {
-    fields: [loanPayments.payrollEntryId],
-    references: [payrollEntries.id],
+  payrollRun: one(payrollRuns, {
+    fields: [loanPayments.payrollRunId],
+    references: [payrollRuns.id],
   }),
 }));
 
