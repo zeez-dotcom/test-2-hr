@@ -27,6 +27,7 @@ vi.mock('./storage', () => {
       createEmployeeEvent: vi.fn(),
       getEmployeeReport: vi.fn(),
       getCompanyPayrollSummary: vi.fn(),
+      getLoanReportDetails: vi.fn(),
       getLoanBalances: vi.fn(),
       getAssetUsage: vi.fn(),
     },
@@ -1035,14 +1036,34 @@ describe('employee routes', () => {
     ]);
   });
 
-  it('GET /api/reports/loan-balances returns balances', async () => {
-    const balances = [{ employeeId: 'e1', balance: 100 }];
-    (storage.getLoanBalances as any).mockResolvedValue(balances);
+  it('GET /api/reports/loan-balances returns loan details', async () => {
+    const details = [
+      {
+        loanId: 'l1',
+        employeeId: 'e1',
+        originalAmount: 500,
+        remainingAmount: 200,
+        totalRepaid: 300,
+        deductionInRange: 100,
+        status: 'active',
+        pausedByVacation: false,
+        pauseNote: null,
+        startDate: '2024-01-01',
+        endDate: null,
+      },
+    ];
+    (storage.getLoanReportDetails as any).mockResolvedValue(details);
 
-    const res = await request(app).get('/api/reports/loan-balances');
+    const res = await request(app)
+      .get('/api/reports/loan-balances')
+      .query({ startDate: '2024-01-01', endDate: '2024-03-31' });
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual(balances);
+    expect(storage.getLoanReportDetails).toHaveBeenCalledWith({
+      startDate: '2024-01-01',
+      endDate: '2024-03-31',
+    });
+    expect(res.body).toEqual(details);
   });
 
   it('GET /api/reports/asset-usage returns usage', async () => {
