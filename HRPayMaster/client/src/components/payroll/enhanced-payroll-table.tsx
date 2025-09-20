@@ -19,7 +19,7 @@ import {
   ClipboardPaste,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, calculateWorkingDaysAdjustment } from "@/lib/utils";
 import type { PayrollEntry } from "@shared/schema";
 import { SmartVacationForm } from "@/components/payroll/smart-vacation-form";
 import { SmartDeductionForm } from "@/components/payroll/smart-deduction-form";
@@ -276,6 +276,9 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
                 Base Salary
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Working Days Adjustment
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Working Days
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -302,7 +305,14 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
             {entries.map((entry) => {
               const healthIndicator = getHealthIndicator(entry);
               const HealthIcon = healthIndicator.icon;
-              
+              const workingDaysAdjustment = calculateWorkingDaysAdjustment(entry);
+              const adjustmentClass =
+                workingDaysAdjustment < 0
+                  ? "text-red-600"
+                  : workingDaysAdjustment > 0
+                    ? "text-green-600"
+                    : "text-gray-900";
+
               return (
                 <tr key={entry.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -321,17 +331,22 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    <EditableCell 
-                      entryId={entry.id} 
-                      field="baseSalary" 
-                      value={entry.baseSalary} 
+                    <EditableCell
+                      entryId={entry.id}
+                      field="baseSalary"
+                      value={entry.baseSalary}
                     />
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <span className={`font-medium ${adjustmentClass}`}>
+                      {formatCurrency(workingDaysAdjustment)}
+                    </span>
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    <EditableCell 
-                      entryId={entry.id} 
-                      field="actualWorkingDays" 
-                      value={entry.actualWorkingDays} 
+                    <EditableCell
+                      entryId={entry.id}
+                      field="actualWorkingDays"
+                      value={entry.actualWorkingDays}
                     />
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">

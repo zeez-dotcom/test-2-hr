@@ -658,15 +658,21 @@ export class DatabaseStorage implements IStorage {
         id: employees.id,
         firstName: employees.firstName,
         lastName: employees.lastName,
+        salary: employees.salary,
       }
     })
     .from(payrollEntries)
     .leftJoin(employees, eq(payrollEntries.employeeId, employees.id))
     .where(eq(payrollEntries.payrollRunId, id));
-    
+
+    const normalizedEntries = entries.map((entry) => ({
+      ...entry,
+      employee: entry.employee ?? undefined,
+    }));
+
     return {
       ...payrollRun,
-      entries
+      entries: normalizedEntries
     };
   }
 

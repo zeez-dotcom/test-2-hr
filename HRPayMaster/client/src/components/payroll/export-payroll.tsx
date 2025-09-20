@@ -17,7 +17,7 @@ import {
   CreditCard,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, calculateWorkingDaysAdjustment } from "@/lib/utils";
 import { openPdf } from "@/lib/pdf";
 import type { TDocumentDefinitions } from "pdfmake/interfaces";
 import type { PayrollRunWithEntries, PayrollEntry, Employee } from "@shared/schema";
@@ -38,10 +38,10 @@ export function ExportPayroll({ payrollRun, isOpen, onClose }: ExportPayrollProp
   });
 
   if (!isOpen) return null;
-  const entries: (PayrollEntry & { employee?: Employee })[] =
-    (payrollRun.entries ?? []).map(entry => ({
+  const entries: PayrollEntry[] =
+    (payrollRun.entries ?? []).map((entry): PayrollEntry => ({
       ...entry,
-      employee: employees?.find(e => e.id === entry.employeeId),
+      employee: employees?.find(e => e.id === entry.employeeId) ?? entry.employee,
     }));
   // Get unique work locations
   const workLocations = Array.from(
@@ -105,7 +105,7 @@ export function ExportPayroll({ payrollRun, isOpen, onClose }: ExportPayrollProp
     // Create CSV content
     const headers = [
       "Employee ID", "Employee Name", "Position", "Work Location", 
-      "Base Salary", "Bonus", "Gross Pay", "Working Days", "Actual Working Days", "Vacation Days",
+      "Base Salary", "Bonus", "Gross Pay", "Working Days", "Actual Working Days", "Working Days Adjustment", "Vacation Days",
       "Tax Deduction", "Social Security", "Health Insurance", "Loan Deduction", "Other Deductions", 
       "Total Deductions", "Net Pay", "Adjustment Reason"
     ];
@@ -120,7 +120,8 @@ export function ExportPayroll({ payrollRun, isOpen, onClose }: ExportPayrollProp
         parseFloat(entry.otherDeductions?.toString() || "0")
       );
       const netPay = grossPay - totalDeductions;
-      
+      const workingDaysAdjustment = calculateWorkingDaysAdjustment(entry);
+
       return [
         entry.employeeId,
         `${entry.employee?.firstName} ${entry.employee?.lastName}`,
@@ -131,6 +132,7 @@ export function ExportPayroll({ payrollRun, isOpen, onClose }: ExportPayrollProp
         grossPay,
         entry.workingDays,
         entry.actualWorkingDays,
+        workingDaysAdjustment.toFixed(3),
         entry.vacationDays || 0,
         entry.taxDeduction || 0,
         entry.socialSecurityDeduction || 0,

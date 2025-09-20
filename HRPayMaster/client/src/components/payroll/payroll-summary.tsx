@@ -1,27 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Users, Calculator, TrendingDown, TrendingUp, AlertCircle } from "lucide-react";
-import { formatCurrency, formatDate } from "@/lib/utils";
-
-interface PayrollEntry {
-  id: string;
-  employeeId: string;
-  grossPay: string;
-  workingDays: number;
-  actualWorkingDays: number;
-  vacationDays: number;
-  taxDeduction: string;
-  socialSecurityDeduction: string;
-  healthInsuranceDeduction: string;
-  loanDeduction: string;
-  otherDeductions: string;
-  netPay: string;
-  adjustmentReason?: string;
-  employee?: {
-    firstName: string;
-    lastName: string;
-  };
-}
+import { formatCurrency, calculateWorkingDaysAdjustment } from "@/lib/utils";
+import type { PayrollEntry } from "@shared/schema";
 
 interface PayrollSummaryProps {
   entries: PayrollEntry[];
@@ -39,9 +20,15 @@ export default function PayrollSummary({
   totalDeductions 
 }: PayrollSummaryProps) {
 
-  const employeesWithAdjustments = entries.filter(entry => 
-    entry.adjustmentReason || entry.vacationDays > 0 || parseFloat(entry.loanDeduction) > 0
-  );
+  const employeesWithAdjustments = entries.filter(entry => {
+    const workingDaysAdjustment = calculateWorkingDaysAdjustment(entry);
+    return (
+      entry.adjustmentReason ||
+      entry.vacationDays > 0 ||
+      parseFloat(entry.loanDeduction) > 0 ||
+      workingDaysAdjustment !== 0
+    );
+  });
 
   const totalVacationDays = entries.reduce((sum, entry) => sum + entry.vacationDays, 0);
   const totalLoanDeductions = entries.reduce((sum, entry) => sum + parseFloat(entry.loanDeduction), 0);
@@ -189,6 +176,9 @@ export default function PayrollSummary({
                     Working Days
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Working Days Adjustment
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Gross Pay
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -204,12 +194,19 @@ export default function PayrollSummary({
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {entries.map((entry) => {
-                  const totalEmployeeDeductions = 
-                    parseFloat(entry.taxDeduction) + 
-                    parseFloat(entry.socialSecurityDeduction) + 
-                    parseFloat(entry.healthInsuranceDeduction) + 
-                    parseFloat(entry.loanDeduction) + 
+                  const totalEmployeeDeductions =
+                    parseFloat(entry.taxDeduction) +
+                    parseFloat(entry.socialSecurityDeduction) +
+                    parseFloat(entry.healthInsuranceDeduction) +
+                    parseFloat(entry.loanDeduction) +
                     parseFloat(entry.otherDeductions);
+                  const workingDaysAdjustment = calculateWorkingDaysAdjustment(entry);
+                  const adjustmentClass =
+                    workingDaysAdjustment < 0
+                      ? "text-red-600"
+                      : workingDaysAdjustment > 0
+                        ? "text-green-600"
+                        : "text-gray-900";
 
                   return (
                     <tr key={entry.id} className="hover:bg-gray-50">
@@ -227,6 +224,11 @@ export default function PayrollSummary({
                             -{entry.vacationDays} vacation
                           </div>
                         )}
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm">
+                        <span className={`font-medium ${adjustmentClass}`}>
+                          {formatCurrency(workingDaysAdjustment)}
+                        </span>
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
                         {formatCurrency(parseFloat(entry.grossPay))}

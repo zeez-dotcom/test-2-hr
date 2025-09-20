@@ -15,6 +15,55 @@ export function formatCurrency(amount: number | string): string {
   }).format(num);
 }
 
+type NumericLike = number | string | null | undefined;
+
+const toNumericValue = (value: NumericLike): number => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  return 0;
+};
+
+export function calculateWorkingDaysAdjustment(entry: {
+  baseSalary?: NumericLike;
+  employee?: { salary?: NumericLike } | null;
+  actualWorkingDays?: number | null;
+  workingDays?: number | null;
+}): number {
+  const baseSalary = toNumericValue(entry.baseSalary);
+  const fullSalarySource =
+    entry.employee?.salary !== undefined && entry.employee?.salary !== null
+      ? entry.employee.salary
+      : entry.baseSalary;
+  const fullSalary = toNumericValue(fullSalarySource);
+
+  const difference = fullSalary - baseSalary;
+  if (difference === 0) {
+    return 0;
+  }
+
+  const actualDays = entry.actualWorkingDays ?? entry.workingDays;
+  const standardDays = entry.workingDays ?? entry.actualWorkingDays;
+
+  if (typeof actualDays === 'number' && typeof standardDays === 'number') {
+    if (actualDays < standardDays) {
+      return -Math.abs(difference);
+    }
+
+    if (actualDays > standardDays) {
+      return Math.abs(difference);
+    }
+  }
+
+  return difference;
+}
+
 export function formatDate(date: string | Date): string {
   const d = typeof date === 'string' ? new Date(date) : date;
   return new Intl.DateTimeFormat('en-US', {

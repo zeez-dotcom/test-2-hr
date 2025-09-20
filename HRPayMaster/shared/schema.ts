@@ -712,7 +712,16 @@ export type InsertEmployeeCustomValue = z.infer<typeof insertEmployeeCustomValue
 export type PayrollRun = typeof payrollRuns.$inferSelect;
 export type InsertPayrollRun = z.infer<typeof insertPayrollRunSchema>;
 
-export type PayrollEntry = typeof payrollEntries.$inferSelect;
+type BasePayrollEntry = typeof payrollEntries.$inferSelect;
+export type PayrollEntryEmployee = Partial<Employee> & {
+  id: Employee["id"];
+  firstName: Employee["firstName"];
+  lastName?: Employee["lastName"];
+  salary?: Employee["salary"];
+};
+export type PayrollEntry = BasePayrollEntry & {
+  employee?: PayrollEntryEmployee;
+};
 export type InsertPayrollEntry = z.infer<typeof insertPayrollEntrySchema>;
 
 export type VacationRequest = typeof vacationRequests.$inferSelect;
