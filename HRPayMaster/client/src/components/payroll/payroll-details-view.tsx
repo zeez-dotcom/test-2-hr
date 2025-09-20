@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { DollarSign, User, Calendar, FileText } from "lucide-react";
 import type { PayrollRunWithEntries } from "@shared/schema";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, calculateWorkingDaysAdjustment } from "@/lib/utils";
 
 interface PayrollDetailsViewProps {
   payrollId: string;
@@ -134,6 +134,9 @@ export default function PayrollDetailsView({ payrollId }: PayrollDetailsViewProp
                       Base Salary
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Working Days Adjustment
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Working Days
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -151,42 +154,57 @@ export default function PayrollDetailsView({ payrollId }: PayrollDetailsViewProp
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {payrollRun.entries.map((entry) => (
-                    <tr key={entry.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
-                          Employee {entry.employeeId}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          ID: {entry.employeeId}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {formatCurrency(entry.baseSalary || entry.grossPay)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {entry.workingDays || 30}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {entry.vacationDays || 0}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
-                        +{formatCurrency(parseFloat(entry.bonusAmount) || 0)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600">
-                        -{formatCurrency(
-                          (parseFloat(entry.taxDeduction) || 0) +
-                          (parseFloat(entry.socialSecurityDeduction) || 0) +
-                          (parseFloat(entry.healthInsuranceDeduction) || 0) +
-                          (parseFloat(entry.loanDeduction) || 0) +
-                          (parseFloat(entry.otherDeductions) || 0)
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {formatCurrency(entry.netPay)}
-                      </td>
-                    </tr>
-                  ))}
+                  {payrollRun.entries.map((entry) => {
+                    const workingDaysAdjustment = calculateWorkingDaysAdjustment(entry);
+                    const adjustmentClass =
+                      workingDaysAdjustment < 0
+                        ? "text-red-600"
+                        : workingDaysAdjustment > 0
+                          ? "text-green-600"
+                          : "text-gray-900";
+
+                    return (
+                      <tr key={entry.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">
+                            Employee {entry.employeeId}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            ID: {entry.employeeId}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {formatCurrency(entry.baseSalary || entry.grossPay)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          <span className={`font-medium ${adjustmentClass}`}>
+                            {formatCurrency(workingDaysAdjustment)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {entry.workingDays || 30}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {entry.vacationDays || 0}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
+                          +{formatCurrency(parseFloat(entry.bonusAmount) || 0)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600">
+                          -{formatCurrency(
+                            (parseFloat(entry.taxDeduction) || 0) +
+                            (parseFloat(entry.socialSecurityDeduction) || 0) +
+                            (parseFloat(entry.healthInsuranceDeduction) || 0) +
+                            (parseFloat(entry.loanDeduction) || 0) +
+                            (parseFloat(entry.otherDeductions) || 0)
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {formatCurrency(entry.netPay)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
