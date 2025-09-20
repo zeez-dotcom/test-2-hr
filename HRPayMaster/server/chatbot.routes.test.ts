@@ -15,6 +15,7 @@ vi.mock('./db', () => ({
 
 vi.mock('./storage', () => ({
   storage: {
+    getLoanReportDetails: vi.fn(),
     getLoanBalances: vi.fn(),
     getEmployeeReport: vi.fn(),
     getMonthlyEmployeeSummary: vi.fn(),

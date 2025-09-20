@@ -318,6 +318,18 @@ export const payrollEntries = pgTable(
   })
 );
 
+export const loanPayments = pgTable("loan_payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  loanId: varchar("loan_id").references(() => loans.id).notNull(),
+  employeeId: varchar("employee_id").references(() => employees.id).notNull(),
+  payrollEntryId: varchar("payroll_entry_id").references(() => payrollEntries.id),
+  amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
+  paidAt: date("paid_at").default(sql`CURRENT_DATE`),
+  source: text("source").notNull().default("payroll"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Notifications table for document expiry alerts
 export const notifications = pgTable("notifications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -729,6 +741,7 @@ export type InsertVacationRequest = z.infer<typeof insertVacationRequestSchema>;
 
 export type Loan = typeof loans.$inferSelect;
 export type InsertLoan = z.infer<typeof insertLoanSchema>;
+export type LoanPayment = typeof loanPayments.$inferSelect;
 
 export type Asset = typeof assets.$inferSelect;
 export type InsertAsset = z.infer<typeof insertAssetSchema>;
@@ -919,7 +932,7 @@ export const vacationRequestsRelations = relations(vacationRequests, ({ one }) =
   }),
 }));
 
-export const loansRelations = relations(loans, ({ one }) => ({
+export const loansRelations = relations(loans, ({ one, many }) => ({
   employee: one(employees, {
     fields: [loans.employeeId],
     references: [employees.id],
@@ -927,6 +940,22 @@ export const loansRelations = relations(loans, ({ one }) => ({
   approver: one(employees, {
     fields: [loans.approvedBy],
     references: [employees.id],
+  }),
+  payments: many(loanPayments),
+}));
+
+export const loanPaymentsRelations = relations(loanPayments, ({ one }) => ({
+  loan: one(loans, {
+    fields: [loanPayments.loanId],
+    references: [loans.id],
+  }),
+  employee: one(employees, {
+    fields: [loanPayments.employeeId],
+    references: [employees.id],
+  }),
+  payrollEntry: one(payrollEntries, {
+    fields: [loanPayments.payrollEntryId],
+    references: [payrollEntries.id],
   }),
 }));
 

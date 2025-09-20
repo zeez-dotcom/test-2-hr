@@ -136,13 +136,17 @@ reportsRouter.get("/api/reports/payroll", async (req, res, next) => {
   }
 });
 
-// Loan balances
-reportsRouter.get("/api/reports/loan-balances", async (_req, res, next) => {
+// Loan balances / loan repayment details
+reportsRouter.get("/api/reports/loan-balances", async (req, res, next) => {
   try {
-    const report = await storage.getLoanBalances();
+    const { startDate, endDate } = reportQuerySchema.parse(req.query);
+    const report = await storage.getLoanReportDetails({ startDate, endDate });
     res.json(report);
   } catch (error) {
     console.error(error);
+    if (error instanceof z.ZodError) {
+      return next(new HttpError(400, "Invalid query parameters", error.errors));
+    }
     next(new HttpError(500, "Failed to fetch loan balances", error));
   }
 });

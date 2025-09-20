@@ -15,6 +15,7 @@ import {
   type Loan,
   type InsertLoan,
   type LoanWithEmployee,
+  loanPayments,
   type Asset,
   type InsertAsset,
   type AssetWithAssignment,
@@ -71,7 +72,7 @@ import {
   type InsertAttendance
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, gte, lte, sql, type AnyColumn } from "drizzle-orm";
+import { eq, desc, and, gte, lte, sql, inArray, type AnyColumn } from "drizzle-orm";
 
 export class DuplicateEmployeeCodeError extends Error {
   constructor(code: string) {
@@ -104,6 +105,21 @@ export interface PayrollDepartmentSummaryRow {
 export interface LoanBalance {
   employeeId: string;
   balance: number;
+}
+
+export interface LoanReportDetail {
+  loanId: string;
+  employeeId: string;
+  employee?: Employee;
+  originalAmount: number;
+  remainingAmount: number;
+  status: Loan["status"];
+  totalRepaid: number;
+  deductionInRange: number;
+  pausedByVacation: boolean;
+  pauseNote: string | null;
+  startDate: string;
+  endDate: string | null;
 }
 
 export interface AssetUsage {
@@ -197,6 +213,7 @@ export interface IStorage {
   createLoan(loan: InsertLoan): Promise<Loan>;
   updateLoan(id: string, loan: Partial<InsertLoan>): Promise<Loan | undefined>;
   deleteLoan(id: string): Promise<boolean>;
+  getLoanReportDetails(range: { startDate: string; endDate: string }): Promise<LoanReportDetail[]>;
 
   // Asset methods
   getAssets(): Promise<AssetWithAssignment[]>;
@@ -1635,6 +1652,119 @@ export class DatabaseStorage implements IStorage {
       grossPay: Number(r.gross),
       netPay: Number(r.net),
     }));
+  }
+
+  async getLoanReportDetails({ startDate, endDate }: { startDate: string; endDate: string }): Promise<LoanReportDetail[]> {
+    const loansWithEmployees = await db.query.loans.findMany({
+      with: { employee: true },
+      orderBy: desc(loans.createdAt),
+    });
+
+    if (loansWithEmployees.length === 0) {
+      return [];
+    }
+
+    const loanIds = loansWithEmployees.map(loan => loan.id);
+    const employeeIds = loansWithEmployees.map(loan => loan.employeeId);
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    const paymentRows = loanIds.length
+      ? await db
+          .select({
+            loanId: loanPayments.loanId,
+            amount: loanPayments.amount,
+            paidAt: loanPayments.paidAt,
+            payrollDate: payrollRuns.startDate,
+          })
+          .from(loanPayments)
+          .leftJoin(payrollEntries, eq(loanPayments.payrollEntryId, payrollEntries.id))
+          .leftJoin(payrollRuns, eq(payrollEntries.payrollRunId, payrollRuns.id))
+          .where(inArray(loanPayments.loanId, loanIds))
+      : [];
+
+    const totalPaid = new Map<string, number>();
+    const inRangePaid = new Map<string, number>();
+
+    for (const row of paymentRows) {
+      if (!row.loanId) continue;
+      const amount = Number(row.amount ?? 0);
+      if (!Number.isFinite(amount)) continue;
+
+      totalPaid.set(row.loanId, (totalPaid.get(row.loanId) ?? 0) + amount);
+
+      const rawDate = (row.paidAt ?? row.payrollDate) as string | null;
+      if (!rawDate) continue;
+
+      const paymentDate = new Date(rawDate);
+      if (Number.isNaN(paymentDate.getTime())) continue;
+
+      if (paymentDate >= start && paymentDate <= end) {
+        inRangePaid.set(row.loanId, (inRangePaid.get(row.loanId) ?? 0) + amount);
+      }
+    }
+
+    const pauseRows = employeeIds.length
+      ? await db
+          .select({
+            employeeId: vacationRequests.employeeId,
+            start: vacationRequests.startDate,
+            end: vacationRequests.endDate,
+            reason: vacationRequests.reason,
+          })
+          .from(vacationRequests)
+          .where(
+            and(
+              inArray(vacationRequests.employeeId, employeeIds),
+              eq(vacationRequests.status, "approved"),
+              lte(vacationRequests.startDate, endDate),
+              gte(vacationRequests.endDate, startDate),
+            ),
+          )
+      : [];
+
+    const pauseLookup = new Map<string, { note: string; paused: boolean }>();
+    for (const row of pauseRows) {
+      if (!row.employeeId) continue;
+      const reason = String(row.reason ?? "");
+      const wantsPause = reason.toLowerCase().includes("[pause-loans]");
+      if (!wantsPause) continue;
+
+      const startLabel = row.start ?? undefined;
+      const endLabel = row.end ?? undefined;
+      const note =
+        startLabel && endLabel
+          ? `Paused via approved vacation (${startLabel} – ${endLabel})`
+          : "Paused via approved vacation";
+
+      pauseLookup.set(row.employeeId, { note, paused: true });
+    }
+
+    return loansWithEmployees.map(loan => {
+      const originalAmount = Number(loan.amount ?? 0);
+      const remainingAmount = Number(loan.remainingAmount ?? 0);
+      const totalRepaid = totalPaid.has(loan.id)
+        ? totalPaid.get(loan.id) ?? 0
+        : Math.max(0, originalAmount - remainingAmount);
+
+      const deductionInRange = inRangePaid.get(loan.id) ?? 0;
+      const pauseInfo = pauseLookup.get(loan.employeeId);
+
+      return {
+        loanId: loan.id,
+        employeeId: loan.employeeId,
+        employee: loan.employee || undefined,
+        originalAmount,
+        remainingAmount,
+        status: loan.status,
+        totalRepaid,
+        deductionInRange,
+        pausedByVacation: Boolean(pauseInfo?.paused),
+        pauseNote: pauseInfo?.note ?? null,
+        startDate: loan.startDate,
+        endDate: loan.endDate,
+      } satisfies LoanReportDetail;
+    });
   }
 
   async getLoanBalances(): Promise<LoanBalance[]> {

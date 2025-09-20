@@ -1,11 +1,17 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-const { selectMock } = vi.hoisted(() => ({
-  selectMock: vi.fn()
+const { selectMock, loansFindManyMock } = vi.hoisted(() => ({
+  selectMock: vi.fn(),
+  loansFindManyMock: vi.fn(),
 }));
 
 vi.mock('./db', () => ({
-  db: { select: selectMock }
+  db: {
+    select: selectMock,
+    query: {
+      loans: { findMany: loansFindManyMock },
+    },
+  }
 }));
 
 import { storage } from './storage';
@@ -13,6 +19,7 @@ import { storage } from './storage';
 describe('getCompanyPayrollSummary', () => {
   beforeEach(() => {
     selectMock.mockReset();
+    loansFindManyMock.mockReset();
   });
 
   it('groups payroll entries by period', async () => {
@@ -54,6 +61,7 @@ describe('getCompanyPayrollSummary', () => {
 describe('getLoanBalances', () => {
   beforeEach(() => {
     selectMock.mockReset();
+    loansFindManyMock.mockReset();
   });
 
   it('aggregates remaining loan amounts by employee', async () => {
@@ -72,6 +80,86 @@ describe('getLoanBalances', () => {
     expect(result).toEqual([
       { employeeId: 'e1', balance: 150 },
       { employeeId: 'e2', balance: 200 }
+    ]);
+  });
+});
+
+describe('getLoanReportDetails', () => {
+  beforeEach(() => {
+    selectMock.mockReset();
+    loansFindManyMock.mockReset();
+  });
+
+  it('returns loan metrics with payment and vacation context', async () => {
+    const loan = {
+      id: 'l1',
+      employeeId: 'e1',
+      amount: '500',
+      remainingAmount: '200',
+      status: 'active',
+      startDate: '2024-01-01',
+      endDate: null,
+      employee: { id: 'e1', firstName: 'Ada', lastName: 'Lovelace' },
+    } as any;
+
+    loansFindManyMock.mockResolvedValue([loan]);
+
+    selectMock
+      .mockReturnValueOnce({
+        from: () => ({
+          leftJoin: () => ({
+            leftJoin: () => ({
+              where: async () => [
+                {
+                  loanId: 'l1',
+                  amount: '100',
+                  paidAt: '2024-01-15',
+                  payrollDate: null,
+                },
+                {
+                  loanId: 'l1',
+                  amount: '50',
+                  paidAt: null,
+                  payrollDate: '2023-12-15',
+                },
+              ],
+            }),
+          }),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: () => ({
+          where: async () => [
+            {
+              employeeId: 'e1',
+              start: '2024-01-01',
+              end: '2024-01-10',
+              reason: 'Annual [pause-loans]',
+            },
+          ],
+        }),
+      });
+
+    const result = await storage.getLoanReportDetails({
+      startDate: '2024-01-01',
+      endDate: '2024-01-31',
+    });
+
+    expect(result).toEqual([
+      {
+        loanId: 'l1',
+        employeeId: 'e1',
+        employee: loan.employee,
+        originalAmount: 500,
+        remainingAmount: 200,
+        status: 'active',
+        totalRepaid: 150,
+        deductionInRange: 100,
+        pausedByVacation: true,
+        pauseNote: 'Paused via approved vacation (2024-01-01 – 2024-01-10)',
+        startDate: '2024-01-01',
+        endDate: null,
+      },
     ]);
   });
 });

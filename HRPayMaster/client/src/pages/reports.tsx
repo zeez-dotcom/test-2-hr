@@ -45,7 +45,20 @@ import type {
 } from "@shared/schema";
 // Types for company-level reports
 type PayrollSummary = { period: string; totals: { grossPay: number; netPay: number } };
-type LoanBalance = { employeeId: string; balance: number };
+type LoanReportDetail = {
+  loanId: string;
+  employeeId: string;
+  employee?: Employee;
+  originalAmount: number;
+  remainingAmount: number;
+  totalRepaid: number;
+  deductionInRange: number;
+  status: string;
+  pausedByVacation: boolean;
+  pauseNote: string | null;
+  startDate: string;
+  endDate: string | null;
+};
 type AssetUsage = { assetId: string; name: string; assignments: number };
 type SalaryTrend = { period: string; netPay: number; change: number };
 import { openPdf, buildEmployeeReport, buildEmployeeHistoryReport } from "@/lib/pdf";
@@ -105,7 +118,7 @@ export default function Reports() {
     enabled: Boolean(startDate && endDate),
   });
 
-  const { data: loanBalances, error: loanBalancesError } = useQuery<LoanBalance[]>({
+  const { data: loanDetails, error: loanDetailsError } = useQuery<LoanReportDetail[]>({
     queryKey: ["/api/reports/loan-balances", startDate, endDate],
     queryFn: async () => {
       const res = await apiGet(
@@ -144,7 +157,7 @@ export default function Reports() {
     employeeEventsError ||
     payrollRunsError ||
     payrollSummaryError ||
-    loanBalancesError ||
+    loanDetailsError ||
     assetUsageError ||
     payrollByDeptError
   ) {
@@ -917,25 +930,54 @@ export default function Reports() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {loanBalances && loanBalances.length > 0 ? (
+              {loanDetails && loanDetails.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="min-w-full text-sm">
                     <thead>
                       <tr className="text-left">
+                        <th className="py-2 pr-4">{t('reports.loanId','Loan ID')}</th>
                         <th className="py-2 pr-4">{t('reports.employee','Employee')}</th>
-                        <th className="py-2">{t('reports.balance','Balance')}</th>
+                        <th className="py-2 pr-4">{t('reports.originalAmount','Original Amount')}</th>
+                        <th className="py-2 pr-4">{t('reports.remainingBalance','Remaining Balance')}</th>
+                        <th className="py-2 pr-4">{t('reports.totalRepaid','Total Repaid')}</th>
+                        <th className="py-2 pr-4">{t('reports.rangeDeduction','Deduction (Selected Range)')}</th>
+                        <th className="py-2 pr-4">{t('reports.status','Status')}</th>
+                        <th className="py-2">{t('reports.pauseNote','Pause Note')}</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {loanBalances.map(balance => {
-                        const employee = employees?.find(emp => emp.id === balance.employeeId);
-                        const name = employee
-                          ? `${employee.firstName} ${employee.lastName}`
-                          : balance.employeeId;
+                      {loanDetails.map(detail => {
+                        const employee = detail.employee ?? employees?.find(emp => emp.id === detail.employeeId);
+                        const rawName = employee
+                          ? `${employee.firstName ?? ''} ${employee.lastName ?? ''}`.trim()
+                          : "";
+                        const name = rawName || employee?.employeeCode || detail.employeeId;
+                        const pauseNote = detail.pauseNote
+                          ?? (detail.pausedByVacation
+                            ? t('reports.pauseViaVacation','Paused via approved vacation')
+                            : "—");
+                        const statusLabel = detail.status
+                          ? detail.status.replace(/_/g, ' ')
+                          : t('reports.unknown','Unknown');
+                        const statusVariant = detail.status === 'completed'
+                          ? ('secondary' as const)
+                          : detail.status === 'cancelled'
+                          ? ('destructive' as const)
+                          : detail.status === 'active'
+                          ? ('default' as const)
+                          : ('outline' as const);
                         return (
-                          <tr key={balance.employeeId} className="border-t">
+                          <tr key={detail.loanId} className="border-t align-top">
+                            <td className="py-2 pr-4 font-mono text-xs">{detail.loanId}</td>
                             <td className="py-2 pr-4">{name}</td>
-                            <td className="py-2">{formatCurrency(balance.balance)}</td>
+                            <td className="py-2 pr-4">{formatCurrency(detail.originalAmount)}</td>
+                            <td className="py-2 pr-4">{formatCurrency(detail.remainingAmount)}</td>
+                            <td className="py-2 pr-4">{formatCurrency(detail.totalRepaid)}</td>
+                            <td className="py-2 pr-4">{formatCurrency(detail.deductionInRange)}</td>
+                            <td className="py-2 pr-4">
+                              <Badge variant={statusVariant}>{statusLabel}</Badge>
+                            </td>
+                            <td className="py-2 max-w-[16rem] whitespace-pre-wrap">{pauseNote}</td>
                           </tr>
                         );
                       })}
