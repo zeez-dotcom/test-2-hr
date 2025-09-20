@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import { Button } from "@/components/ui/button";
@@ -10,9 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
-import { apiPost } from "@/lib/http";
+import { apiDelete, apiPost, apiPut } from "@/lib/http";
 import { toastApiError } from "@/lib/toastError";
 import { CheckCircle, Users, AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -26,9 +27,31 @@ import {
   type Employee
 } from "@shared/schema";
 
+function createAssignmentDefaultValues(): InsertAssetAssignment {
+  return {
+    assetId: "",
+    employeeId: "",
+    assignedDate: new Date().toISOString().split("T")[0],
+    status: "active",
+    notes: "",
+  };
+}
+
+function formatStatusLabel(status: string) {
+  if (!status) return "";
+  return status
+    .split(/[\s_-]+/)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export default function Assets() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isAssignOpen, setIsAssignOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [selectedAssignment, setSelectedAssignment] = useState<AssetAssignmentWithDetails | null>(null);
+  const [isUnassignConfirmOpen, setIsUnassignConfirmOpen] = useState(false);
+  const [assignmentToUnassign, setAssignmentToUnassign] = useState<AssetAssignmentWithDetails | null>(null);
   const { toast } = useToast();
   const { t } = useTranslation();
 
@@ -111,7 +134,7 @@ export default function Assets() {
         queryClient.invalidateQueries({ queryKey: ["/api/asset-assignments", data.assetId] });
       }
       queryClient.invalidateQueries({ queryKey: ["/api/asset-assignments"] });
-      setIsAssignOpen(false);
+      handleAssignOpenChange(false);
       toast({ title: t('assets.assigned','Asset assigned') });
     },
   });
@@ -128,14 +151,178 @@ export default function Assets() {
 
   const assignmentForm = useForm<InsertAssetAssignment>({
     resolver: zodResolver(insertAssetAssignmentSchema),
-    defaultValues: {
-      assetId: "",
-      employeeId: "",
-      assignedDate: new Date().toISOString().split("T")[0],
-      status: "active",
-      notes: "",
+    defaultValues: createAssignmentDefaultValues(),
+  });
+
+  const editAssignmentForm = useForm<InsertAssetAssignment>({
+    resolver: zodResolver(insertAssetAssignmentSchema),
+    defaultValues: createAssignmentDefaultValues(),
+  });
+
+  const createStatusValue = assignmentForm.watch("status");
+
+  const assignmentStatusOptions = useMemo(() => {
+    const statuses = new Set<string>(["active", "completed"]);
+    assignments.forEach(assignment => {
+      if (assignment.status) {
+        statuses.add(assignment.status);
+      }
+    });
+    if (selectedAssignment?.status) {
+      statuses.add(selectedAssignment.status);
+    }
+    if (createStatusValue) {
+      statuses.add(createStatusValue);
+    }
+    const result = Array.from(statuses);
+    const order = ["active", "completed"];
+    result.sort((a, b) => {
+      const ai = order.indexOf(a);
+      const bi = order.indexOf(b);
+      if (ai === -1 && bi === -1) {
+        return a.localeCompare(b);
+      }
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    });
+    return result;
+  }, [assignments, createStatusValue, selectedAssignment?.status]);
+
+  const updateAssignment = useMutation({
+    mutationFn: async ({
+      id,
+      assetId,
+      payload,
+    }: {
+      id: string;
+      assetId: string;
+      payload: Partial<InsertAssetAssignment>;
+    }) => {
+      const res = await apiPut(`/api/asset-assignments/${id}`, payload);
+      if (!res.ok) throw res;
+      return { data: res.data, assetId, id };
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/assets"] });
+      if (variables.assetId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/assets", variables.assetId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/asset-assignments", variables.assetId] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/asset-assignments"] });
+      toast({ title: t("assets.assignmentUpdated", "Assignment updated") });
+      setIsEditOpen(false);
+      setSelectedAssignment(null);
+      editAssignmentForm.reset(createAssignmentDefaultValues());
+    },
+    onError: (err) => {
+      toastApiError(err as any, t("assets.updateFailed", "Failed to update assignment"));
     },
   });
+
+  const unassignAsset = useMutation({
+    mutationFn: async ({ id, assetId }: { id: string; assetId: string }) => {
+      const res = await apiDelete(`/api/asset-assignments/${id}`);
+      if (!res.ok) throw res;
+      return { assetId, id };
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/assets"] });
+      if (variables.assetId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/assets", variables.assetId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/asset-assignments", variables.assetId] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/asset-assignments"] });
+      toast({ title: t("assets.assignmentRemoved", "Asset unassigned") });
+      setAssignmentToUnassign(null);
+      setIsUnassignConfirmOpen(false);
+    },
+    onError: (err) => {
+      toastApiError(err as any, t("assets.unassignFailed", "Failed to unassign asset"));
+      setAssignmentToUnassign(null);
+      setIsUnassignConfirmOpen(false);
+    },
+  });
+
+  const handleAssignOpenChange = (open: boolean) => {
+    setIsAssignOpen(open);
+    if (!open) {
+      assignmentForm.reset(createAssignmentDefaultValues());
+    }
+  };
+
+  const handleEditDialogChange = (open: boolean) => {
+    setIsEditOpen(open);
+    if (!open) {
+      setSelectedAssignment(null);
+      editAssignmentForm.reset(createAssignmentDefaultValues());
+    }
+  };
+
+  const handleUnassignDialogChange = (open: boolean) => {
+    setIsUnassignConfirmOpen(open);
+    if (!open) {
+      setAssignmentToUnassign(null);
+    }
+  };
+
+  const handleEditAssignmentClick = (assignmentId: string) => {
+    const assignment = assignments.find(a => a.id === assignmentId);
+    if (!assignment) return;
+    setSelectedAssignment(assignment);
+    editAssignmentForm.reset({
+      assetId: assignment.assetId,
+      employeeId: assignment.employeeId,
+      assignedDate: assignment.assignedDate ?? new Date().toISOString().split("T")[0],
+      status: assignment.status ?? "active",
+      notes: assignment.notes ?? "",
+      returnDate: assignment.returnDate ?? undefined,
+    });
+    setIsEditOpen(true);
+  };
+
+  const handleUnassignClick = (assignmentId: string) => {
+    const assignment = assignments.find(a => a.id === assignmentId);
+    if (!assignment) return;
+    setAssignmentToUnassign(assignment);
+    setIsUnassignConfirmOpen(true);
+  };
+
+  const handleConfirmUnassign = () => {
+    if (!assignmentToUnassign) return;
+    unassignAsset.mutate({ id: assignmentToUnassign.id, assetId: assignmentToUnassign.assetId });
+  };
+
+  const onSubmitEditAssignment = (data: InsertAssetAssignment) => {
+    if (!selectedAssignment) return;
+    updateAssignment.mutate({
+      id: selectedAssignment.id,
+      assetId: selectedAssignment.assetId,
+      payload: {
+        assignedDate: data.assignedDate,
+        status: data.status,
+        notes: data.notes ?? "",
+      },
+    });
+  };
+
+  const unassignAssetName =
+    assignmentToUnassign?.asset?.name ??
+    (assignmentToUnassign ? assets.find(a => a.id === assignmentToUnassign.assetId)?.name : undefined);
+
+  const unassignEmployeeDetails =
+    assignmentToUnassign?.employee ??
+    (assignmentToUnassign
+      ? employees.find(emp => emp.id === assignmentToUnassign.employeeId)
+      : undefined);
+
+  const unassignEmployeeName = unassignEmployeeDetails
+    ? `${unassignEmployeeDetails.firstName ?? ""} ${unassignEmployeeDetails.lastName ?? ""}`.trim() || undefined
+    : undefined;
+
+  const unassignDescription = assignmentToUnassign
+    ? `This will unassign ${unassignAssetName ?? "this asset"} from ${unassignEmployeeName ?? "this employee"}.`
+    : undefined;
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -157,14 +344,14 @@ export default function Assets() {
   const availableAssets = assets.filter(a => a.status === "available");
 
   const onSubmitAsset = (data: any) => createAsset.mutate(data);
-  const onSubmitAssignment = (data: any) => assignAsset.mutate(data);
+  const onSubmitAssignment = (data: InsertAssetAssignment) => assignAsset.mutate(data);
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold tracking-tight">Assets</h1>
         <div className="space-x-2">
-          <Dialog open={isAssignOpen} onOpenChange={setIsAssignOpen}>
+          <Dialog open={isAssignOpen} onOpenChange={handleAssignOpenChange}>
             <DialogTrigger asChild>
               <Button variant="outline">Assign Asset</Button>
             </DialogTrigger>
@@ -175,88 +362,37 @@ export default function Assets() {
                   Select an asset, employee, assignment date, and add optional notes.
                 </DialogDescription>
               </DialogHeader>
-              <Form {...assignmentForm}>
-                <form onSubmit={assignmentForm.handleSubmit(onSubmitAssignment)} className="space-y-4">
-                  <FormField
-                    control={assignmentForm.control}
-                    name="assetId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Asset</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || undefined}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select asset" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {availableAssets.map(a => (
-                              <SelectItem key={a.id} value={a.id}>
-                                {a.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+              <AssetAssignmentForm
+                form={assignmentForm}
+                assetOptions={availableAssets}
+                employees={employees}
+                onSubmit={onSubmitAssignment}
+                submitLabel="Assign"
+                statusOptions={assignmentStatusOptions}
+                submitting={assignAsset.isPending}
+              />
+            </DialogContent>
+          </Dialog>
 
-                  <FormField
-                    control={assignmentForm.control}
-                    name="employeeId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Employee</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || undefined}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select employee" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {employees.map((emp) => (
-                              <SelectItem key={emp.id} value={emp.id}>
-                                {emp.firstName} {emp.lastName}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={assignmentForm.control}
-                    name="assignedDate"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Assignment Date</FormLabel>
-                        <FormControl>
-                          <Input type="date" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={assignmentForm.control}
-                    name="notes"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Notes (Optional)</FormLabel>
-                        <FormControl>
-                          <Textarea placeholder="Assignment notes..." {...field} value={field.value || ""} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <Button type="submit">Assign</Button>
-                </form>
-              </Form>
+          <Dialog open={isEditOpen} onOpenChange={handleEditDialogChange}>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>Edit Assignment</DialogTitle>
+                <DialogDescription>
+                  Update the assignment status, dates, or notes for this asset.
+                </DialogDescription>
+              </DialogHeader>
+              <AssetAssignmentForm
+                form={editAssignmentForm}
+                assetOptions={assets}
+                employees={employees}
+                onSubmit={onSubmitEditAssignment}
+                submitLabel="Save changes"
+                statusOptions={assignmentStatusOptions}
+                showAssetAndEmployeeFields={false}
+                selectedAssignment={selectedAssignment}
+                submitting={updateAssignment.isPending}
+              />
             </DialogContent>
           </Dialog>
 
@@ -327,8 +463,26 @@ export default function Assets() {
               {getStatusBadge(asset.status)}
             </div>
             {asset.currentAssignment && (
-              <div className="text-sm">
-                Assigned to: {asset.currentAssignment.employee?.firstName} {asset.currentAssignment.employee?.lastName}
+              <div className="space-y-2 text-sm">
+                <div>
+                  Assigned to: {asset.currentAssignment.employee?.firstName} {asset.currentAssignment.employee?.lastName}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => handleEditAssignmentClick(asset.currentAssignment!.id)}
+                  >
+                    Edit assignment
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => handleUnassignClick(asset.currentAssignment!.id)}
+                  >
+                    Unassign
+                  </Button>
+                </div>
               </div>
             )}
             <div>
@@ -339,6 +493,15 @@ export default function Assets() {
           </div>
         ))}
       </div>
+
+      <ConfirmDialog
+        open={isUnassignConfirmOpen}
+        onOpenChange={handleUnassignDialogChange}
+        title="Unassign asset?"
+        description={unassignDescription}
+        confirmText="Unassign"
+        onConfirm={handleConfirmUnassign}
+      />
 
       {/* Upload document dialog */}
       <Dialog open={!!docAssetId} onOpenChange={(o)=>!o&&setDocAssetId(null)}>
@@ -386,5 +549,182 @@ export default function Assets() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+type AssetAssignmentFormProps = {
+  form: UseFormReturn<InsertAssetAssignment>;
+  assetOptions: AssetWithAssignment[];
+  employees: Employee[];
+  onSubmit: (values: InsertAssetAssignment) => void;
+  submitLabel: string;
+  statusOptions: string[];
+  showAssetAndEmployeeFields?: boolean;
+  selectedAssignment?: AssetAssignmentWithDetails | null;
+  submitting?: boolean;
+};
+
+function AssetAssignmentForm({
+  form,
+  assetOptions,
+  employees,
+  onSubmit,
+  submitLabel,
+  statusOptions,
+  showAssetAndEmployeeFields = true,
+  selectedAssignment,
+  submitting = false,
+}: AssetAssignmentFormProps) {
+  const assetId = form.watch("assetId");
+  const employeeId = form.watch("employeeId");
+
+  const currentAsset =
+    assetOptions.find(asset => asset.id === assetId) ??
+    (selectedAssignment ? assetOptions.find(asset => asset.id === selectedAssignment.assetId) : undefined) ??
+    selectedAssignment?.asset ??
+    null;
+
+  const currentEmployee =
+    employees.find(emp => emp.id === employeeId) ??
+    (selectedAssignment ? employees.find(emp => emp.id === selectedAssignment.employeeId) : undefined) ??
+    selectedAssignment?.employee ??
+    null;
+
+  const employeeName = currentEmployee
+    ? `${currentEmployee.firstName ?? ""} ${currentEmployee.lastName ?? ""}`.trim()
+    : selectedAssignment
+      ? `${selectedAssignment.employee?.firstName ?? ""} ${selectedAssignment.employee?.lastName ?? ""}`.trim()
+      : "";
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        {showAssetAndEmployeeFields ? (
+          <>
+            <FormField
+              control={form.control}
+              name="assetId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Asset</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value || undefined}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select asset" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {assetOptions.map(asset => (
+                        <SelectItem key={asset.id} value={asset.id}>
+                          {asset.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="employeeId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Employee</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value || undefined}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select employee" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {employees.map(employee => (
+                        <SelectItem key={employee.id} value={employee.id}>
+                          {employee.firstName} {employee.lastName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </>
+        ) : (
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <FormLabel>Asset</FormLabel>
+              <div className="text-sm font-medium">
+                {currentAsset?.name ?? selectedAssignment?.asset?.name ?? "—"}
+              </div>
+            </div>
+            <div className="space-y-1">
+              <FormLabel>Employee</FormLabel>
+              <div className="text-sm font-medium">{employeeName || "—"}</div>
+            </div>
+          </div>
+        )}
+
+        <FormField
+          control={form.control}
+          name="assignedDate"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Assignment Date</FormLabel>
+              <FormControl>
+                <Input type="date" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="status"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Status</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value || undefined}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {statusOptions.map(status => (
+                    <SelectItem key={status} value={status}>
+                      {formatStatusLabel(status)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="notes"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Notes (Optional)</FormLabel>
+              <FormControl>
+                <Textarea placeholder="Assignment notes..." {...field} value={field.value ?? ""} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <div className="flex justify-end">
+          <Button type="submit" disabled={submitting}>
+            {submitLabel}
+          </Button>
+        </div>
+      </form>
+    </Form>
   );
 }
