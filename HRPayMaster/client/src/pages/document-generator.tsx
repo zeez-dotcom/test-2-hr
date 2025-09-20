@@ -18,6 +18,7 @@ import { defaultTemplates, type TemplateKey } from "@/lib/default-templates";
 export default function DocumentGenerator() {
   const { data: employees = [] } = useQuery<any[]>({ queryKey: ["/api/employees"] });
   const { data: events = [] } = useQuery<any[]>({ queryKey: ["/api/employee-events"] });
+  const { data: assetAssignments = [] } = useQuery<any[]>({ queryKey: ["/api/asset-assignments"] });
 
   const [mode, setMode] = useState<'employee'|'custom'>("employee");
   const [tab, setTab] = useState<'create'|'saved'|'drawer'>("create");
@@ -57,6 +58,10 @@ export default function DocumentGenerator() {
 
   const selectedEmployee = useMemo(() => employees.find((e: any) => e.id === employeeId), [employees, employeeId]);
   const employeeEvents = useMemo(() => (events as any[]).filter(e => e.employeeId === employeeId), [events, employeeId]);
+  const employeeActiveAssignments = useMemo(
+    () => (assetAssignments as any[]).filter((assignment) => assignment.employeeId === employeeId && assignment.status === "active"),
+    [assetAssignments, employeeId]
+  );
 
   const buildDocDef = async () => {
     const brand = getBrand();
@@ -99,6 +104,22 @@ export default function DocumentGenerator() {
         const body = [[ 'Type', 'Title', 'Amount', 'Date' ]];
         for (const ev of evFiltered) body.push([ev.eventType, ev.title, ev.amount || '0', ev.eventDate]);
         content.push({ table: { headerRows: 1, widths: ['auto','*','auto','auto'], body } });
+      }
+      if (employeeActiveAssignments.length) {
+        content.push({ text: 'Assigned Assets', style: 'section' });
+        const assignmentBody = [[ 'Asset', 'Assigned', 'Return', 'Status' ]];
+        for (const assignment of employeeActiveAssignments) {
+          const assignedOn = assignment.assignedDate ? new Date(assignment.assignedDate).toLocaleDateString() : '-';
+          const returnedOn = assignment.returnDate ? new Date(assignment.returnDate).toLocaleDateString() : '-';
+          const status = assignment.status ? assignment.status[0].toUpperCase() + assignment.status.slice(1) : '-';
+          assignmentBody.push([
+            assignment.asset?.name || assignment.assetId,
+            assignedOn,
+            returnedOn,
+            status,
+          ]);
+        }
+        content.push({ table: { headerRows: 1, widths: ['*','auto','auto','auto'], body: assignmentBody } });
       }
     } else {
       // custom text
@@ -323,7 +344,7 @@ export default function DocumentGenerator() {
           <SavedDocuments employees={employees as any[]} />
         </TabsContent>
         <TabsContent value="drawer">
-          <EmployeesDrawer employees={employees as any[]} />
+          <EmployeesDrawer employees={employees as any[]} assignments={assetAssignments as any[]} />
         </TabsContent>
       </Tabs>
     </div>
@@ -381,7 +402,7 @@ function SavedDocuments({ employees }: { employees: any[] }) {
   );
 }
 
-function EmployeesDrawer({ employees }: { employees: any[] }) {
+function EmployeesDrawer({ employees, assignments }: { employees: any[]; assignments: any[] }) {
   const [employeeId, setEmployeeId] = useState<string>("");
   const [start, setStart] = useState<string>(() => new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0]);
   const [end, setEnd] = useState<string>(() => new Date().toISOString().split('T')[0]);
@@ -401,6 +422,12 @@ function EmployeesDrawer({ employees }: { employees: any[] }) {
   const brand = getBrand();
   const empEvents = (events as any[]).filter((e)=> e.employeeId === employeeId).sort((a,b)=> +new Date(a.eventDate) - +new Date(b.eventDate));
   const empLoans = (loans as any[]).filter((l)=> l.employeeId === employeeId);
+  const activeAssignments = useMemo(
+    () => (assignments as any[]).filter((assignment) => assignment.employeeId === employeeId && assignment.status === "active"),
+    [assignments, employeeId]
+  );
+
+  const formatDate = (value?: string | null) => (value ? new Date(value).toLocaleDateString() : "-");
 
   const totals = (report as any[]).reduce((acc: any, p: any)=> {
     acc.gross += (p.payrollEntries||[]).reduce((s: number, e: any)=> s + Number(e.grossPay||0), 0);
@@ -501,6 +528,27 @@ function EmployeesDrawer({ employees }: { employees: any[] }) {
                   content.push({ table: { headerRows:1, widths:['auto','auto','*','auto'], body: rows } });
                   openPdf({ pageMargins:[40,56,40,56], content, styles:{ title:{ fontSize:16, bold:true, color: brand.primaryColor||'#0F172A' }, section:{ fontSize:12, bold:true, color: brand.primaryColor||'#0F172A' }, muted:{ fontSize:10, color:'#64748B' } }, defaultStyle:{ fontSize:10, color:'#111827' } } as any);
                 }}>Export PDF</Button>
+              </div>
+            </div>
+            <div className="space-y-3 md:col-span-3">
+              <div className="text-sm font-medium">Assigned Assets</div>
+              <div className="space-y-2">
+                {activeAssignments.length === 0 ? (
+                  <div className="text-xs text-muted-foreground">No active asset assignments.</div>
+                ) : (
+                  activeAssignments.map((assignment: any) => (
+                    <div key={assignment.id} className="border rounded p-3 space-y-2 text-xs">
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="font-medium">{assignment.asset?.name || assignment.assetId}</div>
+                        <div className="uppercase tracking-wide text-[10px] text-muted-foreground">{assignment.status}</div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                        <div>Assigned: {formatDate(assignment.assignedDate)}</div>
+                        <div>Return: {formatDate(assignment.returnDate)}</div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
