@@ -4,17 +4,20 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { apiPost } from "@/lib/http";
 import { toastApiError } from "@/lib/toastError";
-import { CheckCircle, Users, AlertTriangle } from "lucide-react";
+import { CheckCircle, Users, AlertTriangle, Package } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -155,6 +158,16 @@ export default function Assets() {
   }
 
   const availableAssets = assets.filter(a => a.status === "available");
+  const assignedAssets = assets.filter(a => a.status === "assigned");
+  const maintenanceAssets = assets.filter(a => a.status === "maintenance");
+  const activeAssignments = assignments.filter((assignment) => assignment.status === "active");
+
+  const totalAssets = assets.length;
+  const availableCount = availableAssets.length;
+  const assignedCount = assignedAssets.length;
+  const maintenanceCount = maintenanceAssets.length;
+
+  const formatDate = (value?: string | null) => (value ? new Date(value).toLocaleDateString() : "—");
 
   const onSubmitAsset = (data: any) => createAsset.mutate(data);
   const onSubmitAssignment = (data: any) => assignAsset.mutate(data);
@@ -317,28 +330,129 @@ export default function Assets() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {assets.map(asset => (
-          <div key={asset.id} className="border rounded p-4 space-y-2">
-            <div className="font-medium">{asset.name}</div>
-            <div className="text-sm text-muted-foreground">{asset.type}</div>
-            <div className="text-sm flex items-center space-x-1">
-              <span>Status:</span>
-              {getStatusBadge(asset.status)}
-            </div>
-            {asset.currentAssignment && (
-              <div className="text-sm">
-                Assigned to: {asset.currentAssignment.employee?.firstName} {asset.currentAssignment.employee?.lastName}
-              </div>
-            )}
-            <div>
-              <Button size="sm" variant="outline" onClick={() => window.open(`/asset-file?id=${encodeURIComponent(asset.id)}`, '_blank')}>Print</Button>
-              <Button size="sm" variant="outline" className="ml-2" onClick={() => setDocAssetId(asset.id)}>Add Document</Button>
-              <Button size="sm" variant="outline" className="ml-2" onClick={() => setRepairsAsset(asset)}>Repairs</Button>
-            </div>
+      <Tabs defaultValue="overview" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="overview">Assets Overview</TabsTrigger>
+          <TabsTrigger value="active-assignments">Active Assignments</TabsTrigger>
+        </TabsList>
+        <TabsContent value="overview" className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Assets</CardTitle>
+                <Package className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{totalAssets}</div>
+                <p className="text-xs text-muted-foreground">All tracked assets</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Available</CardTitle>
+                <CheckCircle className="h-4 w-4 text-green-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-green-600">{availableCount}</div>
+                <p className="text-xs text-muted-foreground">Ready for assignment</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Assigned</CardTitle>
+                <Users className="h-4 w-4 text-blue-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-blue-600">{assignedCount}</div>
+                <p className="text-xs text-muted-foreground">Currently in use</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Maintenance</CardTitle>
+                <AlertTriangle className="h-4 w-4 text-amber-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-amber-500">{maintenanceCount}</div>
+                <p className="text-xs text-muted-foreground">Requires attention</p>
+              </CardContent>
+            </Card>
           </div>
-        ))}
-      </div>
+
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {assets.length === 0 ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>No assets found</CardTitle>
+                  <CardDescription>Add assets to get started.</CardDescription>
+                </CardHeader>
+              </Card>
+            ) : (
+              assets.map(asset => (
+                <div key={asset.id} className="border rounded p-4 space-y-2">
+                  <div className="font-medium">{asset.name}</div>
+                  <div className="text-sm text-muted-foreground">{asset.type}</div>
+                  <div className="text-sm flex items-center space-x-1">
+                    <span>Status:</span>
+                    {getStatusBadge(asset.status)}
+                  </div>
+                  {asset.currentAssignment && (
+                    <div className="text-sm">
+                      Assigned to: {asset.currentAssignment.employee?.firstName} {asset.currentAssignment.employee?.lastName}
+                    </div>
+                  )}
+                  <div>
+                    <Button size="sm" variant="outline" onClick={() => window.open(`/asset-file?id=${encodeURIComponent(asset.id)}`, '_blank')}>Print</Button>
+                    <Button size="sm" variant="outline" className="ml-2" onClick={() => setDocAssetId(asset.id)}>Add Document</Button>
+                    <Button size="sm" variant="outline" className="ml-2" onClick={() => setRepairsAsset(asset)}>Repairs</Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="active-assignments" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Active Assignments</CardTitle>
+              <CardDescription>Assets currently assigned to employees.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {activeAssignments.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Asset</TableHead>
+                      <TableHead>Employee</TableHead>
+                      <TableHead>Assignment Date</TableHead>
+                      <TableHead>Expected Return</TableHead>
+                      <TableHead>Notes</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {activeAssignments.map((assignment) => (
+                      <TableRow key={assignment.id}>
+                        <TableCell>{assignment.asset?.name || "Unknown asset"}</TableCell>
+                        <TableCell>
+                          {assignment.employee
+                            ? `${assignment.employee.firstName ?? ""} ${assignment.employee.lastName ?? ""}`.trim() || "Unnamed employee"
+                            : "Unknown employee"}
+                        </TableCell>
+                        <TableCell>{formatDate(assignment.assignedDate)}</TableCell>
+                        <TableCell>{formatDate(assignment.returnDate)}</TableCell>
+                        <TableCell className="max-w-xs whitespace-pre-wrap">{assignment.notes?.trim() || "—"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <p className="text-sm text-muted-foreground">No active assignments.</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Upload document dialog */}
       <Dialog open={!!docAssetId} onOpenChange={(o)=>!o&&setDocAssetId(null)}>
