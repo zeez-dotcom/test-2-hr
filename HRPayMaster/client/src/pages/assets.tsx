@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
@@ -170,7 +171,9 @@ export default function Assets() {
             <DialogContent className="sm:max-w-[425px]">
               <DialogHeader>
                 <DialogTitle>Assign Asset</DialogTitle>
-                <DialogDescription>Select an asset and employee.</DialogDescription>
+                <DialogDescription>
+                  Select an asset, employee, assignment date, and add optional notes.
+                </DialogDescription>
               </DialogHeader>
               <Form {...assignmentForm}>
                 <form onSubmit={assignmentForm.handleSubmit(onSubmitAssignment)} className="space-y-4">
@@ -219,6 +222,34 @@ export default function Assets() {
                             ))}
                           </SelectContent>
                         </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={assignmentForm.control}
+                    name="assignedDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Assignment Date</FormLabel>
+                        <FormControl>
+                          <Input type="date" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={assignmentForm.control}
+                    name="notes"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Notes (Optional)</FormLabel>
+                        <FormControl>
+                          <Textarea placeholder="Assignment notes..." {...field} value={field.value || ""} />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
