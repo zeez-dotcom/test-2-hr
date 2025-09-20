@@ -1,12 +1,12 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { apiGet } from "@/lib/http";
 import { openPdf, controllerNumber, buildAndEncodePdf } from "@/lib/pdf";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -171,7 +171,7 @@ export default function DocumentGenerator() {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <FormLabel>Mode</FormLabel>
+              <Label>Mode</Label>
               <Select value={mode} onValueChange={(v)=> setMode(v as any)}>
                 <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -181,7 +181,7 @@ export default function DocumentGenerator() {
               </Select>
             </div>
             <div>
-              <FormLabel>Template</FormLabel>
+              <Label>Template</Label>
               <Select value={template} onValueChange={(v)=> {
                 setTemplate(v as any);
                 const t = templates[v] || templates.none;
@@ -207,7 +207,7 @@ export default function DocumentGenerator() {
           {mode === 'employee' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <FormLabel>Employee</FormLabel>
+                <Label>Employee</Label>
                 <Select value={employeeId} onValueChange={setEmployeeId}>
                   <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
                   <SelectContent>
@@ -218,23 +218,23 @@ export default function DocumentGenerator() {
                 </Select>
               </div>
               <div>
-                <FormLabel>Purpose (for NOC/Warning)</FormLabel>
+                <Label>Purpose (for NOC/Warning)</Label>
                 <Input placeholder="e.g., travel, bank account, performance" value={purpose} onChange={(e)=> setPurpose(e.target.value)} />
               </div>
               {template === 'experience' && (
                 <>
                   <div>
-                    <FormLabel>Start Date (Experience)</FormLabel>
+                    <Label>Start Date (Experience)</Label>
                     <Input type="date" value={expStart} onChange={(e)=> setExpStart(e.target.value)} />
                   </div>
                   <div>
-                    <FormLabel>End Date (Experience)</FormLabel>
+                    <Label>End Date (Experience)</Label>
                     <Input type="date" value={expEnd} onChange={(e)=> setExpEnd(e.target.value)} />
                   </div>
                 </>
               )}
               <div className="space-y-2">
-                <FormLabel>Include Images</FormLabel>
+                <Label>Include Images</Label>
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <label className="flex items-center gap-2"><Checkbox checked={includeImages.profile} onCheckedChange={(v)=> setIncludeImages(s=>({...s, profile: Boolean(v)}))} /> Profile</label>
                   <label className="flex items-center gap-2"><Checkbox checked={includeImages.civilId} onCheckedChange={(v)=> setIncludeImages(s=>({...s, civilId: Boolean(v)}))} /> Civil ID</label>
@@ -244,7 +244,7 @@ export default function DocumentGenerator() {
                 </div>
               </div>
               <div className="space-y-2 md:col-span-2">
-                <FormLabel>Include Events</FormLabel>
+                <Label>Include Events</Label>
                 <div className="grid grid-cols-3 gap-2 text-sm">
                   {(['bonus','commission','deduction','allowance','overtime','penalty'] as const).map(k => (
                     <label key={k} className="flex items-center gap-2"><Checkbox checked={(includeEvents as any)[k]} onCheckedChange={(v)=> setIncludeEvents(s=> ({...s, [k]: Boolean(v)}))} /> {k[0].toUpperCase()+k.slice(1)}</label>
@@ -256,11 +256,11 @@ export default function DocumentGenerator() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <FormLabel>English Text</FormLabel>
+              <Label>English Text</Label>
               <Textarea placeholder="English body..." value={customEn} onChange={e=> setCustomEn(e.target.value)} />
             </div>
             <div>
-              <FormLabel>Arabic Text</FormLabel>
+              <Label>Arabic Text</Label>
               <Textarea placeholder="النص العربي..." value={customAr} onChange={e=> setCustomAr(e.target.value)} />
             </div>
           </div>
@@ -293,7 +293,7 @@ export default function DocumentGenerator() {
           </div>
 
           <div className="space-y-2">
-            <FormLabel>Signatures</FormLabel>
+            <Label>Signatures</Label>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
               <label className="flex items-center gap-2"><Checkbox checked={signatures.ceo} onCheckedChange={(v)=> setSignatures(s=>({...s, ceo: Boolean(v)}))} /> CEO</label>
               <label className="flex items-center gap-2"><Checkbox checked={signatures.hr} onCheckedChange={(v)=> setSignatures(s=>({...s, hr: Boolean(v)}))} /> HR</label>
@@ -304,11 +304,11 @@ export default function DocumentGenerator() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <FormLabel>Title (for saving)</FormLabel>
+              <Label>Title (for saving)</Label>
               <Input placeholder="Document title" value={title} onChange={e=> setTitle(e.target.value)} />
             </div>
             <div>
-              <FormLabel>Description (optional)</FormLabel>
+              <Label>Description (optional)</Label>
               <Input placeholder="Short description" value={description} onChange={e=> setDescription(e.target.value)} />
             </div>
           </div>
@@ -423,7 +423,7 @@ function EmployeesDrawer({ employees }: { employees: any[] }) {
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
         <div className="md:col-span-2">
-          <FormLabel>Employee</FormLabel>
+          <Label>Employee</Label>
           <Select value={employeeId} onValueChange={setEmployeeId}>
             <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
             <SelectContent>
@@ -434,11 +434,11 @@ function EmployeesDrawer({ employees }: { employees: any[] }) {
           </Select>
         </div>
         <div>
-          <FormLabel>Start</FormLabel>
+          <Label>Start</Label>
           <Input type="date" value={start} onChange={(e)=> setStart(e.target.value)} />
         </div>
         <div>
-          <FormLabel>End</FormLabel>
+          <Label>End</Label>
           <Input type="date" value={end} onChange={(e)=> setEnd(e.target.value)} />
         </div>
       </div>
