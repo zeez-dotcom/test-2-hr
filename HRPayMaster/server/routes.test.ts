@@ -765,6 +765,32 @@ describe('employee routes', () => {
     expect(res.body.remainingAmount).toBe(res.body.amount);
   });
 
+  it('POST /api/loans accepts UUID employeeId unchanged', async () => {
+    const employeeId = '123e4567-e89b-12d3-a456-426614174000';
+    const payload = {
+      employeeId,
+      amount: '1000',
+      monthlyDeduction: '100',
+      startDate: '2024-01-01',
+      interestRate: '0',
+    };
+    const created = {
+      id: 'loan-1',
+      status: 'pending',
+      remainingAmount: '1000',
+      ...payload,
+    };
+
+    (storage.createLoan as any).mockResolvedValue(created);
+
+    const res = await request(app).post('/api/loans').send(payload);
+
+    expect(res.status).toBe(201);
+    const loanArg = (storage.createLoan as any).mock.calls[0][0];
+    expect(loanArg.employeeId).toBe(employeeId);
+    expect(res.body.employeeId).toBe(employeeId);
+  });
+
   it('POST /api/loans includes database error message on constraint violation', async () => {
     const dbMessage = 'insert or update on table "loans" violates foreign key constraint';
     (storage.createLoan as any).mockRejectedValue(dbMessage);

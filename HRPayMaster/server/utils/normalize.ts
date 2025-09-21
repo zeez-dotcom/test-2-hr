@@ -105,6 +105,8 @@ export function parseDateToISO(
   return { value: null, error: null };
 }
 
+const SCIENTIFIC_NOTATION_REGEX = /^[+-]?\d+(?:\.\d+)?e[+-]?\d+$/i;
+
 export function normalizeBigId(v: unknown): string | undefined {
   if (v === undefined || v === null) return undefined;
   if (typeof v === 'number') {
@@ -113,10 +115,11 @@ export function normalizeBigId(v: unknown): string | undefined {
   if (typeof v === 'string') {
     const t = v.trim();
     if (!t) return undefined;
-    if (/e/i.test(t)) {
+    if (SCIENTIFIC_NOTATION_REGEX.test(t)) {
       const num = Number(t);
-      if (!isNaN(num)) return Math.trunc(num).toString();
-      return t.replace(/\D/g, '');
+      if (Number.isFinite(num)) {
+        return Math.trunc(num).toString();
+      }
     }
     return t;
   }
