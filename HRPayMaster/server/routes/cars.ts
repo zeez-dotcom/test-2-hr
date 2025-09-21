@@ -2,7 +2,13 @@ import { Router } from "express";
 import multer from "multer";
 import { HttpError } from "../errorHandler";
 import { storage } from "../storage";
-import { insertCarSchema, insertCarRepairSchema, type InsertCar, type InsertCarRepair } from "@shared/schema";
+import {
+  insertCarSchema,
+  insertCarRepairSchema,
+  type InsertCar,
+  type InsertCarAssignment,
+  type InsertCarRepair,
+} from "@shared/schema";
 import { z } from "zod";
 
 const upload = multer();
@@ -167,9 +173,33 @@ carsRouter.delete("/:id", async (req, res, next) => {
 carsRouter.post("/:id/status", async (req, res, next) => {
   try {
     const { status } = statusUpdateSchema.parse(req.body);
+    const existing = await storage.getCar(req.params.id);
     const updated = await storage.updateCar(req.params.id, { status });
     if (!updated) {
       return next(new HttpError(404, "Car not found"));
+    }
+    const previousStatus = existing?.status ? normalizeStatus(existing.status) : undefined;
+    const activeAssignment = existing?.currentAssignment;
+    if (activeAssignment?.id) {
+      const assignmentUpdates: Partial<InsertCarAssignment> = {};
+      if (status === "maintenance") {
+        assignmentUpdates.status = "maintenance";
+        if (!activeAssignment.returnDate) {
+          assignmentUpdates.returnDate = new Date().toISOString().split("T")[0];
+        }
+      } else if (previousStatus === "maintenance") {
+        if (status === "available") {
+          assignmentUpdates.status = "completed";
+          if (!activeAssignment.returnDate) {
+            assignmentUpdates.returnDate = new Date().toISOString().split("T")[0];
+          }
+        } else {
+          assignmentUpdates.status = "active";
+        }
+      }
+      if (assignmentUpdates.status) {
+        await storage.updateCarAssignment(activeAssignment.id, assignmentUpdates);
+      }
     }
     res.json(updated);
   } catch (error) {

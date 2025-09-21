@@ -272,15 +272,78 @@ describe('Cars page', () => {
     expect(toast).toHaveBeenCalledWith({ title: 'Failed to update car', variant: 'destructive' });
 
     toast.mockReset();
+    await act(async () => {
+      queryClient.setQueryData(['/api/cars'], [
+        {
+          ...cars[0],
+          status: 'assigned',
+          currentAssignment: {
+            id: 'car-asg-1',
+            carId: '1',
+            employeeId: 'emp-assign',
+            status: 'active',
+            assignedDate: '2024-01-01',
+            returnDate: null,
+          },
+        },
+      ]);
+      queryClient.setQueryData(['/api/car-assignments'], [
+        {
+          id: 'car-asg-1',
+          carId: '1',
+          employeeId: 'emp-assign',
+          assignedDate: '2024-01-01',
+          returnDate: null,
+          status: 'active',
+          notes: null,
+          car: {
+            id: '1',
+            make: 'Toyota',
+            model: 'Corolla',
+            year: '2024',
+            plateNumber: 'ABC123',
+          },
+          employee: {
+            id: 'emp-assign',
+            firstName: 'Alex',
+            lastName: 'Driver',
+            phone: '555-0000',
+          },
+          assigner: null,
+        },
+      ]);
+    });
+
+    await waitFor(() =>
+      expect(screen.getByText('Assigned to')).toBeInTheDocument()
+    );
+
     const statusButton = screen.getByText('Mark as Maintenance');
     fireEvent.click(statusButton);
 
     await waitFor(() =>
       expect(toast).toHaveBeenCalledWith({ title: 'Car marked for maintenance' })
     );
-    expect(mutationMocks[6].variables).toEqual({ carId: '1', status: 'maintenance' });
+    const maintenanceCall = mutationMocks.find(
+      mock => mock.variables?.assignmentId === 'car-asg-1'
+    );
+    expect(maintenanceCall).toBeDefined();
+    expect(maintenanceCall?.variables).toMatchObject({
+      assignmentId: 'car-asg-1',
+      carId: '1',
+      status: 'maintenance',
+    });
+    expect(maintenanceCall?.variables?.returnDate).toMatch(/\d{4}-\d{2}-\d{2}/);
+
+    const maintenanceStatus = mutationMocks.find(
+      mock => mock.variables?.carId === '1' && mock.variables?.status === 'maintenance'
+    );
+    expect(maintenanceStatus).toBeDefined();
+    expect(maintenanceStatus?.variables).toMatchObject({ carId: '1', status: 'maintenance' });
 
     toast.mockReset();
+    fireEvent.click(screen.getByText('Active Assignments'));
+
     await act(async () => {
       queryClient.setQueryData(['/api/cars'], [
         {
@@ -288,16 +351,46 @@ describe('Cars page', () => {
           status: 'maintenance',
         },
       ]);
+      queryClient.setQueryData(['/api/car-assignments'], [
+        {
+          id: 'car-asg-1',
+          carId: '1',
+          employeeId: 'emp-assign',
+          assignedDate: '2024-01-01',
+          returnDate: new Date().toISOString().split('T')[0],
+          status: 'maintenance',
+          notes: null,
+          car: {
+            id: '1',
+            make: 'Toyota',
+            model: 'Corolla',
+            year: '2024',
+            plateNumber: 'ABC123',
+          },
+          employee: {
+            id: 'emp-assign',
+            firstName: 'Alex',
+            lastName: 'Driver',
+            phone: '555-0000',
+          },
+          assigner: null,
+        },
+      ]);
     });
 
     await waitFor(() => expect(screen.getByText('Back to Service')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('No active assignments')).toBeInTheDocument());
 
     fireEvent.click(screen.getByText('Back to Service'));
 
     await waitFor(() =>
       expect(toast).toHaveBeenCalledWith({ title: 'Car returned to service' })
     );
-    expect(mutationMocks[6].variables).toEqual({ carId: '1', status: 'available' });
+    const statusCall = [...mutationMocks]
+      .reverse()
+      .find(mock => mock.variables?.carId === '1' && mock.variables?.status === 'available');
+    expect(statusCall).toBeDefined();
+    expect(statusCall?.variables).toEqual({ carId: '1', status: 'available' });
   });
 
   it('renders registration document image when provided', () => {

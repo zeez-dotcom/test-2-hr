@@ -18,6 +18,7 @@ import {
   type InsertEmployeeEvent,
   type InsertEmployee,
   type InsertCar,
+  type InsertAssetAssignment,
 } from "@shared/schema";
 import {
   sendEmail,
@@ -1346,9 +1347,35 @@ const upload = multer({ storage: multer.memoryStorage() });
   employeesRouter.post("/api/assets/:id/status", async (req, res, next) => {
     try {
       const { status } = statusUpdateSchema.parse(req.body);
+      const existing = await assetService.getAsset(req.params.id);
       const updated = await assetService.updateAsset(req.params.id, { status });
       if (!updated) {
         return next(new HttpError(404, "Asset not found"));
+      }
+      const previousStatus = existing?.status
+        ? normalizeStatus(existing.status)
+        : undefined;
+      const activeAssignment = existing?.currentAssignment;
+      if (activeAssignment?.id) {
+        const assignmentUpdates: Partial<InsertAssetAssignment> = {};
+        if (status === "maintenance") {
+          assignmentUpdates.status = "maintenance";
+          if (!activeAssignment.returnDate) {
+            assignmentUpdates.returnDate = new Date().toISOString().split("T")[0];
+          }
+        } else if (previousStatus === "maintenance") {
+          if (status === "available") {
+            assignmentUpdates.status = "completed";
+            if (!activeAssignment.returnDate) {
+              assignmentUpdates.returnDate = new Date().toISOString().split("T")[0];
+            }
+          } else {
+            assignmentUpdates.status = "active";
+          }
+        }
+        if (assignmentUpdates.status) {
+          await storage.updateAssetAssignment(activeAssignment.id, assignmentUpdates);
+        }
       }
       res.json(updated);
     } catch (error) {

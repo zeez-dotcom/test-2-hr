@@ -244,6 +244,8 @@ export default function Cars() {
       if (variables.carId) {
         queryClient.invalidateQueries({ queryKey: ["/api/cars", variables.carId] });
       }
+      queryClient.invalidateQueries({ queryKey: ["/api/car-assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/car-assignments", variables.carId] });
       toast({
         title:
           variables.status === "maintenance"
@@ -255,6 +257,62 @@ export default function Cars() {
       toastApiError(err as any, 'Failed to update car status');
     },
   });
+
+  const updateCarAssignmentStatus = useMutation<
+    any,
+    unknown,
+    { assignmentId: string; status: string; carId: string; returnDate?: string }
+  >({
+    mutationFn: async ({ assignmentId, status, returnDate }) => {
+      const payload: Record<string, string> = { status };
+      if (returnDate) {
+        payload.returnDate = returnDate;
+      }
+      const res = await apiPut(`/api/car-assignments/${assignmentId}`, payload);
+      if (!res.ok) throw res;
+      return res.data;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
+      if (variables.carId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/cars", variables.carId] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/car-assignments"] });
+      if (variables.carId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/car-assignments", variables.carId] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/car-assignments/search"] });
+      if (variables.carId && variables.status) {
+        carStatusMutation.mutate({ carId: variables.carId, status: variables.status });
+      }
+    },
+    onError: (err) => {
+      toastApiError(err as any, 'Failed to update car status');
+    }
+  });
+
+  const handleCarStatusChange = (
+    car: CarWithAssignment,
+    status: "available" | "maintenance" | string
+  ) => {
+    if (status === "maintenance") {
+      const activeAssignment =
+        car.currentAssignment ??
+        carAssignments.find(assignment => assignment.carId === car.id && assignment.status === "active");
+      if (activeAssignment?.id) {
+        const today = new Date().toISOString().split("T")[0];
+        updateCarAssignmentStatus.mutate({
+          assignmentId: activeAssignment.id,
+          carId: car.id,
+          status: "maintenance",
+          ...(activeAssignment.returnDate ? {} : { returnDate: today }),
+        });
+        return;
+      }
+    }
+
+    carStatusMutation.mutate({ carId: car.id, status });
+  };
 
   const [repairsDialogCar, setRepairsDialogCar] = useState<CarWithAssignment | null>(null);
   const repairsQuery = useQuery<any[]>({
@@ -1133,14 +1191,16 @@ export default function Cars() {
                             size="sm"
                             variant="outline"
                             disabled={
-                              carStatusMutation.isPending &&
-                              carStatusMutation.variables?.carId === car.id
+                              (carStatusMutation.isPending &&
+                                carStatusMutation.variables?.carId === car.id) ||
+                              (updateCarAssignmentStatus.isPending &&
+                                updateCarAssignmentStatus.variables?.carId === car.id)
                             }
                             onClick={() =>
-                              carStatusMutation.mutate({
-                                carId: car.id,
-                                status: car.status === "maintenance" ? "available" : "maintenance",
-                              })
+                              handleCarStatusChange(
+                                car,
+                                car.status === "maintenance" ? "available" : "maintenance",
+                              )
                             }
                           >
                             {car.status === "maintenance" ? "Back to Service" : "Mark as Maintenance"}
