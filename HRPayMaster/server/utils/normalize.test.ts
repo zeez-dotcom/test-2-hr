@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseBoolean, parseNumber, parseDateToISO } from './normalize';
+import { parseBoolean, parseNumber, parseDateToISO, normalizeBigId } from './normalize';
 
 describe('parseBoolean', () => {
   it('converts English boolean strings', () => {
@@ -32,5 +32,21 @@ describe('parseDateToISO', () => {
     const res = parseDateToISO('02/03/2020');
     expect(res.value).toBeNull();
     expect(res.error).toBe('Ambiguous date format');
+  });
+});
+
+describe('normalizeBigId', () => {
+  it('leaves UUID strings unchanged', () => {
+    const uuid = '123e4567-e89b-12d3-a456-426614174000';
+    expect(normalizeBigId(uuid)).toBe(uuid);
+  });
+
+  it('normalizes scientific notation strings', () => {
+    expect(normalizeBigId('1.23e+4')).toBe('12300');
+  });
+
+  it('trims non-empty input before returning', () => {
+    const uuid = ' 123e4567-e89b-12d3-a456-426614174000 ';
+    expect(normalizeBigId(uuid)).toBe(uuid.trim());
   });
 });
