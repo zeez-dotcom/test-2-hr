@@ -59,7 +59,21 @@ type LoanReportDetail = {
   startDate: string;
   endDate: string | null;
 };
-type AssetUsage = { assetId: string; name: string; assignments: number };
+type AssetUsage = {
+  assignmentId: string;
+  assetId: string;
+  assetName: string;
+  assetType: string;
+  assetStatus: string;
+  assetDetails: string | null;
+  employeeId: string;
+  employeeCode: string | null;
+  employeeName: string;
+  assignedDate: string;
+  returnDate: string | null;
+  status: string;
+  notes: string | null;
+};
 type SalaryTrend = { period: string; netPay: number; change: number };
 import { openPdf, buildEmployeeReport, buildEmployeeHistoryReport } from "@/lib/pdf";
 type PayrollByDepartment = { period: string; departmentId: string | null; departmentName?: string | null; totals: { grossPay: number; netPay: number } };
@@ -151,6 +165,16 @@ export default function Reports() {
     },
     enabled: Boolean(startDate && endDate),
   });
+
+  const sortedAssetUsage = assetUsage
+    ? [...assetUsage].sort((a, b) => {
+        const assetCompare = a.assetName.localeCompare(b.assetName);
+        if (assetCompare !== 0) return assetCompare;
+        const dateA = new Date(a.assignedDate).getTime();
+        const dateB = new Date(b.assignedDate).getTime();
+        return dateA - dateB;
+      })
+    : [];
 
   if (
     employeesError ||
@@ -1000,22 +1024,71 @@ export default function Reports() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {assetUsage && assetUsage.length > 0 ? (
+              {sortedAssetUsage.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="min-w-full text-sm">
                     <thead>
                       <tr className="text-left">
                         <th className="py-2 pr-4">{t('reports.asset','Asset')}</th>
-                        <th className="py-2">{t('reports.assignments','Assignments')}</th>
+                        <th className="py-2 pr-4">{t('reports.assignedTo','Assigned To')}</th>
+                        <th className="py-2 pr-4">{t('reports.assignmentPeriod','Assignment Period')}</th>
+                        <th className="py-2 pr-4">{t('reports.status','Status')}</th>
+                        <th className="py-2">{t('reports.notes','Notes')}</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {assetUsage.map(asset => (
-                        <tr key={asset.assetId} className="border-t">
-                          <td className="py-2 pr-4">{asset.name}</td>
-                          <td className="py-2">{asset.assignments}</td>
-                        </tr>
-                      ))}
+                      {sortedAssetUsage.map(assignment => {
+                        const assignmentEnd = assignment.returnDate
+                          ? formatDate(assignment.returnDate)
+                          : t('reports.ongoing', 'Ongoing');
+                        const assetTypeLabel = assignment.assetType
+                          ? t('reports.assetTypeLabel', { type: assignment.assetType })
+                          : t('reports.assetTypeLabel', { type: t('reports.unknown', 'Unknown') });
+                        const assetStatusLabel = assignment.assetStatus
+                          ? t('reports.assetStatusLabel', { status: assignment.assetStatus })
+                          : t('reports.assetStatusLabel', { status: t('reports.unknown', 'Unknown') });
+
+                        return (
+                          <tr key={assignment.assignmentId} className="border-t align-top">
+                            <td className="py-3 pr-4">
+                              <div className="font-medium">{assignment.assetName}</div>
+                              <div className="text-xs text-muted-foreground">{assetTypeLabel}</div>
+                              <div className="text-xs text-muted-foreground">{assetStatusLabel}</div>
+                              {assignment.assetDetails ? (
+                                <div className="text-xs text-muted-foreground">{assignment.assetDetails}</div>
+                              ) : null}
+                            </td>
+                            <td className="py-3 pr-4">
+                              <div className="font-medium">{assignment.employeeName}</div>
+                              {assignment.employeeCode ? (
+                                <div className="text-xs text-muted-foreground">
+                                  {t('reports.employeeCodeLabel', { code: assignment.employeeCode })}
+                                </div>
+                              ) : null}
+                              <div className="text-xs text-muted-foreground">
+                                {t('reports.employeeIdLabel', { id: assignment.employeeId })}
+                              </div>
+                            </td>
+                            <td className="py-3 pr-4 whitespace-nowrap">
+                              {formatDate(assignment.assignedDate)} – {assignmentEnd}
+                            </td>
+                            <td className="py-3 pr-4">
+                              <Badge variant={assignment.status === 'active' ? 'default' : 'secondary'}>
+                                {assignment.status}
+                              </Badge>
+                            </td>
+                            <td className="py-3 max-w-[18rem] whitespace-pre-wrap">
+                              {assignment.notes ? (
+                                assignment.notes
+                              ) : (
+                                <span className="text-xs text-muted-foreground">
+                                  {t('reports.noNotes', 'No notes')}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

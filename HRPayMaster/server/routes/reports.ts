@@ -152,12 +152,16 @@ reportsRouter.get("/api/reports/loan-balances", async (req, res, next) => {
 });
 
 // Asset usage
-reportsRouter.get("/api/reports/asset-usage", async (_req, res, next) => {
+reportsRouter.get("/api/reports/asset-usage", async (req, res, next) => {
   try {
-    const report = await storage.getAssetUsage();
+    const { startDate, endDate } = reportQuerySchema.parse(req.query);
+    const report = await storage.getAssetUsageDetails({ startDate, endDate });
     res.json(report);
   } catch (error) {
     console.error(error);
+    if (error instanceof z.ZodError) {
+      return next(new HttpError(400, "Invalid query parameters", error.errors));
+    }
     next(new HttpError(500, "Failed to fetch asset usage", error));
   }
 });
