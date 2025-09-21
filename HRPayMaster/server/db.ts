@@ -1,25 +1,41 @@
 // server/db.ts
 import 'dotenv/config';
 
-import { Pool, neonConfig } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-serverless';
+import { Pool as NeonPool, neonConfig } from '@neondatabase/serverless';
+import { drizzle as drizzleNeon } from 'drizzle-orm/neon-serverless';
+import { Pool as PgPool } from 'pg';
+import { drizzle as drizzlePg } from 'drizzle-orm/node-postgres';
 import ws from 'ws';
 import * as schema from '@shared/schema';
 
-// Configure Neon to use WebSocket
-neonConfig.webSocketConstructor = ws;
-
 // Ensure the env variable is set
-if (!process.env.DATABASE_URL) {
+const connectionString = process.env.DATABASE_URL;
+
+if (!connectionString) {
   throw new Error(
     'DATABASE_URL must be set. Did you forget to provision a database?',
   );
 }
 
-// Create a connection pool using the DATABASE_URL
-export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+const databaseHost = new URL(connectionString).hostname;
+const isLocalConnection =
+  databaseHost === 'localhost' ||
+  databaseHost === '127.0.0.1' ||
+  databaseHost === '::1';
 
-// Initialize Drizzle with the pool and schema
-export const db = drizzle({ client: pool, schema });
+let pool: NeonPool | PgPool;
+
+if (isLocalConnection) {
+  pool = new PgPool({ connectionString });
+} else {
+  // Configure Neon to use WebSocket when connecting to Neon-hosted databases
+  neonConfig.webSocketConstructor = ws;
+  pool = new NeonPool({ connectionString });
+}
+
+export { pool };
+
+// Initialize Drizzle with the appropriate driver for the pool
+export const db = isLocalConnection
+  ? drizzlePg(pool as PgPool, { schema })
+  : drizzleNeon({ client: pool as NeonPool, schema });
