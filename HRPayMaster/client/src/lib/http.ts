@@ -43,20 +43,58 @@ async function request(
     const shouldPrefix = !!base && !isTestEnv && !/^https?:\/\//i.test(url);
     const fullUrl = shouldPrefix ? new URL(url, base).toString() : url;
     const res = await fetch(fullUrl, init);
-    // Some tests/mock responses may not include headers/content-type.
-    const contentType = (res as any)?.headers?.get?.("content-type") || "";
+    const responseHeaders = (res as any)?.headers;
+    const contentType = responseHeaders?.get?.("content-type") || "";
+    const contentDisposition = responseHeaders?.get?.("content-disposition") || "";
+    const normalizedContentType = contentType.toLowerCase();
+    const shouldTreatAsBinary =
+      /attachment/i.test(contentDisposition) ||
+      (!!contentType && !normalizedContentType.includes("json"));
+
     let body: any = undefined;
-    if (contentType.includes("application/json")) {
-      body = await (res as any).json().catch(() => undefined);
-    } else if (typeof (res as any).json === "function") {
-      // Fallback to json() when headers are missing or content-type is not set
+    const resAny = res as any;
+
+    if (shouldTreatAsBinary && typeof resAny.blob === "function") {
       try {
-        body = await (res as any).json();
+        body = await resAny.blob();
       } catch {
         body = undefined;
       }
-    } else if (typeof (res as any).blob === "function") {
-      body = await (res as any).blob();
+    } else if (
+      shouldTreatAsBinary &&
+      typeof resAny.arrayBuffer === "function" &&
+      typeof Blob !== "undefined"
+    ) {
+      try {
+        const buffer = await resAny.arrayBuffer();
+        body = new Blob([buffer]);
+      } catch {
+        body = undefined;
+      }
+    }
+
+    if (body === undefined) {
+      if (typeof resAny.json === "function") {
+        try {
+          body = await resAny.json();
+        } catch {
+          if (!shouldTreatAsBinary && typeof resAny.blob === "function") {
+            try {
+              body = await resAny.blob();
+            } catch {
+              body = undefined;
+            }
+          } else {
+            body = undefined;
+          }
+        }
+      } else if (typeof resAny.blob === "function") {
+        try {
+          body = await resAny.blob();
+        } catch {
+          body = undefined;
+        }
+      }
     }
     if ((res as any).ok) {
       return { ok: true as const, status: (res as any).status ?? 200, data: body, headers: (res as any).headers };
