@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 
@@ -496,10 +497,13 @@ export default function Cars() {
 
   const validCars = cars.filter(car => car.id && car.id.trim() !== "");
   const availableCars = validCars.filter(car => car.status === "available");
+  const maintenanceCars = validCars.filter(car => car.status === "maintenance");
   const totalCars = validCars.length;
   const availableCount = availableCars.length;
   const assignedCount = validCars.filter(car => car.status === "assigned").length;
-  const maintenanceCount = validCars.filter(car => car.status === "maintenance").length;
+  const maintenanceCount = maintenanceCars.length;
+  const formatDateSafely = (value?: string | null) =>
+    value ? format(new Date(value), "MMM d, yyyy") : "—";
 
   return (
     <div className="space-y-6">
@@ -1088,6 +1092,7 @@ export default function Cars() {
         <TabsList>
           <TabsTrigger value="fleet">Fleet Overview</TabsTrigger>
           <TabsTrigger value="assignments">Active Assignments</TabsTrigger>
+          <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
           <TabsTrigger value="history">Assignment History</TabsTrigger>
         </TabsList>
 
@@ -1368,6 +1373,91 @@ export default function Cars() {
               )}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="maintenance" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Vehicles in Maintenance</CardTitle>
+              <CardDescription>Fleet vehicles currently out of service for maintenance.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {maintenanceCars.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Vehicle</TableHead>
+                      <TableHead>Assignment</TableHead>
+                      <TableHead>Dates</TableHead>
+                      <TableHead>Notes</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {maintenanceCars.map((car) => {
+                      const vehicleName = [car.year, car.make, car.model].filter(Boolean).join(" ") || "Vehicle";
+                      const plateDetails = [car.plateNumber, car.vin].filter(Boolean).join(" • ");
+                      const assignedEmployee = car.currentAssignment?.employee
+                        ? `${car.currentAssignment.employee.firstName ?? ""} ${car.currentAssignment.employee.lastName ?? ""}`.trim()
+                        : null;
+                      const assignmentNotes = car.currentAssignment?.notes ?? car.notes ?? "";
+
+                      return (
+                        <TableRow key={car.id}>
+                          <TableCell>
+                            <div className="font-medium">{vehicleName}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {plateDetails || "No plate or VIN provided"}
+                            </div>
+                            <div className="mt-2">{getStatusBadge(car.status)}</div>
+                          </TableCell>
+                          <TableCell>
+                            {assignedEmployee ? (
+                              <div className="space-y-1 text-sm">
+                                <div className="font-medium">{assignedEmployee}</div>
+                                {car.currentAssignment?.employee?.phone && (
+                                  <div className="text-muted-foreground">
+                                    {car.currentAssignment.employee.phone}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">Not currently assigned</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="space-y-1 text-sm">
+                              <div>Assigned: {formatDateSafely(car.currentAssignment?.assignedDate)}</div>
+                              <div>Returned: {formatDateSafely(car.currentAssignment?.returnDate)}</div>
+                              {car.registrationExpiry && (
+                                <div>Registration: {formatDateSafely(car.registrationExpiry)}</div>
+                              )}
+                              {car.insuranceExpiry && (
+                                <div>Insurance: {formatDateSafely(car.insuranceExpiry)}</div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {assignmentNotes ? (
+                              <div className="text-sm whitespace-pre-wrap leading-relaxed">
+                                {assignmentNotes}
+                              </div>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">No notes recorded.</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20 p-6 text-sm text-muted-foreground">
+                  <Car className="h-10 w-10 text-gray-400" />
+                  No vehicles are currently marked for maintenance.
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="history" className="space-y-4">

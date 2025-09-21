@@ -118,6 +118,15 @@ vi.mock('@/components/ui/badge', () => ({
   Badge: ({ children }: any) => <span>{children}</span>,
 }));
 
+vi.mock('@/components/ui/table', () => ({
+  Table: ({ children }: any) => <table>{children}</table>,
+  TableBody: ({ children }: any) => <tbody>{children}</tbody>,
+  TableCell: ({ children }: any) => <td>{children}</td>,
+  TableHead: ({ children }: any) => <th>{children}</th>,
+  TableHeader: ({ children }: any) => <thead>{children}</thead>,
+  TableRow: ({ children }: any) => <tr>{children}</tr>,
+}));
+
 vi.mock('@/components/ui/tabs', () => ({
   Tabs: ({ children }: any) => <div>{children}</div>,
   TabsContent: ({ children }: any) => <div>{children}</div>,
@@ -193,6 +202,7 @@ describe('Cars page', () => {
     );
 
     expect(screen.getByText('2024 Toyota Corolla')).toBeInTheDocument();
+    expect(screen.getByText('No vehicles are currently marked for maintenance.')).toBeInTheDocument();
 
     // create car success
     await mutationMocks[0].mutate({
@@ -349,6 +359,21 @@ describe('Cars page', () => {
         {
           ...cars[0],
           status: 'maintenance',
+          currentAssignment: {
+            id: 'car-asg-1',
+            carId: '1',
+            employeeId: 'emp-assign',
+            status: 'maintenance',
+            assignedDate: '2024-01-01',
+            returnDate: new Date().toISOString().split('T')[0],
+            notes: 'Engine check',
+            employee: {
+              id: 'emp-assign',
+              firstName: 'Alex',
+              lastName: 'Driver',
+              phone: '555-0000',
+            },
+          },
         },
       ]);
       queryClient.setQueryData(['/api/car-assignments'], [
@@ -359,7 +384,7 @@ describe('Cars page', () => {
           assignedDate: '2024-01-01',
           returnDate: new Date().toISOString().split('T')[0],
           status: 'maintenance',
-          notes: null,
+          notes: 'Engine check',
           car: {
             id: '1',
             make: 'Toyota',
@@ -380,6 +405,8 @@ describe('Cars page', () => {
 
     await waitFor(() => expect(screen.getByText('Back to Service')).toBeInTheDocument());
     await waitFor(() => expect(screen.getByText('No active assignments')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Assigned: Jan 1, 2024')).toBeInTheDocument());
+    expect(screen.queryByText('No vehicles are currently marked for maintenance.')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Back to Service'));
 

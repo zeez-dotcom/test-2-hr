@@ -408,6 +408,7 @@ export default function Assets() {
         <TabsList>
           <TabsTrigger value="overview">Assets Overview</TabsTrigger>
           <TabsTrigger value="active-assignments">Active Assignments</TabsTrigger>
+          <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
         </TabsList>
         <TabsContent value="overview" className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -541,6 +542,81 @@ export default function Assets() {
                 </Table>
               ) : (
                 <p className="text-sm text-muted-foreground">No active assignments.</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="maintenance" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Assets in Maintenance</CardTitle>
+              <CardDescription>Equipment currently unavailable while maintenance is in progress.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {maintenanceAssets.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Asset</TableHead>
+                      <TableHead>Assignment</TableHead>
+                      <TableHead>Dates</TableHead>
+                      <TableHead>Notes</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {maintenanceAssets.map((asset) => {
+                      const maintenanceRecord =
+                        assignments.find(
+                          (assignment) => assignment.assetId === asset.id && assignment.status === "maintenance",
+                        ) ?? asset.currentAssignment;
+                      const employee = maintenanceRecord?.employee;
+                      const employeeName = employee
+                        ? `${employee.firstName ?? ""} ${employee.lastName ?? ""}`.trim() || "Unnamed employee"
+                        : null;
+                      const maintenanceNotes =
+                        maintenanceRecord?.notes ?? asset.currentAssignment?.notes ?? asset.details ?? "";
+
+                      return (
+                        <TableRow key={asset.id}>
+                          <TableCell>
+                            <div className="font-medium">{asset.name}</div>
+                            <div className="text-sm text-muted-foreground">{asset.type}</div>
+                            <div className="mt-2">{getStatusBadge(asset.status)}</div>
+                          </TableCell>
+                          <TableCell>
+                            {employeeName ? (
+                              <div className="space-y-1 text-sm">
+                                <div className="font-medium">{employeeName}</div>
+                                {employee?.phone && <div className="text-muted-foreground">{employee.phone}</div>}
+                              </div>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">Not currently assigned</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="space-y-1 text-sm">
+                              <div>Assigned: {formatDate(maintenanceRecord?.assignedDate)}</div>
+                              <div>Returned: {formatDate(maintenanceRecord?.returnDate)}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {maintenanceNotes ? (
+                              <div className="text-sm whitespace-pre-wrap leading-relaxed">{maintenanceNotes}</div>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">No notes recorded.</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20 p-6 text-sm text-muted-foreground">
+                  <Package className="h-10 w-10 text-gray-400" />
+                  No assets are currently marked for maintenance.
+                </div>
               )}
             </CardContent>
           </Card>
