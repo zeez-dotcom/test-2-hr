@@ -1,14 +1,14 @@
 [
   {
     "browser": "chromium",
-    "status": "failed"
+    "status": "passed"
   },
   {
     "browser": "firefox",
-    "status": "failed"
+    "status": "passed"
   },
   {
     "browser": "webkit",
-    "status": "failed"
+    "status": "passed"
   }
 ]

@@ -34,7 +34,9 @@ export default function Cars() {
   const [carImagePreview, setCarImagePreview] = useState<string | null>(null);
   const [editingCar, setEditingCar] = useState<CarWithAssignment | null>(null);
   const { toast } = useToast();
-  const [repairDialogCarId, setRepairDialogCarId] = useState<string | null>(null);
+  const [repairDialogContext, setRepairDialogContext] = useState<
+    { car: CarWithAssignment; mode: "log" | "return" } | null
+  >(null);
   const [assignmentSearch, setAssignmentSearch] = useState("");
   const assignmentSearchTerm = assignmentSearch.trim();
 
@@ -199,39 +201,33 @@ export default function Cars() {
     document: z.any().optional(),
   });
 
-  const repairForm = useForm<z.infer<typeof repairSchema>>({
-    resolver: zodResolver(repairSchema),
-    defaultValues: {
-      repairDate: new Date().toISOString().split('T')[0],
-      description: '',
-      cost: undefined as any,
-      vendor: '',
-      document: undefined as any,
-    },
+  const createRepairFormDefaults = () => ({
+    repairDate: new Date().toISOString().split('T')[0],
+    description: '',
+    cost: undefined as any,
+    vendor: '',
+    document: undefined as any,
   });
 
-  const addRepairMutation = useMutation({
-    mutationFn: async (data: any) => {
-      if (!repairDialogCarId) throw new Error('No car selected');
+  const repairForm = useForm<z.infer<typeof repairSchema>>({
+    resolver: zodResolver(repairSchema),
+    defaultValues: createRepairFormDefaults(),
+  });
+
+  const addRepairMutation = useMutation<
+    void,
+    unknown,
+    { carId: string; data: z.infer<typeof repairSchema> }
+  >({
+    mutationFn: async ({ carId, data }) => {
       const form = new FormData();
       Object.entries(data).forEach(([k, v]) => {
         if (v !== undefined && v !== null && v !== '') {
           form.append(k, v instanceof File ? v : String(v));
         }
       });
-      const res = await apiUpload(`/api/cars/${repairDialogCarId}/repairs`, form);
+      const res = await apiUpload(`/api/cars/${carId}/repairs`, form);
       if (!res.ok) throw res;
-    },
-    onSuccess: () => {
-      toast({ title: 'Repair logged successfully' });
-      setRepairDialogCarId(null);
-      repairForm.reset({
-        repairDate: new Date().toISOString().split('T')[0],
-        description: '',
-        cost: undefined as any,
-        vendor: '',
-        document: undefined as any,
-      });
     },
     onError: (err) => {
       toastApiError(err as any, 'Failed to log repair');
@@ -292,10 +288,24 @@ export default function Cars() {
     }
   });
 
+  const resetRepairFormValues = () => {
+    repairForm.reset(createRepairFormDefaults());
+  };
+
+  const openRepairDialog = (car: CarWithAssignment, mode: "log" | "return") => {
+    resetRepairFormValues();
+    setRepairDialogContext({ car, mode });
+  };
+
   const handleCarStatusChange = (
     car: CarWithAssignment,
     status: "available" | "maintenance" | string
   ) => {
+    if (car.status === "maintenance" && status === "available") {
+      openRepairDialog(car, "return");
+      return;
+    }
+
     if (status === "maintenance") {
       const activeAssignment =
         car.currentAssignment ??
@@ -314,6 +324,38 @@ export default function Cars() {
 
     carStatusMutation.mutate({ carId: car.id, status });
   };
+
+  const handleRepairDialogSubmit = repairForm.handleSubmit(async (data) => {
+    if (!repairDialogContext) return;
+
+    try {
+      await addRepairMutation.mutateAsync({ carId: repairDialogContext.car.id, data });
+      if (repairDialogContext.mode === "return") {
+        await carStatusMutation.mutateAsync({
+          carId: repairDialogContext.car.id,
+          status: "available",
+        });
+      } else {
+        toast({ title: "Repair logged successfully" });
+      }
+      resetRepairFormValues();
+      setRepairDialogContext(null);
+    } catch (err) {
+      // Errors are handled by the respective mutations
+    }
+  });
+
+  const isRepairDialogSubmitting = addRepairMutation.isPending || carStatusMutation.isPending;
+  const isReturnDialog = repairDialogContext?.mode === "return";
+  const repairDialogVehicleName = repairDialogContext
+    ? [
+        repairDialogContext.car.year,
+        repairDialogContext.car.make,
+        repairDialogContext.car.model,
+      ]
+        .filter(Boolean)
+        .join(" ")
+    : "";
 
   const [repairsDialogCar, setRepairsDialogCar] = useState<CarWithAssignment | null>(null);
   const repairsQuery = useQuery<any[]>({
@@ -1186,7 +1228,7 @@ export default function Cars() {
                           >
                             <Trash2 className="w-3 h-3" />
                           </Button>
-                          <Button size="sm" variant="outline" onClick={() => setRepairDialogCarId(car.id)}>
+                          <Button size="sm" variant="outline" onClick={() => openRepairDialog(car, "log")}>
                             Repair
                           </Button>
                           <Button size="sm" variant="outline" onClick={() => setRepairsDialogCar(car)}>
@@ -1576,14 +1618,28 @@ export default function Cars() {
       </Tabs>
 
       {/* Repair Dialog */}
-      <Dialog open={!!repairDialogCarId} onOpenChange={(open) => !open && setRepairDialogCarId(null)}>
+      <Dialog
+        open={!!repairDialogContext}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRepairDialogContext(null);
+            resetRepairFormValues();
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Log Car Repair</DialogTitle>
-            <DialogDescription>Track maintenance and repair activity.</DialogDescription>
+            <DialogTitle>{isReturnDialog ? "Return Car to Service" : "Log Car Repair"}</DialogTitle>
+            <DialogDescription>
+              {isReturnDialog
+                ? `Record the maintenance details before returning ${
+                    repairDialogVehicleName || "this vehicle"
+                  } to service.`
+                : "Track maintenance and repair activity."}
+            </DialogDescription>
           </DialogHeader>
           <Form {...repairForm}>
-            <form onSubmit={repairForm.handleSubmit((data) => addRepairMutation.mutate(data))} className="space-y-4">
+            <form onSubmit={handleRepairDialogSubmit} className="space-y-4">
               <FormField
                 control={repairForm.control}
                 name="repairDate"
@@ -1652,7 +1708,15 @@ export default function Cars() {
                 )}
               />
               <DialogFooter>
-                <Button type="submit" disabled={addRepairMutation.isPending}>{addRepairMutation.isPending ? 'Saving...' : 'Save Repair'}</Button>
+                <Button type="submit" disabled={isRepairDialogSubmitting}>
+                  {isReturnDialog
+                    ? isRepairDialogSubmitting
+                      ? "Returning..."
+                      : "Return to Service"
+                    : isRepairDialogSubmitting
+                    ? "Saving..."
+                    : "Save Repair"}
+                </Button>
               </DialogFooter>
             </form>
           </Form>
