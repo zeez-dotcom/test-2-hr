@@ -86,7 +86,15 @@ export default function EmployeeImport() {
         toastApiError(res, "Failed to download template");
         return;
       }
-      const blob = res.data as Blob;
+      if (!(res.data instanceof Blob)) {
+        toast({
+          title: "Template unavailable",
+          description: "Template file was not returned by the server.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const blob = res.data;
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
