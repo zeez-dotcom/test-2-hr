@@ -128,63 +128,190 @@ export function normalizeBigId(v: unknown): string | undefined {
 
 export const headerDictionary: Record<string, string> = {
   'employee code': 'employeeCode',
+  'employee id': 'employeeCode',
   'code': 'employeeCode',
+  'id': 'employeeCode',
+  'معرف': 'employeeCode',
+  'معرف الموظف': 'employeeCode',
+
   'english name': 'englishName',
   'اسم الانجليزي': 'englishName',
-  'arabic name': 'fullNameArabic',
-  'اسم المؤظف': 'fullNameArabic',
+
+  'first name': 'firstName',
+  'first name (english)': 'firstName',
+  'الاسم الأول': 'firstName',
+  'الاسم الاول': 'firstName',
+
+  'last name': 'lastName',
+  'family name': 'lastName',
+  'اسم العائلة': 'lastName',
+  'الاسم الأخير': 'lastName',
+
+  'arabic name': 'arabicName',
+  'الاسم العربي': 'arabicName',
+  'اسم المؤظف': 'arabicName',
+  'اسم الموظف': 'arabicName',
+
+  'nickname': 'nickname',
+
   'job title': 'position',
+  'position': 'position',
   'لقب': 'position',
+  'المسمى الوظيفي': 'position',
+
   'work location': 'workLocation',
   'مكان العمل': 'workLocation',
+
   'nationality': 'nationality',
   'الجنسية': 'nationality',
+
+  'profession': 'profession',
+  'المهنة': 'profession',
+
+  'profession code': 'professionCode',
+  'رمز المهنة': 'professionCode',
+
+  'profession category': 'professionCategory',
+  'تصنيف المهنة': 'professionCategory',
+
+  'department id': 'departmentId',
+  'department': 'departmentId',
+  'قسم': 'departmentId',
+  'معرف القسم': 'departmentId',
+  'profession department': 'departmentId',
+
   'employment date': 'startDate',
+  'start date': 'startDate',
   'تاريخ التوظيف': 'startDate',
+
   'status': 'status',
   'الحالة': 'status',
+
   'civil id number': 'civilId',
   'رقم البطاقة المدنية': 'civilId',
+
   'civil id issue date': 'civilIdIssueDate',
+  'تاريخ اصدار البطاقة المدنية': 'civilIdIssueDate',
+  'تاريخ إصدار البطاقة المدنية': 'civilIdIssueDate',
+
   'civil id expiry date': 'civilIdExpiryDate',
+  'تاريخ انتهاء البطاقة المدنية': 'civilIdExpiryDate',
+
+  'civil id alert days': 'civilIdAlertDays',
+
   'passport number': 'passportNumber',
   'رقم جواز السفر': 'passportNumber',
+
   'passport issue date': 'passportIssueDate',
+  'تاريخ اصدار جواز السفر': 'passportIssueDate',
+  'تاريخ إصدار جواز السفر': 'passportIssueDate',
+
   'passport expiry date': 'passportExpiryDate',
-  'driving license expiry date': 'drivingLicenseExpiryDate',
+  'تاريخ انتهاء جواز السفر': 'passportExpiryDate',
+
+  'passport alert days': 'passportAlertDays',
+
+  'salary': 'salary',
   'salaries': 'salary',
-  'رواتب': 'salary',
-  'salary deductions': 'salaryDeductions',
-  'خصومات الراتب': 'salaryDeductions',
+  'الراتب': 'salary',
+
   'additions': 'additions',
-  'fines': 'fines',
-  'total loans': 'totalLoans',
-  'loans': 'loans',
+  'إضافات': 'additions',
+
   'payment method': 'paymentMethod',
   'طريقة الدفع': 'paymentMethod',
+
   'transferable': 'transferable',
   'تحويل': 'transferable',
+
+  'standard working days': 'standardWorkingDays',
+  'days worked': 'standardWorkingDays',
+  'working days': 'standardWorkingDays',
+  'أيام العمل': 'standardWorkingDays',
+
   'phone': 'phone',
-  'iban': 'iban',
-  'swiftcode': 'swiftCode',
-  'company': 'company',
-  'image url': 'imageUrl',
-  'رابط الصورة': 'imageUrl',
+  'phone number': 'phone',
+  'phonenumber': 'phone',
+  'رقم الهاتف': 'phone',
+
+  'email': 'email',
+
+  'emergency contact': 'emergencyContact',
+  'emergency phone': 'emergencyPhone',
+  'emergency number': 'emergencyPhone',
+
+  'national id': 'nationalId',
+  'address': 'address',
+  'date of birth': 'dateOfBirth',
+  'birth date': 'dateOfBirth',
+
+  'image url': 'profileImage',
+  'profile image': 'profileImage',
+  'profile image url': 'profileImage',
+  'profile picture': 'profileImage',
+  'رابط الصورة': 'profileImage',
+  'صورة الملف الشخصي': 'profileImage',
+
+  'civil id image': 'civilIdImage',
   'civil id pic': 'civilIdImage',
+  'صورة البطاقة المدنية': 'civilIdImage',
+
+  'passport image': 'passportImage',
   'passport pic': 'passportImage',
+  'صورة جواز السفر': 'passportImage',
+
+  'driving license image': 'drivingLicenseImage',
   'driving license': 'drivingLicenseImage',
-  'other docs': 'otherDocs',
-  'vacation return date': 'vacationReturnDate',
-  'residency on company or not': 'residencyOnCompany',
-  'profession category': 'professionCategory',
-  'swift code': 'swiftCode',
+  'صورة رخصة القيادة': 'drivingLicenseImage',
+
+  'driving license number': 'drivingLicenseNumber',
+
+  'driving license issue date': 'drivingLicenseIssueDate',
+  'تاريخ اصدار رخصة القيادة': 'drivingLicenseIssueDate',
+  'تاريخ إصدار رخصة القيادة': 'drivingLicenseIssueDate',
+
+  'driving license expiry date': 'drivingLicenseExpiryDate',
+  'تاريخ انتهاء رخصة القيادة': 'drivingLicenseExpiryDate',
+
   'documents': 'otherDocs',
   'document': 'otherDocs',
-  'profession code': 'professionCode',
-  'profession': 'profession',
+  'مستندات': 'otherDocs',
+
+  'other docs': 'additionalDocs',
+  'additional documents': 'additionalDocs',
+  'مستندات إضافية': 'additionalDocs',
+
+  'iban': 'iban',
+  'iban number': 'iban',
+  'آيبان': 'iban',
+  'bank iban': 'bankIban',
+  'bank name': 'bankName',
+
+  'swiftcode': 'swiftCode',
+  'swift code': 'swiftCode',
+  'رمز السويفت': 'swiftCode',
+
+  'bank iban number': 'bankIban',
+
   'residency name': 'residencyName',
-  'company vacation return date': 'vacationReturnDate',
-  'id': 'employeeCode',
+  'اسم الإقامة': 'residencyName',
+
+  'residency on company or not': 'residencyOnCompany',
+  'residency on company': 'residencyOnCompany',
+  'الإقامة على الشركة': 'residencyOnCompany',
+
+  'company': 'companyId',
+  'company id': 'companyId',
+  'company name': 'companyId',
+
+  'visa number': 'visaNumber',
+  'visa type': 'visaType',
+  'visa issue date': 'visaIssueDate',
+  'visa expiry date': 'visaExpiryDate',
+  'visa alert days': 'visaAlertDays',
+  'visa image': 'visaImage',
+
+  'role': 'role',
 };
 
 export function mapHeader(header: string): string | undefined {

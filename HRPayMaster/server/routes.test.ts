@@ -4,6 +4,8 @@ import request from 'supertest';
 import { errorHandler } from './errorHandler';
 import * as XLSX from 'xlsx';
 import sharp from 'sharp';
+import { mapHeader } from './utils/normalize';
+import { insertEmployeeSchema } from '@shared/schema';
 
 vi.mock('./storage', () => {
   class DuplicateEmployeeCodeError extends Error {}
@@ -257,43 +259,51 @@ describe('employee routes', () => {
     const sheet = wb.Sheets[wb.SheetNames[0]];
     const headers = XLSX.utils.sheet_to_json(sheet, { header: 1 })[0];
     expect(headers).toEqual([
-      'id/معرف',
-      'English Name/اسم الانجليزي',
+      'Employee Code/معرف الموظف',
+      'First Name (English)/الاسم الأول',
+      'Last Name/اسم العائلة',
+      'Arabic Name/الاسم العربي',
       'Image URL/رابط الصورة',
-      'Arabic Name/اسم المؤظف',
-      'Job Title/لقب',
+      'Job Title/المسمى الوظيفي',
       'Work Location/مكان العمل',
       'Nationality/الجنسية',
       'Profession/المهنة',
       'Employment Date/تاريخ التوظيف',
       'Status/الحالة',
       'Civil ID Number/رقم البطاقة المدنية',
-      'civil id issue date',
+      'Civil ID Issue Date/تاريخ إصدار البطاقة المدنية',
       'Civil ID Expiry Date/تاريخ انتهاء البطاقة المدنية',
       'Passport Number/رقم جواز السفر',
-      'Passport Issue Date/تاريخ اصدار جواز السفر',
+      'Passport Issue Date/تاريخ إصدار جواز السفر',
       'Passport Expiry Date/تاريخ انتهاء جواز السفر',
-      'Salaries/رواتب',
-      'loans',
+      'Salary/الراتب',
+      'Additions/إضافات',
       'Transferable/تحويل',
       'Payment Method/طريقة الدفع',
-      'Documents/مستندات or izenamal',
-      'Days Worked/أيام العمل',
-      'phonenumber',
-      'civil id pic',
-      'passport pic',
-      'driving license',
-      'driving license issue date',
-      'driving license expiry date',
-      'other docs',
-      'iban',
-      'SWIFTCODE',
-      'residency name',
-      'residency on company or not',
-      'profession department',
-      'profession code',
-      'profession category',
+      'Documents/مستندات',
+      'Standard Working Days/أيام العمل',
+      'Phone Number/رقم الهاتف',
+      'Civil ID Image/صورة البطاقة المدنية',
+      'Passport Image/صورة جواز السفر',
+      'Driving License Image/صورة رخصة القيادة',
+      'Driving License Issue Date/تاريخ إصدار رخصة القيادة',
+      'Driving License Expiry Date/تاريخ انتهاء رخصة القيادة',
+      'Additional Documents/مستندات إضافية',
+      'IBAN/آيبان',
+      'SWIFT Code/رمز السويفت',
+      'Residency Name/اسم الإقامة',
+      'Residency On Company/الإقامة على الشركة',
+      'Department ID/معرف القسم',
+      'Profession Code/رمز المهنة',
+      'Profession Category/تصنيف المهنة',
     ]);
+
+    const employeeKeys = new Set(Object.keys(insertEmployeeSchema.shape));
+    headers.forEach(header => {
+      const mapped = mapHeader(String(header));
+      expect(mapped).toBeDefined();
+      expect(employeeKeys.has(mapped!)).toBe(true);
+    });
   });
 
   it('POST /api/employees validates input data', async () => {
