@@ -74,7 +74,7 @@ import {
   type InsertAttendance
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc, and, gte, lte, sql, inArray, type AnyColumn } from "drizzle-orm";
+import { eq, desc, asc, and, gte, lte, sql, inArray, type AnyColumn, type SQL } from "drizzle-orm";
 
 export class DuplicateEmployeeCodeError extends Error {
   constructor(code: string) {
@@ -125,9 +125,19 @@ export interface LoanReportDetail {
 }
 
 export interface AssetUsage {
+  assignmentId: string;
   assetId: string;
-  name: string;
-  assignments: number;
+  assetName: string;
+  assetType: string;
+  assetStatus: string;
+  assetDetails: string | null;
+  employeeId: string;
+  employeeCode: string | null;
+  employeeName: string;
+  assignedDate: string;
+  returnDate: string | null;
+  status: AssetAssignment["status"];
+  notes: string | null;
 }
 
 export interface IStorage {
@@ -291,7 +301,7 @@ export interface IStorage {
     range: { startDate: string; endDate: string; groupBy: "month" | "year" }
   ): Promise<PayrollDepartmentSummaryRow[]>;
   getLoanBalances(): Promise<LoanBalance[]>;
-  getAssetUsage(): Promise<AssetUsage[]>;
+  getAssetUsageDetails(params: { startDate?: string; endDate?: string }): Promise<AssetUsage[]>;
   getAssetDocuments(assetId: string): Promise<AssetDocument[]>;
   createAssetDocument(doc: InsertAssetDocument): Promise<AssetDocument>;
   getAssetRepairs(assetId: string): Promise<AssetRepair[]>;
@@ -1831,24 +1841,98 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async getAssetUsage(): Promise<AssetUsage[]> {
-    const rows = await db
-      .select({
-        assetId: assets.id,
-        name: assets.name,
-        count: sql<number>`count(${assetAssignments.id})`,
-      })
-      .from(assetAssignments)
-      .innerJoin(assets, eq(assetAssignments.assetId, assets.id))
-      .where(eq(assetAssignments.status, "active"))
-      // group by both id and name to satisfy SQL grouping rules
-      .groupBy(assets.id, assets.name);
+  async getAssetUsageDetails({
+    startDate,
+    endDate,
+  }: {
+    startDate?: string;
+    endDate?: string;
+  }): Promise<AssetUsage[]> {
+    const filters: SQL<unknown>[] = [];
 
-    return rows.map(r => ({
-      assetId: r.assetId,
-      name: r.name,
-      assignments: Number(r.count),
-    }));
+    if (endDate) {
+      filters.push(lte(assetAssignments.assignedDate, endDate));
+    }
+
+    if (startDate) {
+      filters.push(
+        sql`(${assetAssignments.returnDate} IS NULL OR ${assetAssignments.returnDate} >= ${startDate})`,
+      );
+    }
+
+    const assignments = await db.query.assetAssignments.findMany({
+      where: filters.length ? and(...filters) : undefined,
+      with: {
+        asset: true,
+        employee: true,
+      },
+      orderBy: [asc(assetAssignments.assetId), asc(assetAssignments.assignedDate)],
+    });
+
+    const start = startDate ? new Date(startDate) : null;
+    const end = endDate ? new Date(endDate) : null;
+
+    const normalizeDate = (value?: string | Date | null) => {
+      if (!value) return null;
+      if (value instanceof Date) {
+        return value.toISOString().split("T")[0];
+      }
+      return value;
+    };
+
+    const toDate = (value: string | Date) =>
+      value instanceof Date ? value : new Date(value);
+
+    return assignments
+      .filter((assignment) => {
+        const assigned = toDate(assignment.assignedDate);
+        const returned = assignment.returnDate
+          ? toDate(assignment.returnDate)
+          : null;
+
+        const startsBeforeEnd = !end || assigned <= end;
+        const endsAfterStart = !start || !returned || returned >= start;
+
+        return startsBeforeEnd && endsAfterStart;
+      })
+      .map((assignment) => {
+        const asset = assignment.asset;
+        const employee = assignment.employee;
+        const assignedDate = normalizeDate(assignment.assignedDate) ?? "";
+        const returnDate = normalizeDate(assignment.returnDate);
+        const employeeName = [employee?.firstName, employee?.lastName]
+          .filter(Boolean)
+          .join(" ")
+          .trim();
+
+        return {
+          assignmentId: assignment.id,
+          assetId: assignment.assetId,
+          assetName: asset?.name ?? assignment.assetId,
+          assetType: asset?.type ?? "",
+          assetStatus: asset?.status ?? "",
+          assetDetails: asset?.details ?? null,
+          employeeId: assignment.employeeId,
+          employeeCode: employee?.employeeCode ?? null,
+          employeeName:
+            employeeName ||
+            employee?.firstName ||
+            employee?.lastName ||
+            assignment.employeeId,
+          assignedDate,
+          returnDate,
+          status: assignment.status,
+          notes: assignment.notes ?? null,
+        } satisfies AssetUsage;
+      })
+      .sort((a, b) => {
+        const nameCompare = a.assetName.localeCompare(b.assetName);
+        if (nameCompare !== 0) return nameCompare;
+
+        const dateA = new Date(a.assignedDate);
+        const dateB = new Date(b.assignedDate);
+        return dateA.getTime() - dateB.getTime();
+      });
   }
 
   // Document expiry check methods

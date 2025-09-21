@@ -29,7 +29,7 @@ vi.mock('./storage', () => {
       getCompanyPayrollSummary: vi.fn(),
       getLoanReportDetails: vi.fn(),
       getLoanBalances: vi.fn(),
-      getAssetUsage: vi.fn(),
+      getAssetUsageDetails: vi.fn(),
     },
     DuplicateEmployeeCodeError,
   };
@@ -1092,13 +1092,35 @@ describe('employee routes', () => {
     expect(res.body).toEqual(details);
   });
 
-  it('GET /api/reports/asset-usage returns usage', async () => {
-    const usage = [{ assetId: 'a1', name: 'Laptop', assignments: 2 }];
-    (storage.getAssetUsage as any).mockResolvedValue(usage);
+  it('GET /api/reports/asset-usage returns usage details with filters', async () => {
+    const usage = [
+      {
+        assignmentId: 'assign-1',
+        assetId: 'a1',
+        assetName: 'Laptop',
+        assetType: 'IT',
+        assetStatus: 'assigned',
+        assetDetails: 'MacBook',
+        employeeId: 'e1',
+        employeeCode: 'EMP-001',
+        employeeName: 'Ada Lovelace',
+        assignedDate: '2024-01-01',
+        returnDate: null,
+        status: 'active',
+        notes: 'Primary device',
+      },
+    ];
+    (storage.getAssetUsageDetails as any).mockResolvedValue(usage);
 
-    const res = await request(app).get('/api/reports/asset-usage');
+    const res = await request(app)
+      .get('/api/reports/asset-usage')
+      .query({ startDate: '2024-01-01', endDate: '2024-02-01' });
 
     expect(res.status).toBe(200);
+    expect(storage.getAssetUsageDetails).toHaveBeenCalledWith({
+      startDate: '2024-01-01',
+      endDate: '2024-02-01',
+    });
     expect(res.body).toEqual(usage);
   });
 });

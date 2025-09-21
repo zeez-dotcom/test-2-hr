@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-const { selectMock, loansFindManyMock } = vi.hoisted(() => ({
+const { selectMock, loansFindManyMock, assetAssignmentsFindManyMock } = vi.hoisted(() => ({
   selectMock: vi.fn(),
   loansFindManyMock: vi.fn(),
+  assetAssignmentsFindManyMock: vi.fn(),
 }));
 
 vi.mock('./db', () => ({
@@ -10,6 +11,7 @@ vi.mock('./db', () => ({
     select: selectMock,
     query: {
       loans: { findMany: loansFindManyMock },
+      assetAssignments: { findMany: assetAssignmentsFindManyMock },
     },
   }
 }));
@@ -20,6 +22,7 @@ describe('getCompanyPayrollSummary', () => {
   beforeEach(() => {
     selectMock.mockReset();
     loansFindManyMock.mockReset();
+    assetAssignmentsFindManyMock.mockReset();
   });
 
   it('groups payroll entries by period', async () => {
@@ -62,6 +65,7 @@ describe('getLoanBalances', () => {
   beforeEach(() => {
     selectMock.mockReset();
     loansFindManyMock.mockReset();
+    assetAssignmentsFindManyMock.mockReset();
   });
 
   it('aggregates remaining loan amounts by employee', async () => {
@@ -88,6 +92,7 @@ describe('getLoanReportDetails', () => {
   beforeEach(() => {
     selectMock.mockReset();
     loansFindManyMock.mockReset();
+    assetAssignmentsFindManyMock.mockReset();
   });
 
   it('returns loan metrics with payment and vacation context', async () => {
@@ -162,30 +167,197 @@ describe('getLoanReportDetails', () => {
   });
 });
 
-describe('getAssetUsage', () => {
+describe('getAssetUsageDetails', () => {
   beforeEach(() => {
-    selectMock.mockReset();
+    assetAssignmentsFindManyMock.mockReset();
   });
 
-  it('returns active asset assignment counts', async () => {
-    const rows = [
-      { assetId: 'a1', name: 'Laptop', count: 2 },
-      { assetId: 'a2', name: 'Phone', count: 1 }
-    ];
-    selectMock.mockReturnValue({
-      from: () => ({
-        innerJoin: () => ({
-          where: () => ({
-            groupBy: async () => rows
-          })
-        })
-      })
+  it('returns assignment details with asset and employee context', async () => {
+    assetAssignmentsFindManyMock.mockResolvedValue([
+      {
+        id: 'assign-b',
+        assetId: 'asset-b',
+        employeeId: 'emp-2',
+        assignedDate: '2024-02-01',
+        returnDate: null,
+        status: 'active',
+        notes: 'Primary phone',
+        asset: {
+          id: 'asset-b',
+          type: 'IT',
+          name: 'Phone',
+          status: 'assigned',
+          details: 'iPhone',
+          createdAt: new Date(),
+        },
+        employee: {
+          id: 'emp-2',
+          employeeCode: 'E-002',
+          firstName: 'Grace',
+          lastName: 'Hopper',
+        },
+      },
+      {
+        id: 'assign-a',
+        assetId: 'asset-a',
+        employeeId: 'emp-1',
+        assignedDate: '2024-01-01',
+        returnDate: '2024-01-15',
+        status: 'returned',
+        notes: 'Loaner',
+        asset: {
+          id: 'asset-a',
+          type: 'IT',
+          name: 'Laptop',
+          status: 'available',
+          details: 'Dell XPS',
+          createdAt: new Date(),
+        },
+        employee: {
+          id: 'emp-1',
+          employeeCode: 'E-001',
+          firstName: 'Ada',
+          lastName: 'Lovelace',
+        },
+      },
+    ]);
+
+    const result = await storage.getAssetUsageDetails({
+      startDate: '2024-01-01',
+      endDate: '2024-12-31',
     });
 
-    const result = await storage.getAssetUsage();
+    expect(assetAssignmentsFindManyMock).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.anything() })
+    );
     expect(result).toEqual([
-      { assetId: 'a1', name: 'Laptop', assignments: 2 },
-      { assetId: 'a2', name: 'Phone', assignments: 1 }
+      {
+        assignmentId: 'assign-a',
+        assetId: 'asset-a',
+        assetName: 'Laptop',
+        assetType: 'IT',
+        assetStatus: 'available',
+        assetDetails: 'Dell XPS',
+        employeeId: 'emp-1',
+        employeeCode: 'E-001',
+        employeeName: 'Ada Lovelace',
+        assignedDate: '2024-01-01',
+        returnDate: '2024-01-15',
+        status: 'returned',
+        notes: 'Loaner',
+      },
+      {
+        assignmentId: 'assign-b',
+        assetId: 'asset-b',
+        assetName: 'Phone',
+        assetType: 'IT',
+        assetStatus: 'assigned',
+        assetDetails: 'iPhone',
+        employeeId: 'emp-2',
+        employeeCode: 'E-002',
+        employeeName: 'Grace Hopper',
+        assignedDate: '2024-02-01',
+        returnDate: null,
+        status: 'active',
+        notes: 'Primary phone',
+      },
+    ]);
+  });
+
+  it('filters assignments that fall completely outside the window', async () => {
+    assetAssignmentsFindManyMock.mockResolvedValue([
+      {
+        id: 'outside-after',
+        assetId: 'asset-c',
+        employeeId: 'emp-3',
+        assignedDate: '2024-02-10',
+        returnDate: null,
+        status: 'active',
+        notes: null,
+        asset: {
+          id: 'asset-c',
+          type: 'IT',
+          name: 'Tablet',
+          status: 'assigned',
+          details: null,
+          createdAt: new Date(),
+        },
+        employee: {
+          id: 'emp-3',
+          employeeCode: 'E-003',
+          firstName: 'Linus',
+          lastName: 'Torvalds',
+        },
+      },
+      {
+        id: 'outside-before',
+        assetId: 'asset-d',
+        employeeId: 'emp-4',
+        assignedDate: '2023-11-01',
+        returnDate: '2023-11-30',
+        status: 'returned',
+        notes: null,
+        asset: {
+          id: 'asset-d',
+          type: 'IT',
+          name: 'Monitor',
+          status: 'available',
+          details: null,
+          createdAt: new Date(),
+        },
+        employee: {
+          id: 'emp-4',
+          employeeCode: 'E-004',
+          firstName: 'Barbara',
+          lastName: 'Liskov',
+        },
+      },
+      {
+        id: 'inside',
+        assetId: 'asset-a',
+        employeeId: 'emp-1',
+        assignedDate: '2024-01-05',
+        returnDate: null,
+        status: 'active',
+        notes: 'Ongoing',
+        asset: {
+          id: 'asset-a',
+          type: 'IT',
+          name: 'Laptop',
+          status: 'assigned',
+          details: null,
+          createdAt: new Date(),
+        },
+        employee: {
+          id: 'emp-1',
+          employeeCode: 'E-001',
+          firstName: 'Ada',
+          lastName: 'Lovelace',
+        },
+      },
+    ]);
+
+    const result = await storage.getAssetUsageDetails({
+      startDate: '2024-01-01',
+      endDate: '2024-01-31',
+    });
+
+    expect(result).toEqual([
+      {
+        assignmentId: 'inside',
+        assetId: 'asset-a',
+        assetName: 'Laptop',
+        assetType: 'IT',
+        assetStatus: 'assigned',
+        assetDetails: null,
+        employeeId: 'emp-1',
+        employeeCode: 'E-001',
+        employeeName: 'Ada Lovelace',
+        assignedDate: '2024-01-05',
+        returnDate: null,
+        status: 'active',
+        notes: 'Ongoing',
+      },
     ]);
   });
 });

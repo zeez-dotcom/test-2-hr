@@ -15,9 +15,17 @@ const loanRows = [
 
 const vacationRows: any[] = [];
 
+const { selectMock, assetAssignmentsFindManyMock } = vi.hoisted(() => ({
+  selectMock: vi.fn(),
+  assetAssignmentsFindManyMock: vi.fn(),
+}));
+
 vi.mock('./db', () => ({
   db: {
-    select: vi.fn(),
+    select: selectMock,
+    query: {
+      assetAssignments: { findMany: assetAssignmentsFindManyMock },
+    },
   },
 }));
 
@@ -25,7 +33,8 @@ import { db } from './db';
 import { storage } from './storage';
 
 beforeEach(() => {
-  vi.mocked(db.select).mockReset();
+  selectMock.mockReset();
+  assetAssignmentsFindManyMock.mockReset();
 });
 
 describe('getEmployeeReport', () => {
@@ -141,40 +150,90 @@ describe('getLoanBalances', () => {
   });
 });
 
-describe('getAssetUsage', () => {
-  it('returns assignment counts for active assets', async () => {
-    const rows = [
-      { assetId: 'a1', name: 'Laptop', count: 2 },
-      { assetId: 'a2', name: 'Phone', count: 1 },
-    ];
-    vi.mocked(db.select).mockReturnValueOnce({
-      from: () => ({
-        innerJoin: () => ({
-          where: () => ({
-            groupBy: async () => rows,
-          }),
-        }),
-      }),
+describe('getAssetUsageDetails', () => {
+  it('returns assignment details for overlapping records', async () => {
+    assetAssignmentsFindManyMock.mockResolvedValue([
+      {
+        id: 'assign-1',
+        assetId: 'asset-1',
+        employeeId: 'emp-1',
+        assignedDate: '2024-01-05',
+        returnDate: null,
+        status: 'active',
+        notes: 'Primary asset',
+        asset: {
+          id: 'asset-1',
+          type: 'IT',
+          name: 'Laptop',
+          status: 'assigned',
+          details: 'MacBook',
+          createdAt: new Date(),
+        },
+        employee: {
+          id: 'emp-1',
+          employeeCode: 'E-001',
+          firstName: 'Ada',
+          lastName: 'Lovelace',
+        },
+      },
+    ]);
+
+    const result = await storage.getAssetUsageDetails({
+      startDate: '2024-01-01',
+      endDate: '2024-02-01',
     });
 
-    const result = await storage.getAssetUsage();
     expect(result).toEqual([
-      { assetId: 'a1', name: 'Laptop', assignments: 2 },
-      { assetId: 'a2', name: 'Phone', assignments: 1 },
+      {
+        assignmentId: 'assign-1',
+        assetId: 'asset-1',
+        assetName: 'Laptop',
+        assetType: 'IT',
+        assetStatus: 'assigned',
+        assetDetails: 'MacBook',
+        employeeId: 'emp-1',
+        employeeCode: 'E-001',
+        employeeName: 'Ada Lovelace',
+        assignedDate: '2024-01-05',
+        returnDate: null,
+        status: 'active',
+        notes: 'Primary asset',
+      },
     ]);
   });
 
-  it('returns empty array when no active assignments', async () => {
-    vi.mocked(db.select).mockReturnValueOnce({
-      from: () => ({
-        innerJoin: () => ({
-          where: () => ({
-            groupBy: async () => [],
-          }),
-        }),
-      }),
+  it('returns empty array when no assignments overlap the window', async () => {
+    assetAssignmentsFindManyMock.mockResolvedValue([
+      {
+        id: 'assign-old',
+        assetId: 'asset-2',
+        employeeId: 'emp-2',
+        assignedDate: '2023-01-01',
+        returnDate: '2023-02-01',
+        status: 'returned',
+        notes: null,
+        asset: {
+          id: 'asset-2',
+          type: 'IT',
+          name: 'Tablet',
+          status: 'available',
+          details: null,
+          createdAt: new Date(),
+        },
+        employee: {
+          id: 'emp-2',
+          employeeCode: 'E-002',
+          firstName: 'Grace',
+          lastName: 'Hopper',
+        },
+      },
+    ]);
+
+    const result = await storage.getAssetUsageDetails({
+      startDate: '2024-01-01',
+      endDate: '2024-01-31',
     });
-    const result = await storage.getAssetUsage();
+
     expect(result).toEqual([]);
   });
 });
