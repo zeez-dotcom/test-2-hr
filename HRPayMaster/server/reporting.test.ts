@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-const { selectMock, loansFindManyMock, assetAssignmentsFindManyMock } = vi.hoisted(() => ({
+const { selectMock, loansFindManyMock, assetAssignmentsFindManyMock, carAssignmentsFindManyMock } = vi.hoisted(() => ({
   selectMock: vi.fn(),
   loansFindManyMock: vi.fn(),
   assetAssignmentsFindManyMock: vi.fn(),
+  carAssignmentsFindManyMock: vi.fn(),
 }));
 
 vi.mock('./db', () => ({
@@ -12,6 +13,7 @@ vi.mock('./db', () => ({
     query: {
       loans: { findMany: loansFindManyMock },
       assetAssignments: { findMany: assetAssignmentsFindManyMock },
+      carAssignments: { findMany: carAssignmentsFindManyMock },
     },
   }
 }));
@@ -23,6 +25,7 @@ describe('getCompanyPayrollSummary', () => {
     selectMock.mockReset();
     loansFindManyMock.mockReset();
     assetAssignmentsFindManyMock.mockReset();
+    carAssignmentsFindManyMock.mockReset();
   });
 
   it('groups payroll entries by period', async () => {
@@ -66,6 +69,7 @@ describe('getLoanBalances', () => {
     selectMock.mockReset();
     loansFindManyMock.mockReset();
     assetAssignmentsFindManyMock.mockReset();
+    carAssignmentsFindManyMock.mockReset();
   });
 
   it('aggregates remaining loan amounts by employee', async () => {
@@ -93,6 +97,7 @@ describe('getLoanReportDetails', () => {
     selectMock.mockReset();
     loansFindManyMock.mockReset();
     assetAssignmentsFindManyMock.mockReset();
+    carAssignmentsFindManyMock.mockReset();
   });
 
   it('returns loan metrics with payment and vacation context', async () => {
@@ -170,6 +175,7 @@ describe('getLoanReportDetails', () => {
 describe('getAssetUsageDetails', () => {
   beforeEach(() => {
     assetAssignmentsFindManyMock.mockReset();
+    carAssignmentsFindManyMock.mockReset();
   });
 
   it('returns assignment details with asset and employee context', async () => {
@@ -357,6 +363,206 @@ describe('getAssetUsageDetails', () => {
         returnDate: null,
         status: 'active',
         notes: 'Ongoing',
+      },
+    ]);
+  });
+});
+
+describe('getFleetUsage', () => {
+  beforeEach(() => {
+    carAssignmentsFindManyMock.mockReset();
+  });
+
+  it('returns assignment details with vehicle and employee context', async () => {
+    carAssignmentsFindManyMock.mockResolvedValue([
+      {
+        id: 'assign-truck',
+        carId: 'car-truck',
+        employeeId: 'emp-2',
+        assignedDate: '2024-02-10',
+        returnDate: null,
+        status: 'active',
+        notes: 'Logistics route',
+        car: {
+          id: 'car-truck',
+          make: 'Toyota',
+          model: 'Hilux',
+          year: 2021,
+          plateNumber: 'KUW-4567',
+          vin: 'VIN-4567',
+          serial: 'SER-4567',
+        },
+        employee: {
+          id: 'emp-2',
+          employeeCode: 'E-002',
+          firstName: 'Grace',
+          lastName: 'Hopper',
+        },
+      },
+      {
+        id: 'assign-sedan',
+        carId: 'car-sedan',
+        employeeId: 'emp-1',
+        assignedDate: '2024-01-05',
+        returnDate: '2024-01-20',
+        status: 'returned',
+        notes: 'Client visits',
+        car: {
+          id: 'car-sedan',
+          make: 'Honda',
+          model: 'Civic',
+          year: 2022,
+          plateNumber: 'KUW-1234',
+          vin: 'VIN-1234',
+          serial: 'SER-1234',
+        },
+        employee: {
+          id: 'emp-1',
+          employeeCode: 'E-001',
+          firstName: 'Ada',
+          lastName: 'Lovelace',
+        },
+      },
+    ]);
+
+    const result = await storage.getFleetUsage({
+      startDate: '2024-01-01',
+      endDate: '2024-12-31',
+    });
+
+    expect(carAssignmentsFindManyMock).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.anything() })
+    );
+    expect(result).toEqual([
+      {
+        assignmentId: 'assign-sedan',
+        carId: 'car-sedan',
+        vehicle: 'Honda Civic 2022',
+        plateNumber: 'KUW-1234',
+        vin: 'VIN-1234',
+        serial: 'SER-1234',
+        employeeId: 'emp-1',
+        employeeCode: 'E-001',
+        employeeName: 'Ada Lovelace',
+        assignedDate: '2024-01-05',
+        returnDate: '2024-01-20',
+        status: 'returned',
+        notes: 'Client visits',
+      },
+      {
+        assignmentId: 'assign-truck',
+        carId: 'car-truck',
+        vehicle: 'Toyota Hilux 2021',
+        plateNumber: 'KUW-4567',
+        vin: 'VIN-4567',
+        serial: 'SER-4567',
+        employeeId: 'emp-2',
+        employeeCode: 'E-002',
+        employeeName: 'Grace Hopper',
+        assignedDate: '2024-02-10',
+        returnDate: null,
+        status: 'active',
+        notes: 'Logistics route',
+      },
+    ]);
+  });
+
+  it('filters assignments that do not overlap the requested window', async () => {
+    carAssignmentsFindManyMock.mockResolvedValue([
+      {
+        id: 'outside-before',
+        carId: 'car-old',
+        employeeId: 'emp-3',
+        assignedDate: '2023-01-01',
+        returnDate: '2023-01-20',
+        status: 'completed',
+        notes: null,
+        car: {
+          id: 'car-old',
+          make: 'Nissan',
+          model: 'Sunny',
+          year: 2018,
+          plateNumber: 'OLD-001',
+          vin: null,
+          serial: null,
+        },
+        employee: {
+          id: 'emp-3',
+          employeeCode: 'E-003',
+          firstName: 'Linus',
+          lastName: 'Torvalds',
+        },
+      },
+      {
+        id: 'outside-after',
+        carId: 'car-future',
+        employeeId: 'emp-4',
+        assignedDate: '2024-05-01',
+        returnDate: null,
+        status: 'active',
+        notes: null,
+        car: {
+          id: 'car-future',
+          make: 'Ford',
+          model: 'Focus',
+          year: 2024,
+          plateNumber: 'NEW-777',
+          vin: 'VIN-777',
+          serial: 'SER-777',
+        },
+        employee: {
+          id: 'emp-4',
+          employeeCode: 'E-004',
+          firstName: 'Barbara',
+          lastName: 'Liskov',
+        },
+      },
+      {
+        id: 'inside',
+        carId: 'car-inside',
+        employeeId: 'emp-1',
+        assignedDate: '2024-03-10',
+        returnDate: null,
+        status: 'active',
+        notes: 'Project support',
+        car: {
+          id: 'car-inside',
+          make: 'Honda',
+          model: 'Civic',
+          year: 2021,
+          plateNumber: 'MID-123',
+          vin: 'VIN-123',
+          serial: 'SER-123',
+        },
+        employee: {
+          id: 'emp-1',
+          employeeCode: 'E-001',
+          firstName: 'Ada',
+          lastName: 'Lovelace',
+        },
+      },
+    ]);
+
+    const result = await storage.getFleetUsage({
+      startDate: '2024-02-01',
+      endDate: '2024-04-30',
+    });
+
+    expect(result).toEqual([
+      {
+        assignmentId: 'inside',
+        carId: 'car-inside',
+        vehicle: 'Honda Civic 2021',
+        plateNumber: 'MID-123',
+        vin: 'VIN-123',
+        serial: 'SER-123',
+        employeeId: 'emp-1',
+        employeeCode: 'E-001',
+        employeeName: 'Ada Lovelace',
+        assignedDate: '2024-03-10',
+        returnDate: null,
+        status: 'active',
+        notes: 'Project support',
       },
     ]);
   });

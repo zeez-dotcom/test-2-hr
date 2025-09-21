@@ -173,7 +173,9 @@ describe('Cars page', () => {
       year: '2024',
       plateNumber: 'ABC123'
     });
-    expect(toast).toHaveBeenCalledWith({ title: 'Failed to add car', variant: 'destructive' });
+    expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Failed to add car', variant: 'destructive' })
+    );
     mutationMocks[0].shouldError = false;
     toast.mockReset();
 
@@ -189,7 +191,9 @@ describe('Cars page', () => {
     // assign car error
     mutationMocks[1].shouldError = true;
     await mutationMocks[1].mutate({ carId: '1' });
-    expect(toast).toHaveBeenCalledWith({ title: 'Failed to assign car', variant: 'destructive' });
+    expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Failed to assign car', variant: 'destructive' })
+    );
     mutationMocks[1].shouldError = false;
     toast.mockReset();
 

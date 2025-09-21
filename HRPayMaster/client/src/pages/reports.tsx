@@ -24,6 +24,7 @@ import {
   Search,
   Building,
   Users,
+  Car,
   Award,
   AlertTriangle,
 } from "lucide-react";
@@ -66,6 +67,21 @@ type AssetUsage = {
   assetType: string;
   assetStatus: string;
   assetDetails: string | null;
+  employeeId: string;
+  employeeCode: string | null;
+  employeeName: string;
+  assignedDate: string;
+  returnDate: string | null;
+  status: string;
+  notes: string | null;
+};
+type FleetUsage = {
+  assignmentId: string;
+  carId: string;
+  vehicle: string;
+  plateNumber: string;
+  vin: string | null;
+  serial: string | null;
   employeeId: string;
   employeeCode: string | null;
   employeeName: string;
@@ -156,6 +172,18 @@ export default function Reports() {
     enabled: Boolean(startDate && endDate),
   });
 
+  const { data: fleetUsage, error: fleetUsageError } = useQuery<FleetUsage[]>({
+    queryKey: ["/api/reports/fleet-usage", startDate, endDate],
+    queryFn: async () => {
+      const res = await apiGet(
+        `/api/reports/fleet-usage?startDate=${startDate}&endDate=${endDate}`,
+      );
+      if (!res.ok) throw new Error(res.error || "Failed to fetch");
+      return res.data;
+    },
+    enabled: Boolean(startDate && endDate),
+  });
+
   const { data: payrollByDept, error: payrollByDeptError } = useQuery<PayrollByDepartment[]>({
     queryKey: ["/api/reports/payroll-by-department", startDate, endDate],
     queryFn: async () => {
@@ -176,6 +204,16 @@ export default function Reports() {
       })
     : [];
 
+  const sortedFleetUsage = fleetUsage
+    ? [...fleetUsage].sort((a, b) => {
+        const vehicleCompare = a.vehicle.localeCompare(b.vehicle);
+        if (vehicleCompare !== 0) return vehicleCompare;
+        const dateA = new Date(a.assignedDate).getTime();
+        const dateB = new Date(b.assignedDate).getTime();
+        return dateA - dateB;
+      })
+    : [];
+
   if (
     employeesError ||
     employeeEventsError ||
@@ -183,6 +221,7 @@ export default function Reports() {
     payrollSummaryError ||
     loanDetailsError ||
     assetUsageError ||
+    fleetUsageError ||
     payrollByDeptError
   ) {
     return <div>Error loading reports data</div>;
@@ -390,7 +429,7 @@ export default function Reports() {
       </div>
 
       <Tabs defaultValue="employee-history" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className="grid w-full grid-cols-8">
           <TabsTrigger value="employee-history" className="flex items-center gap-2">
             <History className="h-4 w-4" />
             {t('reportsPage.employeeHistory','Employee History')}
@@ -418,6 +457,10 @@ export default function Reports() {
           <TabsTrigger value="asset-usage" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
             {t('reports.assetUsage','Asset Usage')}
+          </TabsTrigger>
+          <TabsTrigger value="fleet-usage" className="flex items-center gap-2">
+            <Car className="h-4 w-4" />
+            {t('reports.fleetUsage','Fleet Usage')}
           </TabsTrigger>
         </TabsList>
 
@@ -1094,6 +1137,96 @@ export default function Reports() {
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">{t('reports.noAssetData','No asset usage data available')}</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="fleet-usage" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Car className="h-5 w-5" />
+                {t('reports.fleetUsage','Fleet Usage')}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {sortedFleetUsage.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="text-left">
+                        <th className="py-2 pr-4">{t('reports.vehicle','Vehicle')}</th>
+                        <th className="py-2 pr-4">{t('reports.identifiers','Identifiers')}</th>
+                        <th className="py-2 pr-4">{t('reports.assignee','Assignee')}</th>
+                        <th className="py-2 pr-4">{t('reports.assignmentWindow','Assignment Window')}</th>
+                        <th className="py-2 pr-4">{t('reports.status','Status')}</th>
+                        <th className="py-2">{t('reports.remarks','Remarks')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedFleetUsage.map(assignment => {
+                        const assignmentEnd = assignment.returnDate
+                          ? formatDate(assignment.returnDate)
+                          : t('reports.ongoing', 'Ongoing');
+                        return (
+                          <tr key={assignment.assignmentId} className="border-t align-top">
+                            <td className="py-3 pr-4">
+                              <div className="font-medium">{assignment.vehicle}</div>
+                            </td>
+                            <td className="py-3 pr-4">
+                              <div className="font-medium">
+                                {assignment.plateNumber
+                                  ? t('reports.plateLabel', { plate: assignment.plateNumber })
+                                  : t('reports.unknown', 'Unknown')}
+                              </div>
+                              {assignment.vin ? (
+                                <div className="text-xs text-muted-foreground">
+                                  {t('reports.vinLabel', { vin: assignment.vin })}
+                                </div>
+                              ) : null}
+                              {assignment.serial ? (
+                                <div className="text-xs text-muted-foreground">
+                                  {t('reports.serialLabel', { serial: assignment.serial })}
+                                </div>
+                              ) : null}
+                            </td>
+                            <td className="py-3 pr-4">
+                              <div className="font-medium">{assignment.employeeName}</div>
+                              {assignment.employeeCode ? (
+                                <div className="text-xs text-muted-foreground">
+                                  {t('reports.employeeCodeLabel', { code: assignment.employeeCode })}
+                                </div>
+                              ) : null}
+                              <div className="text-xs text-muted-foreground">
+                                {t('reports.employeeIdLabel', { id: assignment.employeeId })}
+                              </div>
+                            </td>
+                            <td className="py-3 pr-4 whitespace-nowrap">
+                              {formatDate(assignment.assignedDate)} – {assignmentEnd}
+                            </td>
+                            <td className="py-3 pr-4">
+                              <Badge variant={assignment.status === 'active' ? 'default' : 'secondary'}>
+                                {assignment.status}
+                              </Badge>
+                            </td>
+                            <td className="py-3 max-w-[18rem] whitespace-pre-wrap">
+                              {assignment.notes ? (
+                                assignment.notes
+                              ) : (
+                                <span className="text-xs text-muted-foreground">
+                                  {t('reports.noNotes', 'No notes')}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">{t('reports.noFleetData','No fleet usage data available')}</p>
               )}
             </CardContent>
           </Card>
