@@ -1,10 +1,17 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-const { selectMock, transactionMock, insertMock, loanPaymentsFindManyMock } = vi.hoisted(() => ({
+const {
+  selectMock,
+  transactionMock,
+  insertMock,
+  loanPaymentsFindManyMock,
+  carAssignmentsFindManyMock,
+} = vi.hoisted(() => ({
   selectMock: vi.fn(),
   transactionMock: vi.fn(),
   insertMock: vi.fn(),
   loanPaymentsFindManyMock: vi.fn(),
+  carAssignmentsFindManyMock: vi.fn(),
 }));
 
 vi.mock('./db', () => ({
@@ -13,6 +20,7 @@ vi.mock('./db', () => ({
     insert: insertMock,
     query: {
       loanPayments: { findMany: loanPaymentsFindManyMock },
+      carAssignments: { findMany: carAssignmentsFindManyMock },
     },
   },
 }));
@@ -229,6 +237,74 @@ describe('loan payment helpers', () => {
       expect.objectContaining({ where: expect.anything(), orderBy: expect.anything() }),
     );
     expect(byRun).toEqual([{ id: 'lp2' }]);
+  });
+});
+
+describe('getCarAssignments', () => {
+  beforeEach(() => {
+    carAssignmentsFindManyMock.mockReset();
+  });
+
+  const assignmentRows = [
+    {
+      id: 'assign-1',
+      carId: 'car-1',
+      employeeId: 'emp-1',
+      assignedDate: '2024-01-01',
+      returnDate: '2024-01-10',
+      status: 'completed',
+      notes: null,
+      car: { id: 'car-1', plateNumber: 'ABC123', vin: 'VIN1', serial: 'SER1' },
+      employee: { id: 'emp-1', firstName: 'Alice', lastName: 'Smith' },
+      assigner: { id: 'mgr-1', firstName: 'Manager', lastName: 'One' },
+    },
+    {
+      id: 'assign-2',
+      carId: 'car-2',
+      employeeId: 'emp-2',
+      assignedDate: '2024-02-01',
+      returnDate: null,
+      status: 'active',
+      notes: null,
+      car: { id: 'car-2', plateNumber: 'XYZ789', vin: 'VIN2', serial: 'SER2' },
+      employee: { id: 'emp-2', firstName: 'Bob', lastName: 'Jones' },
+      assigner: null,
+    },
+  ];
+
+  it('returns all assignments when no filters provided', async () => {
+    carAssignmentsFindManyMock.mockResolvedValueOnce(assignmentRows as any);
+    const result = await storage.getCarAssignments();
+
+    expect(carAssignmentsFindManyMock).toHaveBeenCalled();
+    expect(result).toHaveLength(2);
+    expect(result[0].car?.plateNumber).toBe('ABC123');
+    expect(result[1].assigner).toBeUndefined();
+  });
+
+  it('filters assignments by provided vehicle identifiers', async () => {
+    carAssignmentsFindManyMock.mockResolvedValueOnce(assignmentRows as any);
+
+    const result = await storage.getCarAssignments({ plateNumber: 'xyz', vin: 'vin2', serial: 'ser2' });
+
+    expect(result).toEqual([
+      expect.objectContaining({ id: 'assign-2', car: expect.objectContaining({ plateNumber: 'XYZ789' }) }),
+    ]);
+  });
+
+  it('applies individual filters when some fields are omitted', async () => {
+    carAssignmentsFindManyMock.mockResolvedValueOnce(assignmentRows as any);
+
+    const byPlate = await storage.getCarAssignments({ plateNumber: 'abc123' });
+    expect(byPlate).toEqual([
+      expect.objectContaining({ id: 'assign-1' }),
+    ]);
+
+    carAssignmentsFindManyMock.mockResolvedValueOnce(assignmentRows as any);
+    const byVin = await storage.getCarAssignments({ vin: 'vin1' });
+    expect(byVin).toEqual([
+      expect.objectContaining({ id: 'assign-1' }),
+    ]);
   });
 });
 

@@ -22,7 +22,7 @@ import CarImport from "@/components/cars/car-import";
 import { insertCarSchema, insertCarAssignmentSchema, type CarWithAssignment, type CarAssignmentWithDetails, type InsertCarAssignment } from "@shared/schema";
 import { sanitizeImageSrc } from "@/lib/sanitizeImageSrc";
 import { queryClient } from "@/lib/queryClient";
-import { apiPost, apiPut, apiDelete, apiUpload } from "@/lib/http";
+import { apiGet, apiPost, apiPut, apiDelete, apiUpload } from "@/lib/http";
 import { toastApiError } from "@/lib/toastError";
 
 export default function Cars() {
@@ -34,6 +34,8 @@ export default function Cars() {
   const [editingCar, setEditingCar] = useState<CarWithAssignment | null>(null);
   const { toast } = useToast();
   const [repairDialogCarId, setRepairDialogCarId] = useState<string | null>(null);
+  const [assignmentSearch, setAssignmentSearch] = useState("");
+  const assignmentSearchTerm = assignmentSearch.trim();
 
   const {
     data: cars = [],
@@ -49,6 +51,27 @@ export default function Cars() {
     error: assignmentsError,
   } = useQuery<CarAssignmentWithDetails[]>({
     queryKey: ["/api/car-assignments"]
+  });
+
+  const {
+    data: searchedAssignments = [],
+    isLoading: isSearchLoading,
+    isFetching: isSearching,
+    error: searchError,
+  } = useQuery<CarAssignmentWithDetails[]>({
+    queryKey: ["/api/car-assignments/search", assignmentSearchTerm],
+    enabled: assignmentSearchTerm.length > 0,
+    queryFn: async ({ queryKey }) => {
+      const [, searchValue] = queryKey as [string, string];
+      const params = new URLSearchParams();
+      params.set("plateNumber", searchValue);
+      params.set("vin", searchValue);
+      params.set("serial", searchValue);
+      const res = await apiGet(`/api/car-assignments?${params.toString()}`);
+      if (!res.ok) throw new Error(res.error || `Request failed with status ${res.status}`);
+      const data = res.data;
+      return Array.isArray(data) ? (data as CarAssignmentWithDetails[]) : [];
+    },
   });
 
   const { data: employees = [], error: employeesError } = useQuery({
@@ -89,6 +112,7 @@ export default function Cars() {
       }
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
       queryClient.invalidateQueries({ queryKey: ["/api/car-assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/car-assignments/search"] });
       setIsAssignCarDialogOpen(false);
       toast({ title: "Car assigned successfully" });
     },
@@ -110,6 +134,7 @@ export default function Cars() {
       }
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
       queryClient.invalidateQueries({ queryKey: ["/api/car-assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/car-assignments/search"] });
       toast({ title: "Assignment updated successfully" });
     },
     onError: () => {
@@ -350,6 +375,33 @@ export default function Cars() {
         return <Badge variant="secondary">{status}</Badge>;
     }
   };
+
+  const getAssignmentStatusBadge = (status: string) => {
+    switch (status) {
+      case "active":
+        return <Badge className="bg-blue-100 text-blue-800"><Users className="w-3 h-3 mr-1" />Active</Badge>;
+      case "completed":
+        return <Badge className="bg-gray-100 text-gray-800"><CheckCircle className="w-3 h-3 mr-1" />Completed</Badge>;
+      default:
+        return <Badge variant="secondary">{status}</Badge>;
+    }
+  };
+
+  const normalizedHistorySearch = assignmentSearchTerm.toLowerCase();
+  const unfilteredHistoryAssignments = assignmentSearchTerm.length > 0 ? searchedAssignments : carAssignments;
+  const historyAssignments = unfilteredHistoryAssignments.filter(assignment => {
+    if (!normalizedHistorySearch) return true;
+    const car = assignment.car;
+    if (!car) return false;
+    const plate = car.plateNumber?.toLowerCase() ?? "";
+    const vin = car.vin?.toLowerCase() ?? "";
+    const serial = car.serial?.toLowerCase() ?? "";
+    return [plate, vin, serial].some(value => value.includes(normalizedHistorySearch));
+  });
+  const historyLoading = assignmentSearchTerm.length > 0 ? isSearchLoading && searchedAssignments.length === 0 : assignmentsLoading;
+  const historyError = assignmentSearchTerm.length > 0 ? searchError : assignmentsError;
+  const historyErrorMessage = historyError instanceof Error ? historyError.message : null;
+  const historyRefreshing = assignmentSearchTerm.length > 0 ? isSearching && searchedAssignments.length > 0 : false;
 
   const validCars = cars.filter(car => car.id && car.id.trim() !== "");
   const availableCars = validCars.filter(car => car.status === "available");
@@ -945,6 +997,7 @@ export default function Cars() {
         <TabsList>
           <TabsTrigger value="fleet">Fleet Overview</TabsTrigger>
           <TabsTrigger value="assignments">Active Assignments</TabsTrigger>
+          <TabsTrigger value="history">Assignment History</TabsTrigger>
         </TabsList>
 
         <TabsContent value="fleet" className="space-y-4">
@@ -1204,6 +1257,120 @@ export default function Cars() {
                     </Card>
                   ))
               )}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="history" className="space-y-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-lg font-medium">Assignment History</h3>
+              <p className="text-sm text-muted-foreground">
+                Search across active and completed vehicle assignments.
+              </p>
+            </div>
+            <div className="sm:w-72">
+              <Input
+                placeholder="Search by plate, VIN, or serial"
+                value={assignmentSearch}
+                onChange={event => setAssignmentSearch(event.target.value)}
+                aria-label="Search assignments"
+              />
+              {historyRefreshing && (
+                <p className="mt-1 text-xs text-muted-foreground">Updating results…</p>
+              )}
+            </div>
+          </div>
+
+          {historyError ? (
+            <Card>
+              <CardContent className="p-6">
+                <p className="text-sm text-destructive">
+                  {historyErrorMessage || "Unable to load assignments."}
+                </p>
+              </CardContent>
+            </Card>
+          ) : historyLoading ? (
+            <div className="space-y-4">
+              {[...Array(3)].map((_, index) => (
+                <Card key={index}>
+                  <CardContent className="p-6">
+                    <div className="animate-pulse space-y-2">
+                      <div className="h-4 bg-gray-200 rounded w-1/3"></div>
+                      <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                      <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : historyAssignments.length === 0 ? (
+            <Card>
+              <CardContent className="p-6 text-center space-y-2">
+                <Users className="mx-auto h-12 w-12 text-gray-400" />
+                <h3 className="text-lg font-medium text-gray-900">No assignments found</h3>
+                <p className="text-gray-500">Try adjusting your search to find historical records.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {historyAssignments.map(assignment => {
+                const startDate = assignment.assignedDate
+                  ? format(new Date(assignment.assignedDate), "MMM d, yyyy")
+                  : "Unknown";
+                const endDate = assignment.returnDate
+                  ? format(new Date(assignment.returnDate), "MMM d, yyyy")
+                  : "Present";
+                const vehicleNameParts = [assignment.car?.year, assignment.car?.make, assignment.car?.model].filter(Boolean) as string[];
+                const vehicleName = vehicleNameParts.length > 0 ? vehicleNameParts.join(" ") : "Vehicle Assignment";
+                const employeeName = assignment.employee
+                  ? [assignment.employee.firstName, assignment.employee.lastName].filter(Boolean).join(" ").trim() || "Unknown employee"
+                  : "Unknown employee";
+                const statusLabel = assignment.status
+                  ? assignment.status.charAt(0).toUpperCase() + assignment.status.slice(1)
+                  : "Status";
+
+                return (
+                  <Card key={assignment.id}>
+                    <CardHeader className="pb-4">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <CardTitle className="text-lg">{vehicleName}</CardTitle>
+                          <CardDescription>{assignment.car?.plateNumber ?? "Unknown plate"}</CardDescription>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {getAssignmentStatusBadge(assignment.status)}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4 text-sm">
+                      <div className="grid gap-4 sm:grid-cols-3">
+                        <div>
+                          <span className="text-muted-foreground">Assignment Period</span>
+                          <p className="font-medium">{startDate} – {endDate}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Employee</span>
+                          <p className="font-medium">{employeeName}</p>
+                          {assignment.employee?.phone && (
+                            <p className="text-muted-foreground">{assignment.employee.phone}</p>
+                          )}
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Status</span>
+                          <p className="font-medium">{statusLabel}</p>
+                        </div>
+                      </div>
+                      {assignment.notes && (
+                        <div className="pt-4 border-t">
+                          <span className="text-muted-foreground block mb-1">Notes</span>
+                          <p>{assignment.notes}</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </TabsContent>
