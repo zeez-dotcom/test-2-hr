@@ -82,6 +82,12 @@ export default function Cars() {
     queryKey: ["/api/vacations"],
   });
 
+  const postCarStatus = async (carId: string, status: string) => {
+    const res = await apiPost(`/api/cars/${carId}/status`, { status });
+    if (!res.ok) throw res;
+    return res.data;
+  };
+
   const createCarMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiUpload("/api/cars", data);
@@ -108,7 +114,11 @@ export default function Cars() {
     },
     onSuccess: async (_data, variables: any) => {
       if (variables?.carId) {
-        await apiPut(`/api/cars/${variables.carId}`, { status: "assigned" });
+        try {
+          await postCarStatus(variables.carId, "assigned");
+        } catch (err) {
+          toastApiError(err as any, "Failed to update car status");
+        }
       }
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
       queryClient.invalidateQueries({ queryKey: ["/api/car-assignments"] });
@@ -130,7 +140,11 @@ export default function Cars() {
     },
     onSuccess: async (_data, variables) => {
       if (variables?.carId) {
-        await apiPut(`/api/cars/${variables.carId}`, { status: "available" });
+        try {
+          await postCarStatus(variables.carId, "available");
+        } catch (err) {
+          toastApiError(err as any, "Failed to update car status");
+        }
       }
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
       queryClient.invalidateQueries({ queryKey: ["/api/car-assignments"] });
@@ -221,6 +235,25 @@ export default function Cars() {
     onError: (err) => {
       toastApiError(err as any, 'Failed to log repair');
     }
+  });
+
+  const carStatusMutation = useMutation<any, unknown, { carId: string; status: string }>({
+    mutationFn: ({ carId, status }: { carId: string; status: string }) => postCarStatus(carId, status),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
+      if (variables.carId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/cars", variables.carId] });
+      }
+      toast({
+        title:
+          variables.status === "maintenance"
+            ? "Car marked for maintenance"
+            : "Car returned to service",
+      });
+    },
+    onError: (err) => {
+      toastApiError(err as any, 'Failed to update car status');
+    },
   });
 
   const [repairsDialogCar, setRepairsDialogCar] = useState<CarWithAssignment | null>(null);
@@ -1095,6 +1128,22 @@ export default function Cars() {
                           </Button>
                           <Button size="sm" variant="outline" onClick={() => setRepairsDialogCar(car)}>
                             Repairs
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={
+                              carStatusMutation.isPending &&
+                              carStatusMutation.variables?.carId === car.id
+                            }
+                            onClick={() =>
+                              carStatusMutation.mutate({
+                                carId: car.id,
+                                status: car.status === "maintenance" ? "available" : "maintenance",
+                              })
+                            }
+                          >
+                            {car.status === "maintenance" ? "Back to Service" : "Mark as Maintenance"}
                           </Button>
                         </div>
                       </div>

@@ -8,6 +8,15 @@ import { z } from "zod";
 const upload = multer();
 export const carsRouter = Router();
 
+const normalizeStatus = (value: string) => value.trim().toLowerCase();
+
+const statusUpdateSchema = z.object({
+  status: z
+    .string({ required_error: "Status is required" })
+    .transform(normalizeStatus)
+    .refine(val => val.length > 0, { message: "Status is required" }),
+});
+
 carsRouter.get("/", async (req, res, next) => {
   try {
     const cars = await storage.getCars();
@@ -152,6 +161,22 @@ carsRouter.delete("/:id", async (req, res, next) => {
     res.status(204).send();
   } catch (error) {
     next(new HttpError(500, "Failed to delete car"));
+  }
+});
+
+carsRouter.post("/:id/status", async (req, res, next) => {
+  try {
+    const { status } = statusUpdateSchema.parse(req.body);
+    const updated = await storage.updateCar(req.params.id, { status });
+    if (!updated) {
+      return next(new HttpError(404, "Car not found"));
+    }
+    res.json(updated);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return next(new HttpError(400, "Invalid car status", error.errors));
+    }
+    next(new HttpError(500, "Failed to update car status"));
   }
 });
 

@@ -98,6 +98,27 @@ export default function Assets() {
     onError: (err) => toastApiError(err as any, t('assets.createFailed','Failed to create asset')),
   });
 
+  const assetStatusMutation = useMutation<any, unknown, { assetId: string; status: string }>({
+    mutationFn: async ({ assetId, status }: { assetId: string; status: string }) => {
+      const res = await apiPost(`/api/assets/${assetId}/status`, { status });
+      if (!res.ok) throw res;
+      return res.data;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/assets"] });
+      if (variables.assetId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/assets", variables.assetId] });
+      }
+      toast({
+        title:
+          variables.status === "maintenance"
+            ? t('assets.markedMaintenance', 'Asset marked for maintenance')
+            : t('assets.backInService', 'Asset returned to service'),
+      });
+    },
+    onError: (err) => toastApiError(err as any, t('assets.statusUpdateFailed', 'Failed to update asset status')),
+  });
+
   const assignAsset = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiPost("/api/asset-assignments", data);
@@ -171,6 +192,10 @@ export default function Assets() {
 
   const onSubmitAsset = (data: any) => createAsset.mutate(data);
   const onSubmitAssignment = (data: any) => assignAsset.mutate(data);
+
+  const handleAssetStatusChange = (assetId: string, status: "available" | "maintenance" | "assigned") => {
+    assetStatusMutation.mutate({ assetId, status });
+  };
 
   return (
     <div className="space-y-6">
@@ -405,6 +430,23 @@ export default function Assets() {
                     <Button size="sm" variant="outline" onClick={() => window.open(`/asset-file?id=${encodeURIComponent(asset.id)}`, '_blank')}>Print</Button>
                     <Button size="sm" variant="outline" className="ml-2" onClick={() => setDocAssetId(asset.id)}>Add Document</Button>
                     <Button size="sm" variant="outline" className="ml-2" onClick={() => setRepairsAsset(asset)}>Repairs</Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="ml-2"
+                      disabled={
+                        assetStatusMutation.isPending &&
+                        assetStatusMutation.variables?.assetId === asset.id
+                      }
+                      onClick={() =>
+                        handleAssetStatusChange(
+                          asset.id,
+                          asset.status === "maintenance" ? "available" : "maintenance",
+                        )
+                      }
+                    >
+                      {asset.status === "maintenance" ? "Back to Service" : "Mark as Maintenance"}
+                    </Button>
                   </div>
                 </div>
               ))

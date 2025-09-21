@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
 import Cars from './cars';
@@ -15,19 +15,29 @@ vi.mock('@tanstack/react-query', async () => {
   return {
     ...actual,
     useMutation: (options: any) => {
-      const mock = {
-        shouldError: false,
-        isPending: false,
-        mutate: async (vars: any) => {
-          if (mock.shouldError) {
-            await options.onError?.('error', vars, null);
-          } else {
-            await options.onSuccess?.('success', vars, null);
+      const optionsRef = React.useRef(options);
+      optionsRef.current = options;
+      const stateRef = React.useRef<any>();
+      if (!stateRef.current) {
+        const mock = {
+          shouldError: false,
+          isPending: false,
+          variables: undefined as any,
+          mutate: async (vars: any) => {
+            mock.variables = vars;
+            mock.isPending = true;
+            if (mock.shouldError) {
+              await optionsRef.current.onError?.('error', vars, null);
+            } else {
+              await optionsRef.current.onSuccess?.('success', vars, null);
+            }
+            mock.isPending = false;
           }
-        }
-      };
-      mutationMocks.push(mock);
-      return mock;
+        };
+        stateRef.current = mock;
+        mutationMocks.push(mock);
+      }
+      return stateRef.current;
     }
   };
 });
@@ -122,11 +132,33 @@ beforeEach(() => {
   toast.mockReset();
   mutationMocks.length = 0;
   // @ts-ignore
-  global.fetch = vi.fn().mockResolvedValue({
-    ok: true,
-    status: 200,
-    json: async () => ({}),
-    headers: { get: () => null },
+  global.fetch = vi.fn().mockImplementation(async (url: any, init?: any) => {
+    if (typeof url === 'string' && url.startsWith('/api/cars') && (!init || init.method === undefined || init.method === 'GET')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => queryClient.getQueryData(['/api/cars']) ?? [],
+        headers: { get: () => null },
+      } as any;
+    }
+    if (
+      typeof url === 'string' &&
+      url.startsWith('/api/car-assignments') &&
+      (!init || init.method === undefined || init.method === 'GET')
+    ) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => queryClient.getQueryData(['/api/car-assignments']) ?? [],
+        headers: { get: () => null },
+      } as any;
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+      headers: { get: () => null },
+    } as any;
   });
 });
 
@@ -187,8 +219,8 @@ describe('Cars page', () => {
 
     // assign car success
     await mutationMocks[1].mutate({ carId: '1' });
-    expect(global.fetch).toHaveBeenCalledWith('/api/cars/1', expect.objectContaining({
-      method: 'PUT',
+    expect(global.fetch).toHaveBeenCalledWith('/api/cars/1/status', expect.objectContaining({
+      method: 'POST',
       body: JSON.stringify({ status: 'assigned' }),
     }));
     expect(toast).toHaveBeenCalledWith({ title: 'Car assigned successfully' });
@@ -205,8 +237,8 @@ describe('Cars page', () => {
 
     // update assignment success
     await mutationMocks[2].mutate({ carId: '1' });
-    expect(global.fetch).toHaveBeenCalledWith('/api/cars/1', expect.objectContaining({
-      method: 'PUT',
+    expect(global.fetch).toHaveBeenCalledWith('/api/cars/1/status', expect.objectContaining({
+      method: 'POST',
       body: JSON.stringify({ status: 'available' }),
     }));
     expect(toast).toHaveBeenCalledWith({ title: 'Assignment updated successfully' });
@@ -238,6 +270,34 @@ describe('Cars page', () => {
     mutationMocks[4].shouldError = true;
     await mutationMocks[4].mutate({ id: '1' });
     expect(toast).toHaveBeenCalledWith({ title: 'Failed to update car', variant: 'destructive' });
+
+    toast.mockReset();
+    const statusButton = screen.getByText('Mark as Maintenance');
+    fireEvent.click(statusButton);
+
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith({ title: 'Car marked for maintenance' })
+    );
+    expect(mutationMocks[6].variables).toEqual({ carId: '1', status: 'maintenance' });
+
+    toast.mockReset();
+    await act(async () => {
+      queryClient.setQueryData(['/api/cars'], [
+        {
+          ...cars[0],
+          status: 'maintenance',
+        },
+      ]);
+    });
+
+    await waitFor(() => expect(screen.getByText('Back to Service')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Back to Service'));
+
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith({ title: 'Car returned to service' })
+    );
+    expect(mutationMocks[6].variables).toEqual({ carId: '1', status: 'available' });
   });
 
   it('renders registration document image when provided', () => {

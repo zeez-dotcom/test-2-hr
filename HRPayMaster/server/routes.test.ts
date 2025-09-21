@@ -20,11 +20,20 @@ vi.mock('./storage', () => {
       getPayrollRuns: vi.fn(),
       getLoans: vi.fn(),
       createLoan: vi.fn(),
+      getAssets: vi.fn(),
+      updateAsset: vi.fn(),
+      createAssetAssignment: vi.fn(),
+      updateAssetAssignment: vi.fn(),
+      getAssetAssignment: vi.fn(),
+      deleteAssetAssignment: vi.fn(),
       getCars: vi.fn(),
       createCar: vi.fn(),
       updateCar: vi.fn(),
       createCarAssignment: vi.fn(),
+      updateCarAssignment: vi.fn(),
       getCarAssignments: vi.fn(),
+      getCarAssignment: vi.fn(),
+      deleteCarAssignment: vi.fn(),
       createEmployeeEvent: vi.fn(),
       getEmployeeReport: vi.fn(),
       getCompanyPayrollSummary: vi.fn(),
@@ -136,6 +145,68 @@ describe('employee routes', () => {
       vin: 'VIN123',
       serial: 'SER123',
     });
+  });
+
+  it('POST /api/assets/:id/status updates asset status', async () => {
+    (storage.updateAsset as any).mockResolvedValue({ id: 'asset-1', status: 'maintenance' });
+
+    const res = await request(app)
+      .post('/api/assets/asset-1/status')
+      .send({ status: 'Maintenance' });
+
+    expect(res.status).toBe(200);
+    expect(storage.updateAsset).toHaveBeenCalledWith('asset-1', { status: 'maintenance' });
+  });
+
+  it('POST /api/cars/:id/status updates car status', async () => {
+    (storage.updateCar as any).mockResolvedValue({ id: 'car-1', status: 'maintenance' });
+
+    const res = await request(app)
+      .post('/api/cars/car-1/status')
+      .send({ status: ' MAINTENANCE ' });
+
+    expect(res.status).toBe(200);
+    expect(storage.updateCar).toHaveBeenCalledWith('car-1', { status: 'maintenance' });
+  });
+
+  it('PUT /api/asset-assignments/:id preserves maintenance status', async () => {
+    (storage.updateAssetAssignment as any).mockResolvedValue({ id: 'asg-1', assetId: 'asset-1', employeeId: 'emp-1' });
+    (storage.getAssetAssignment as any).mockResolvedValue({
+      id: 'asg-1',
+      assetId: 'asset-1',
+      employeeId: 'emp-1',
+      status: 'maintenance',
+      asset: { name: 'Laptop' },
+      employee: { firstName: 'Test', lastName: 'User' },
+    });
+
+    const res = await request(app)
+      .put('/api/asset-assignments/asg-1')
+      .send({ status: 'maintenance' });
+
+    expect(res.status).toBe(200);
+    expect(storage.updateAssetAssignment).toHaveBeenCalledWith('asg-1', { status: 'maintenance' });
+    expect(storage.updateAsset).toHaveBeenCalledWith('asset-1', { status: 'maintenance' });
+  });
+
+  it('PUT /api/car-assignments/:id preserves maintenance status', async () => {
+    (storage.updateCarAssignment as any).mockResolvedValue({ id: 'car-asg-1', carId: 'car-1', employeeId: 'emp-2' });
+    (storage.getCarAssignment as any).mockResolvedValue({
+      id: 'car-asg-1',
+      carId: 'car-1',
+      employeeId: 'emp-2',
+      status: 'maintenance',
+      car: { make: 'Toyota', model: 'Corolla' },
+      employee: { firstName: 'Sam', lastName: 'Driver' },
+    });
+
+    const res = await request(app)
+      .put('/api/car-assignments/car-asg-1')
+      .send({ status: 'maintenance' });
+
+    expect(res.status).toBe(200);
+    expect(storage.updateCarAssignment).toHaveBeenCalledWith('car-asg-1', { status: 'maintenance' });
+    expect(storage.updateCar).toHaveBeenCalledWith('car-1', { status: 'maintenance' });
   });
 
   it('GET /api/employees/import/template returns xlsx with headers', async () => {

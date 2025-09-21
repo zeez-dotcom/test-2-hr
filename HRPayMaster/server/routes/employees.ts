@@ -1091,6 +1091,24 @@ const upload = multer({ storage: multer.memoryStorage() });
     }
   });
 
+  const normalizeStatus = (value: string) => value.trim().toLowerCase();
+
+  const mapAssignmentStatusToResourceStatus = (status?: string | null) => {
+    if (!status) return undefined;
+    const normalized = normalizeStatus(status);
+    if (!normalized) return undefined;
+    if (normalized === "completed") return "available";
+    if (normalized === "active") return "assigned";
+    return normalized;
+  };
+
+  const statusUpdateSchema = z.object({
+    status: z
+      .string({ required_error: "Status is required" })
+      .transform(normalizeStatus)
+      .refine(val => val.length > 0, { message: "Status is required" }),
+  });
+
   // Asset routes
   employeesRouter.get("/api/assets", async (req, res, next) => {
     try {
@@ -1226,8 +1244,10 @@ const upload = multer({ storage: multer.memoryStorage() });
       const newAssignment = await storage.createAssetAssignment(assignment);
       // ensure the asset reflects its new assignment
       if (newAssignment?.assetId) {
+        const desiredStatus =
+          mapAssignmentStatusToResourceStatus(newAssignment.status ?? assignment.status) ?? "assigned";
         await storage.updateAsset(newAssignment.assetId, {
-          status: "assigned",
+          status: desiredStatus,
         });
       }
       const detailed = await storage.getAssetAssignment(newAssignment.id);
@@ -1262,9 +1282,12 @@ const upload = multer({ storage: multer.memoryStorage() });
         return next(new HttpError(404, "Asset assignment not found"));
       }
       if (updates.status) {
-        await storage.updateAsset(updated.assetId, {
-          status: updates.status === "completed" ? "available" : "assigned",
-        });
+        const desiredStatus = mapAssignmentStatusToResourceStatus(updates.status);
+        if (desiredStatus) {
+          await storage.updateAsset(updated.assetId, {
+            status: desiredStatus,
+          });
+        }
       }
       const detailed = await storage.getAssetAssignment(req.params.id);
       if (detailed) {
@@ -1317,6 +1340,22 @@ const upload = multer({ storage: multer.memoryStorage() });
       res.status(204).send();
     } catch (error) {
       next(new HttpError(500, "Failed to delete asset assignment"));
+    }
+  });
+
+  employeesRouter.post("/api/assets/:id/status", async (req, res, next) => {
+    try {
+      const { status } = statusUpdateSchema.parse(req.body);
+      const updated = await assetService.updateAsset(req.params.id, { status });
+      if (!updated) {
+        return next(new HttpError(404, "Asset not found"));
+      }
+      res.json(updated);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return next(new HttpError(400, "Invalid asset status", error.errors));
+      }
+      next(new HttpError(500, "Failed to update asset status"));
     }
   });
 
@@ -1542,8 +1581,10 @@ const upload = multer({ storage: multer.memoryStorage() });
       const newAssignment = await storage.createCarAssignment(assignment);
       // ensure the car reflects its new assignment
       if (newAssignment?.carId) {
+        const desiredStatus =
+          mapAssignmentStatusToResourceStatus(newAssignment.status ?? assignment.status) ?? "assigned";
         await storage.updateCar(newAssignment.carId, {
-          status: "assigned",
+          status: desiredStatus,
         });
       }
       const detailed = await storage.getCarAssignment(newAssignment.id);
@@ -1578,9 +1619,12 @@ const upload = multer({ storage: multer.memoryStorage() });
         return next(new HttpError(404, "Car assignment not found"));
       }
       if (updates.status) {
-        await storage.updateCar(updated.carId, {
-          status: updates.status === "completed" ? "available" : "assigned",
-        });
+        const desiredStatus = mapAssignmentStatusToResourceStatus(updates.status);
+        if (desiredStatus) {
+          await storage.updateCar(updated.carId, {
+            status: desiredStatus,
+          });
+        }
       }
       const detailed = await storage.getCarAssignment(req.params.id);
       if (detailed) {
