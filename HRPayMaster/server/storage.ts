@@ -1992,15 +1992,17 @@ export class DatabaseStorage implements IStorage {
     startDate?: string;
     endDate?: string;
   }): Promise<FleetUsage[]> {
+    const sanitizedStartDate = startDate?.trim() || undefined;
+    const sanitizedEndDate = endDate?.trim() || undefined;
     const filters: SQL<unknown>[] = [];
 
-    if (endDate) {
-      filters.push(lte(carAssignments.assignedDate, endDate));
+    if (sanitizedEndDate) {
+      filters.push(lte(carAssignments.assignedDate, sanitizedEndDate));
     }
 
-    if (startDate) {
+    if (sanitizedStartDate) {
       filters.push(
-        sql`(${carAssignments.returnDate} IS NULL OR ${carAssignments.returnDate} >= ${startDate})`,
+        sql`(${carAssignments.returnDate} IS NULL OR ${carAssignments.returnDate} >= ${sanitizedStartDate})`,
       );
     }
 
@@ -2013,8 +2015,8 @@ export class DatabaseStorage implements IStorage {
       orderBy: [asc(carAssignments.carId), asc(carAssignments.assignedDate)],
     });
 
-    const start = startDate ? new Date(startDate) : null;
-    const end = endDate ? new Date(endDate) : null;
+    const start = sanitizedStartDate ? new Date(sanitizedStartDate) : null;
+    const end = sanitizedEndDate ? new Date(sanitizedEndDate) : null;
 
     const normalizeDate = (value?: string | Date | null) => {
       if (!value) return null;

@@ -169,8 +169,24 @@ reportsRouter.get("/api/reports/asset-usage", async (req, res, next) => {
 // Fleet usage
 reportsRouter.get("/api/reports/fleet-usage", async (req, res, next) => {
   try {
-    const { startDate, endDate } = reportQuerySchema.parse(req.query);
-    const report = await storage.getFleetUsage({ startDate, endDate });
+    const rawStartDate =
+      typeof req.query.startDate === "string" ? req.query.startDate : undefined;
+    const rawEndDate =
+      typeof req.query.endDate === "string" ? req.query.endDate : undefined;
+
+    const trimmedStartDate = rawStartDate?.trim();
+    const trimmedEndDate = rawEndDate?.trim();
+
+    const { startDate, endDate } = reportQuerySchema.parse({
+      ...req.query,
+      startDate: trimmedStartDate ? trimmedStartDate : undefined,
+      endDate: trimmedEndDate ? trimmedEndDate : undefined,
+    });
+
+    const report = await storage.getFleetUsage({
+      startDate: trimmedStartDate ? startDate : undefined,
+      endDate: trimmedEndDate ? endDate : undefined,
+    });
     res.json(report);
   } catch (error) {
     console.error(error);

@@ -1275,6 +1275,19 @@ describe('employee routes', () => {
     });
     expect(res.body).toEqual(fleet);
   });
+
+  it('GET /api/reports/fleet-usage returns empty results without date filters', async () => {
+    (storage.getFleetUsage as any).mockResolvedValue([]);
+
+    const res = await request(app).get('/api/reports/fleet-usage');
+
+    expect(res.status).toBe(200);
+    expect(storage.getFleetUsage).toHaveBeenCalledWith({
+      startDate: undefined,
+      endDate: undefined,
+    });
+    expect(res.body).toEqual([]);
+  });
 });
 
 describe('payroll routes', () => {
