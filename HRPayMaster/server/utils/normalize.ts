@@ -153,6 +153,7 @@ export const headerDictionary: Record<string, string> = {
   'اسم الموظف': 'arabicName',
 
   'nickname': 'nickname',
+  'الاسم المستعار': 'nickname',
 
   'job title': 'position',
   'position': 'position',
@@ -198,6 +199,7 @@ export const headerDictionary: Record<string, string> = {
   'تاريخ انتهاء البطاقة المدنية': 'civilIdExpiryDate',
 
   'civil id alert days': 'civilIdAlertDays',
+  'أيام تنبيه البطاقة المدنية': 'civilIdAlertDays',
 
   'passport number': 'passportNumber',
   'رقم جواز السفر': 'passportNumber',
@@ -210,6 +212,7 @@ export const headerDictionary: Record<string, string> = {
   'تاريخ انتهاء جواز السفر': 'passportExpiryDate',
 
   'passport alert days': 'passportAlertDays',
+  'أيام تنبيه جواز السفر': 'passportAlertDays',
 
   'salary': 'salary',
   'salaries': 'salary',
@@ -235,14 +238,20 @@ export const headerDictionary: Record<string, string> = {
   'رقم الهاتف': 'phone',
 
   'email': 'email',
+  'البريد الإلكتروني': 'email',
+  'البريد الالكتروني': 'email',
 
   'emergency contact': 'emergencyContact',
   'emergency phone': 'emergencyPhone',
   'emergency number': 'emergencyPhone',
+  'هاتف الطوارئ': 'emergencyPhone',
 
   'national id': 'nationalId',
+  'الرقم الوطني': 'nationalId',
   'address': 'address',
+  'العنوان': 'address',
   'date of birth': 'dateOfBirth',
+  'تاريخ الميلاد': 'dateOfBirth',
   'birth date': 'dateOfBirth',
 
   'image url': 'profileImage',
@@ -265,6 +274,7 @@ export const headerDictionary: Record<string, string> = {
   'صورة رخصة القيادة': 'drivingLicenseImage',
 
   'driving license number': 'drivingLicenseNumber',
+  'رقم رخصة القيادة': 'drivingLicenseNumber',
 
   'driving license issue date': 'drivingLicenseIssueDate',
   'تاريخ اصدار رخصة القيادة': 'drivingLicenseIssueDate',
@@ -276,6 +286,8 @@ export const headerDictionary: Record<string, string> = {
   'documents': 'otherDocs',
   'document': 'otherDocs',
   'مستندات': 'otherDocs',
+  'other documents': 'otherDocs',
+  'مستندات أخرى': 'otherDocs',
 
   'other docs': 'additionalDocs',
   'additional documents': 'additionalDocs',
@@ -285,7 +297,9 @@ export const headerDictionary: Record<string, string> = {
   'iban number': 'iban',
   'آيبان': 'iban',
   'bank iban': 'bankIban',
+  'آيبان البنك': 'bankIban',
   'bank name': 'bankName',
+  'اسم البنك': 'bankName',
 
   'swiftcode': 'swiftCode',
   'swift code': 'swiftCode',
@@ -302,16 +316,24 @@ export const headerDictionary: Record<string, string> = {
 
   'company': 'companyId',
   'company id': 'companyId',
+  'معرف الشركة': 'companyId',
   'company name': 'companyId',
 
   'visa number': 'visaNumber',
+  'رقم التأشيرة': 'visaNumber',
   'visa type': 'visaType',
+  'نوع التأشيرة': 'visaType',
   'visa issue date': 'visaIssueDate',
+  'تاريخ إصدار التأشيرة': 'visaIssueDate',
   'visa expiry date': 'visaExpiryDate',
+  'تاريخ انتهاء التأشيرة': 'visaExpiryDate',
   'visa alert days': 'visaAlertDays',
+  'أيام تنبيه التأشيرة': 'visaAlertDays',
   'visa image': 'visaImage',
+  'صورة التأشيرة': 'visaImage',
 
   'role': 'role',
+  'الدور': 'role',
 };
 
 export function mapHeader(header: string): string | undefined {

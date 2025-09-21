@@ -6,6 +6,7 @@ import * as XLSX from 'xlsx';
 import sharp from 'sharp';
 import { mapHeader } from './utils/normalize';
 import { insertEmployeeSchema } from '@shared/schema';
+import { EMPLOYEE_IMPORT_TEMPLATE_HEADERS } from './routes/employees';
 
 vi.mock('./storage', () => {
   class DuplicateEmployeeCodeError extends Error {}
@@ -258,51 +259,76 @@ describe('employee routes', () => {
     const wb = XLSX.read(res.body, { type: 'buffer' });
     const sheet = wb.Sheets[wb.SheetNames[0]];
     const headers = XLSX.utils.sheet_to_json(sheet, { header: 1 })[0];
-    expect(headers).toEqual([
-      'Employee Code/معرف الموظف',
-      'First Name (English)/الاسم الأول',
-      'Last Name/اسم العائلة',
-      'Arabic Name/الاسم العربي',
-      'Image URL/رابط الصورة',
-      'Job Title/المسمى الوظيفي',
-      'Work Location/مكان العمل',
-      'Nationality/الجنسية',
-      'Profession/المهنة',
-      'Employment Date/تاريخ التوظيف',
-      'Status/الحالة',
-      'Civil ID Number/رقم البطاقة المدنية',
-      'Civil ID Issue Date/تاريخ إصدار البطاقة المدنية',
-      'Civil ID Expiry Date/تاريخ انتهاء البطاقة المدنية',
-      'Passport Number/رقم جواز السفر',
-      'Passport Issue Date/تاريخ إصدار جواز السفر',
-      'Passport Expiry Date/تاريخ انتهاء جواز السفر',
-      'Salary/الراتب',
-      'Additions/إضافات',
-      'Transferable/تحويل',
-      'Payment Method/طريقة الدفع',
-      'Documents/مستندات',
-      'Standard Working Days/أيام العمل',
-      'Phone Number/رقم الهاتف',
-      'Civil ID Image/صورة البطاقة المدنية',
-      'Passport Image/صورة جواز السفر',
-      'Driving License Image/صورة رخصة القيادة',
-      'Driving License Issue Date/تاريخ إصدار رخصة القيادة',
-      'Driving License Expiry Date/تاريخ انتهاء رخصة القيادة',
-      'Additional Documents/مستندات إضافية',
-      'IBAN/آيبان',
-      'SWIFT Code/رمز السويفت',
-      'Residency Name/اسم الإقامة',
-      'Residency On Company/الإقامة على الشركة',
-      'Department ID/معرف القسم',
-      'Profession Code/رمز المهنة',
-      'Profession Category/تصنيف المهنة',
-    ]);
+    expect(headers).toEqual(EMPLOYEE_IMPORT_TEMPLATE_HEADERS);
+
+    const mappedHeaders = headers.map(header => {
+      const value = String(header);
+      const mapped = mapHeader(value);
+      expect(mapped, `Header ${value} should map to an employee schema key`).toBeDefined();
+      return mapped!;
+    });
+
+    const expectedMappedKeys = [
+      'employeeCode',
+      'firstName',
+      'lastName',
+      'arabicName',
+      'nickname',
+      'email',
+      'phone',
+      'emergencyPhone',
+      'position',
+      'role',
+      'workLocation',
+      'departmentId',
+      'companyId',
+      'status',
+      'startDate',
+      'dateOfBirth',
+      'nationality',
+      'nationalId',
+      'civilId',
+      'civilIdAlertDays',
+      'civilIdIssueDate',
+      'civilIdExpiryDate',
+      'passportNumber',
+      'passportAlertDays',
+      'passportIssueDate',
+      'passportExpiryDate',
+      'visaNumber',
+      'visaType',
+      'visaAlertDays',
+      'visaIssueDate',
+      'visaExpiryDate',
+      'salary',
+      'additions',
+      'paymentMethod',
+      'transferable',
+      'standardWorkingDays',
+      'address',
+      'bankIban',
+      'bankName',
+      'swiftCode',
+      'residencyOnCompany',
+      'residencyName',
+      'professionCategory',
+      'profileImage',
+      'visaImage',
+      'civilIdImage',
+      'passportImage',
+      'drivingLicenseNumber',
+      'drivingLicenseIssueDate',
+      'drivingLicenseExpiryDate',
+      'drivingLicenseImage',
+      'additionalDocs',
+      'otherDocs',
+    ];
+
+    expect(new Set(mappedHeaders)).toEqual(new Set(expectedMappedKeys));
 
     const employeeKeys = new Set(Object.keys(insertEmployeeSchema.shape));
-    headers.forEach(header => {
-      const mapped = mapHeader(String(header));
-      expect(mapped).toBeDefined();
-      expect(employeeKeys.has(mapped!)).toBe(true);
+    expectedMappedKeys.forEach(key => {
+      expect(employeeKeys.has(key)).toBe(true);
     });
   });
 
