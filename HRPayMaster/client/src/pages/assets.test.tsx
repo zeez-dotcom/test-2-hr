@@ -228,6 +228,7 @@ describe('Assets page', () => {
       </QueryClientProvider>
     );
 
+    expect(screen.getByText('No assets are currently marked for maintenance.')).toBeInTheDocument();
     fireEvent.click(screen.getAllByText('Active Assignments')[0]);
     expect(screen.queryByText('No active assignments.')).not.toBeInTheDocument();
 
@@ -256,6 +257,10 @@ describe('Assets page', () => {
     toast.mockReset();
 
     await act(async () => {
+      queryClient.setQueryData(['/api/assets'], assets.map(asset => ({
+        ...asset,
+        status: asset.id === 'asset-1' ? 'maintenance' : asset.status,
+      })));
       queryClient.setQueryData(['/api/asset-assignments'], assignments.map(a => ({
         ...a,
         status: a.id === 'assign-1' ? 'maintenance' : a.status,
@@ -265,5 +270,10 @@ describe('Assets page', () => {
     await waitFor(() =>
       expect(screen.getByText('No active assignments.')).toBeInTheDocument()
     );
+    const formattedAssigned = new Date('2024-01-01').toLocaleDateString();
+    await waitFor(() =>
+      expect(screen.getByText(`Assigned: ${formattedAssigned}`)).toBeInTheDocument()
+    );
+    expect(screen.queryByText('No assets are currently marked for maintenance.')).not.toBeInTheDocument();
   });
 });
