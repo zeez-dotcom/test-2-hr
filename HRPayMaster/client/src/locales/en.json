@@ -79,8 +79,14 @@
     "analytics": "Analytics",
     "payrollSummary": "Payroll Summary",
     "loanBalances": "Loan Balances",
-    "byDepartment": "By Department",
+    "byDepartment": "Dept Summary",
     "assetUsage": "Asset Usage",
+    "fleetUsage": "Fleet Usage",
+    "vehicle": "Vehicle",
+    "identifiers": "Identifiers",
+    "assignee": "Assignee",
+    "assignmentWindow": "Assignment Window",
+    "remarks": "Remarks",
     "assignedTo": "Assigned To",
     "assignmentPeriod": "Assignment Period",
     "status": "Status",
@@ -135,7 +141,11 @@
     "noNotes": "No notes",
     "unknown": "Unknown",
     "noLoanData": "No loan data available",
-    "noAssetData": "No asset usage data available"
+    "noAssetData": "No asset usage data available",
+    "plateLabel": "Plate: {{plate}}",
+    "vinLabel": "VIN: {{vin}}",
+    "serialLabel": "Serial: {{serial}}",
+    "noFleetData": "No fleet usage data available"
   },
   "docgen": {
     "noc": "No Objection Certificate",

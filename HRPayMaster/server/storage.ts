@@ -140,6 +140,22 @@ export interface AssetUsage {
   notes: string | null;
 }
 
+export interface FleetUsage {
+  assignmentId: string;
+  carId: string;
+  vehicle: string;
+  plateNumber: string;
+  vin: string | null;
+  serial: string | null;
+  employeeId: string;
+  employeeCode: string | null;
+  employeeName: string;
+  assignedDate: string;
+  returnDate: string | null;
+  status: CarAssignment["status"];
+  notes: string | null;
+}
+
 export interface IStorage {
   // Department methods
   getDepartments(): Promise<Department[]>;
@@ -302,6 +318,7 @@ export interface IStorage {
   ): Promise<PayrollDepartmentSummaryRow[]>;
   getLoanBalances(): Promise<LoanBalance[]>;
   getAssetUsageDetails(params: { startDate?: string; endDate?: string }): Promise<AssetUsage[]>;
+  getFleetUsage(params: { startDate?: string; endDate?: string }): Promise<FleetUsage[]>;
   getAssetDocuments(assetId: string): Promise<AssetDocument[]>;
   createAssetDocument(doc: InsertAssetDocument): Promise<AssetDocument>;
   getAssetRepairs(assetId: string): Promise<AssetRepair[]>;
@@ -1927,6 +1944,96 @@ export class DatabaseStorage implements IStorage {
       })
       .sort((a, b) => {
         const nameCompare = a.assetName.localeCompare(b.assetName);
+        if (nameCompare !== 0) return nameCompare;
+
+        const dateA = new Date(a.assignedDate);
+        const dateB = new Date(b.assignedDate);
+        return dateA.getTime() - dateB.getTime();
+      });
+  }
+
+  async getFleetUsage({
+    startDate,
+    endDate,
+  }: {
+    startDate?: string;
+    endDate?: string;
+  }): Promise<FleetUsage[]> {
+    const filters: SQL<unknown>[] = [];
+
+    if (endDate) {
+      filters.push(lte(carAssignments.assignedDate, endDate));
+    }
+
+    if (startDate) {
+      filters.push(
+        sql`(${carAssignments.returnDate} IS NULL OR ${carAssignments.returnDate} >= ${startDate})`,
+      );
+    }
+
+    const assignments = await db.query.carAssignments.findMany({
+      where: filters.length ? and(...filters) : undefined,
+      with: {
+        car: true,
+        employee: true,
+      },
+      orderBy: [asc(carAssignments.carId), asc(carAssignments.assignedDate)],
+    });
+
+    const start = startDate ? new Date(startDate) : null;
+    const end = endDate ? new Date(endDate) : null;
+
+    const normalizeDate = (value?: string | Date | null) => {
+      if (!value) return null;
+      if (value instanceof Date) {
+        return value.toISOString().split("T")[0];
+      }
+      return value;
+    };
+
+    const toDate = (value: string | Date) => (value instanceof Date ? value : new Date(value));
+
+    return assignments
+      .filter((assignment) => {
+        const assigned = toDate(assignment.assignedDate);
+        const returned = assignment.returnDate ? toDate(assignment.returnDate) : null;
+
+        const startsBeforeEnd = !end || assigned <= end;
+        const endsAfterStart = !start || !returned || returned >= start;
+
+        return startsBeforeEnd && endsAfterStart;
+      })
+      .map((assignment) => {
+        const car = assignment.car;
+        const employee = assignment.employee;
+        const assignedDate = normalizeDate(assignment.assignedDate) ?? "";
+        const returnDate = normalizeDate(assignment.returnDate);
+        const vehicleParts = [car?.make, car?.model, car?.year ? String(car.year) : null].filter(Boolean);
+        const vehicleName = vehicleParts.join(" ") || car?.plateNumber || assignment.carId;
+        const employeeName = [employee?.firstName, employee?.lastName]
+          .filter(Boolean)
+          .join(" ")
+          .trim();
+
+        return {
+          assignmentId: assignment.id,
+          carId: assignment.carId,
+          vehicle: vehicleName,
+          plateNumber: car?.plateNumber ?? "",
+          vin: car?.vin ?? null,
+          serial: car?.serial ?? null,
+          employeeId: assignment.employeeId,
+          employeeCode: employee?.employeeCode ?? null,
+          employeeName:
+            employeeName || employee?.firstName || employee?.lastName || assignment.employeeId,
+          assignedDate,
+          returnDate,
+          status: assignment.status,
+          notes: assignment.notes ?? null,
+        } satisfies FleetUsage;
+      })
+      .sort((a, b) => {
+        const nameCompare = a.vehicle.localeCompare(b.vehicle);
         if (nameCompare !== 0) return nameCompare;
 
         const dateA = new Date(a.assignedDate);

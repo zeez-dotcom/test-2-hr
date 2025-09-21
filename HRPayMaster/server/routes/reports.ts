@@ -166,6 +166,21 @@ reportsRouter.get("/api/reports/asset-usage", async (req, res, next) => {
   }
 });
 
+// Fleet usage
+reportsRouter.get("/api/reports/fleet-usage", async (req, res, next) => {
+  try {
+    const { startDate, endDate } = reportQuerySchema.parse(req.query);
+    const report = await storage.getFleetUsage({ startDate, endDate });
+    res.json(report);
+  } catch (error) {
+    console.error(error);
+    if (error instanceof z.ZodError) {
+      return next(new HttpError(400, "Invalid query parameters", error.errors));
+    }
+    next(new HttpError(500, "Failed to fetch fleet usage", error));
+  }
+});
+
 // Payroll by department
 reportsRouter.get("/api/reports/payroll-by-department", async (req, res, next) => {
   try {

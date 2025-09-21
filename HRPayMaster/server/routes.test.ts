@@ -30,6 +30,7 @@ vi.mock('./storage', () => {
       getLoanReportDetails: vi.fn(),
       getLoanBalances: vi.fn(),
       getAssetUsageDetails: vi.fn(),
+      getFleetUsage: vi.fn(),
     },
     DuplicateEmployeeCodeError,
   };
@@ -1122,6 +1123,38 @@ describe('employee routes', () => {
       endDate: '2024-02-01',
     });
     expect(res.body).toEqual(usage);
+  });
+
+  it('GET /api/reports/fleet-usage returns car assignments with filters', async () => {
+    const fleet = [
+      {
+        assignmentId: 'fleet-1',
+        carId: 'car-1',
+        vehicle: 'Toyota Hilux 2021',
+        plateNumber: 'KUW-4567',
+        vin: 'VIN-4567',
+        serial: 'SER-4567',
+        employeeId: 'emp-1',
+        employeeCode: 'EMP-001',
+        employeeName: 'Ada Lovelace',
+        assignedDate: '2024-01-01',
+        returnDate: null,
+        status: 'active',
+        notes: 'Delivery route',
+      },
+    ];
+    (storage.getFleetUsage as any).mockResolvedValue(fleet);
+
+    const res = await request(app)
+      .get('/api/reports/fleet-usage')
+      .query({ startDate: '2024-01-01', endDate: '2024-02-01' });
+
+    expect(res.status).toBe(200);
+    expect(storage.getFleetUsage).toHaveBeenCalledWith({
+      startDate: '2024-01-01',
+      endDate: '2024-02-01',
+    });
+    expect(res.body).toEqual(fleet);
   });
 });
 

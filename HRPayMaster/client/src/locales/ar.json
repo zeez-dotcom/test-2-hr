@@ -79,8 +79,14 @@
     "analytics": "تحليلات",
     "payrollSummary": "ملخص الرواتب",
     "loanBalances": "أرصدة القروض",
-    "byDepartment": "حسب القسم",
+    "byDepartment": "ملخص القسم",
     "assetUsage": "استخدام الأصول",
+    "fleetUsage": "استخدام الأسطول",
+    "vehicle": "المركبة",
+    "identifiers": "المعرفات",
+    "assignee": "المستلم",
+    "assignmentWindow": "فترة التعيين",
+    "remarks": "ملاحظات",
     "assignedTo": "مُسند إلى",
     "assignmentPeriod": "فترة التعيين",
     "status": "الحالة",
@@ -135,7 +141,11 @@
     "noNotes": "لا توجد ملاحظات",
     "unknown": "غير معروف",
     "noLoanData": "لا توجد بيانات قروض",
-    "noAssetData": "لا توجد بيانات لاستخدام الأصول"
+    "noAssetData": "لا توجد بيانات لاستخدام الأصول",
+    "plateLabel": "اللوحة: {{plate}}",
+    "vinLabel": "رقم الهيكل: {{vin}}",
+    "serialLabel": "الرقم التسلسلي: {{serial}}",
+    "noFleetData": "لا توجد بيانات لاستخدام الأسطول"
   },
   "docgen": {
     "noc": "شهادة عدم ممانعة",
