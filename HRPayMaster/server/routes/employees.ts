@@ -134,6 +134,62 @@ async function getAddedBy(req: Request): Promise<string | undefined> {
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
+  "Employee Code/معرف الموظف",
+  "First Name (English)/الاسم الأول",
+  "Last Name/اسم العائلة",
+  "Arabic Name/الاسم العربي",
+  "Nickname/الاسم المستعار",
+  "Email/البريد الإلكتروني",
+  "Phone Number/رقم الهاتف",
+  "Emergency Phone/هاتف الطوارئ",
+  "Job Title/المسمى الوظيفي",
+  "Role/الدور",
+  "Work Location/مكان العمل",
+  "Department ID/معرف القسم",
+  "Company ID/معرف الشركة",
+  "Status/الحالة",
+  "Start Date/تاريخ التوظيف",
+  "Date of Birth/تاريخ الميلاد",
+  "Nationality/الجنسية",
+  "National ID/الرقم الوطني",
+  "Civil ID Number/رقم البطاقة المدنية",
+  "Civil ID Alert Days/أيام تنبيه البطاقة المدنية",
+  "Civil ID Issue Date/تاريخ إصدار البطاقة المدنية",
+  "Civil ID Expiry Date/تاريخ انتهاء البطاقة المدنية",
+  "Passport Number/رقم جواز السفر",
+  "Passport Alert Days/أيام تنبيه جواز السفر",
+  "Passport Issue Date/تاريخ إصدار جواز السفر",
+  "Passport Expiry Date/تاريخ انتهاء جواز السفر",
+  "Visa Number/رقم التأشيرة",
+  "Visa Type/نوع التأشيرة",
+  "Visa Alert Days/أيام تنبيه التأشيرة",
+  "Visa Issue Date/تاريخ إصدار التأشيرة",
+  "Visa Expiry Date/تاريخ انتهاء التأشيرة",
+  "Salary/الراتب",
+  "Additions/إضافات",
+  "Payment Method/طريقة الدفع",
+  "Transferable/تحويل",
+  "Standard Working Days/أيام العمل",
+  "Address/العنوان",
+  "Bank IBAN/آيبان البنك",
+  "Bank Name/اسم البنك",
+  "SWIFT Code/رمز السويفت",
+  "Residency On Company/الإقامة على الشركة",
+  "Residency Name/اسم الإقامة",
+  "Profession Category/تصنيف المهنة",
+  "Profile Image/صورة الملف الشخصي",
+  "Visa Image/صورة التأشيرة",
+  "Civil ID Image/صورة البطاقة المدنية",
+  "Passport Image/صورة جواز السفر",
+  "Driving License Number/رقم رخصة القيادة",
+  "Driving License Issue Date/تاريخ إصدار رخصة القيادة",
+  "Driving License Expiry Date/تاريخ انتهاء رخصة القيادة",
+  "Driving License Image/صورة رخصة القيادة",
+  "Additional Documents/مستندات إضافية",
+  "Other Documents/مستندات أخرى",
+];
+
   // Department routes
   employeesRouter.get("/api/departments", async (req, res, next) => {
     try {
@@ -317,47 +373,7 @@ const upload = multer({ storage: multer.memoryStorage() });
   });
 
   employeesRouter.get("/api/employees/import/template", (_req, res) => {
-    const headers = [
-      "Employee Code/معرف الموظف",
-      "First Name (English)/الاسم الأول",
-      "Last Name/اسم العائلة",
-      "Arabic Name/الاسم العربي",
-      "Image URL/رابط الصورة",
-      "Job Title/المسمى الوظيفي",
-      "Work Location/مكان العمل",
-      "Nationality/الجنسية",
-      "Profession/المهنة",
-      "Employment Date/تاريخ التوظيف",
-      "Status/الحالة",
-      "Civil ID Number/رقم البطاقة المدنية",
-      "Civil ID Issue Date/تاريخ إصدار البطاقة المدنية",
-      "Civil ID Expiry Date/تاريخ انتهاء البطاقة المدنية",
-      "Passport Number/رقم جواز السفر",
-      "Passport Issue Date/تاريخ إصدار جواز السفر",
-      "Passport Expiry Date/تاريخ انتهاء جواز السفر",
-      "Salary/الراتب",
-      "Additions/إضافات",
-      "Transferable/تحويل",
-      "Payment Method/طريقة الدفع",
-      "Documents/مستندات",
-      "Standard Working Days/أيام العمل",
-      "Phone Number/رقم الهاتف",
-      "Civil ID Image/صورة البطاقة المدنية",
-      "Passport Image/صورة جواز السفر",
-      "Driving License Image/صورة رخصة القيادة",
-      "Driving License Issue Date/تاريخ إصدار رخصة القيادة",
-      "Driving License Expiry Date/تاريخ انتهاء رخصة القيادة",
-      "Additional Documents/مستندات إضافية",
-      "IBAN/آيبان",
-      "SWIFT Code/رمز السويفت",
-      "Residency Name/اسم الإقامة",
-      "Residency On Company/الإقامة على الشركة",
-      "Department ID/معرف القسم",
-      "Profession Code/رمز المهنة",
-      "Profession Category/تصنيف المهنة",
-    ];
-
-    const ws = XLSX.utils.aoa_to_sheet([headers]);
+    const ws = XLSX.utils.aoa_to_sheet([EMPLOYEE_IMPORT_TEMPLATE_HEADERS]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Employees");
     const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
