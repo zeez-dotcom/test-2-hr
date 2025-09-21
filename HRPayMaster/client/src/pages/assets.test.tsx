@@ -18,20 +18,23 @@ vi.mock('@tanstack/react-query', async () => {
       optionsRef.current = options;
       const stateRef = React.useRef<any>();
       if (!stateRef.current) {
-        const mock = {
+        const mutateImpl = async (vars: any) => {
+          mock.variables = vars;
+          mock.isPending = true;
+          if (mock.shouldError) {
+            await optionsRef.current.onError?.('error', vars, null);
+          } else {
+            await optionsRef.current.onSuccess?.('success', vars, null);
+          }
+          mock.isPending = false;
+          return 'success';
+        };
+        const mock: any = {
           shouldError: false,
           isPending: false,
           variables: undefined as any,
-          mutate: async (vars: any) => {
-            mock.variables = vars;
-            mock.isPending = true;
-            if (mock.shouldError) {
-              await optionsRef.current.onError?.('error', vars, null);
-            } else {
-              await optionsRef.current.onSuccess?.('success', vars, null);
-            }
-            mock.isPending = false;
-          },
+          mutate: mutateImpl,
+          mutateAsync: mutateImpl,
         };
         stateRef.current = mock;
         mutationMocks.push(mock);
@@ -66,19 +69,26 @@ vi.mock('@/components/ui/dialog', () => ({
   Dialog: ({ children }: any) => <div>{children}</div>,
   DialogContent: ({ children }: any) => <div>{children}</div>,
   DialogDescription: ({ children }: any) => <div>{children}</div>,
+  DialogFooter: ({ children }: any) => <div>{children}</div>,
   DialogHeader: ({ children }: any) => <div>{children}</div>,
   DialogTitle: ({ children }: any) => <div>{children}</div>,
   DialogTrigger: ({ children }: any) => <div>{children}</div>,
 }));
 
-vi.mock('@/components/ui/form', () => ({
-  Form: ({ children }: any) => <div>{children}</div>,
-  FormControl: ({ children }: any) => <div>{children}</div>,
-  FormField: ({ render }: any) => render({ field: { onChange: vi.fn(), value: '' } }),
-  FormItem: ({ children }: any) => <div>{children}</div>,
-  FormLabel: ({ children }: any) => <label>{children}</label>,
-  FormMessage: () => <div />,
-}));
+vi.mock('@/components/ui/form', () => {
+  const React = require('react');
+  const { Controller } = require('react-hook-form');
+  return {
+    Form: ({ children }: any) => <div>{children}</div>,
+    FormControl: ({ children }: any) => <div>{children}</div>,
+    FormField: ({ control, name, render, rules }: any) => (
+      <Controller control={control} name={name} rules={rules} render={render} />
+    ),
+    FormItem: ({ children }: any) => <div>{children}</div>,
+    FormLabel: ({ children }: any) => <label>{children}</label>,
+    FormMessage: () => <div />,
+  };
+});
 
 vi.mock('@/components/ui/input', () => ({
   Input: (props: any) => <input {...props} />,
@@ -275,5 +285,61 @@ describe('Assets page', () => {
       expect(screen.getByText(`Assigned: ${formattedAssigned}`)).toBeInTheDocument()
     );
     expect(screen.queryByText('No assets are currently marked for maintenance.')).not.toBeInTheDocument();
+  });
+
+  it('requires logging a repair before returning an asset to service', async () => {
+    const assets = [
+      {
+        id: 'asset-1',
+        name: '3D Printer',
+        type: 'Equipment',
+        status: 'maintenance',
+        currentAssignment: null,
+      },
+    ];
+
+    queryClient.setQueryData(['/api/assets'], assets);
+    queryClient.setQueryData(['/api/asset-assignments'], []);
+    queryClient.setQueryData(['/api/employees'], []);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Assets />
+      </QueryClientProvider>
+    );
+
+    const returnButton = screen.getByRole('button', { name: 'Back to Service' });
+    fireEvent.click(returnButton);
+
+    expect(screen.getByText('Return Asset to Service')).toBeInTheDocument();
+
+    const submitButton = screen.getByRole('button', { name: 'Return to Service' });
+    expect(submitButton).toBeDisabled();
+
+    const descriptionField = screen.getByPlaceholderText('What was repaired?');
+    fireEvent.change(descriptionField, { target: { value: 'Maintenance complete' } });
+
+    expect(submitButton).not.toBeDisabled();
+
+    fireEvent.click(submitButton);
+
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith({ title: 'Asset returned to service' })
+    );
+
+    const repairCall = mutationMocks.find(
+      mock =>
+        mock.variables?.assetId === 'asset-1' &&
+        mock.variables?.form?.description === 'Maintenance complete'
+    );
+    expect(repairCall).toBeDefined();
+    expect(repairCall?.variables.form.cost).toBe('');
+    expect(repairCall?.variables.form.vendor).toBe('');
+
+    const statusCall = mutationMocks.find(
+      mock => mock.variables?.assetId === 'asset-1' && mock.variables?.status === 'available'
+    );
+    expect(statusCall).toBeDefined();
+    expect(statusCall?.variables).toMatchObject({ assetId: 'asset-1', status: 'available' });
   });
 });

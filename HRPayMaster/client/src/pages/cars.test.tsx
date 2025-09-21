@@ -19,20 +19,23 @@ vi.mock('@tanstack/react-query', async () => {
       optionsRef.current = options;
       const stateRef = React.useRef<any>();
       if (!stateRef.current) {
-        const mock = {
+        const mutateImpl = async (vars: any) => {
+          mock.variables = vars;
+          mock.isPending = true;
+          if (mock.shouldError) {
+            await optionsRef.current.onError?.('error', vars, null);
+          } else {
+            await optionsRef.current.onSuccess?.('success', vars, null);
+          }
+          mock.isPending = false;
+          return 'success';
+        };
+        const mock: any = {
           shouldError: false,
           isPending: false,
           variables: undefined as any,
-          mutate: async (vars: any) => {
-            mock.variables = vars;
-            mock.isPending = true;
-            if (mock.shouldError) {
-              await optionsRef.current.onError?.('error', vars, null);
-            } else {
-              await optionsRef.current.onSuccess?.('success', vars, null);
-            }
-            mock.isPending = false;
-          }
+          mutate: mutateImpl,
+          mutateAsync: mutateImpl,
         };
         stateRef.current = mock;
         mutationMocks.push(mock);
@@ -73,14 +76,20 @@ vi.mock('@/components/ui/dialog', () => ({
   DialogTrigger: ({ children }: any) => <div>{children}</div>,
 }));
 
-vi.mock('@/components/ui/form', () => ({
-  Form: ({ children }: any) => <div>{children}</div>,
-  FormControl: ({ children }: any) => <div>{children}</div>,
-  FormField: ({ render }: any) => render({ field: { onChange: vi.fn(), value: '' } }),
-  FormItem: ({ children }: any) => <div>{children}</div>,
-  FormLabel: ({ children }: any) => <label>{children}</label>,
-  FormMessage: () => <div />,
-}));
+vi.mock('@/components/ui/form', () => {
+  const React = require('react');
+  const { Controller } = require('react-hook-form');
+  return {
+    Form: ({ children }: any) => <div>{children}</div>,
+    FormControl: ({ children }: any) => <div>{children}</div>,
+    FormField: ({ control, name, render, rules }: any) => (
+      <Controller control={control} name={name} rules={rules} render={render} />
+    ),
+    FormItem: ({ children }: any) => <div>{children}</div>,
+    FormLabel: ({ children }: any) => <label>{children}</label>,
+    FormMessage: () => <div />,
+  };
+});
 
 vi.mock('@/components/ui/input', () => ({
   Input: (props: any) => <input {...props} />,
@@ -408,14 +417,27 @@ describe('Cars page', () => {
     await waitFor(() => expect(screen.getByText('Assigned: Jan 1, 2024')).toBeInTheDocument());
     expect(screen.queryByText('No vehicles are currently marked for maintenance.')).not.toBeInTheDocument();
 
+    toast.mockReset();
     fireEvent.click(screen.getByText('Back to Service'));
+
+    expect(screen.getByText('Return Car to Service')).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText('What was repaired?'), {
+      target: { value: 'Maintenance complete' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Return to Service' }));
 
     await waitFor(() =>
       expect(toast).toHaveBeenCalledWith({ title: 'Car returned to service' })
     );
-    const statusCall = [...mutationMocks]
-      .reverse()
-      .find(mock => mock.variables?.carId === '1' && mock.variables?.status === 'available');
+
+    const repairCall = mutationMocks.find(
+      mock => mock.variables?.carId === '1' && mock.variables?.data?.description === 'Maintenance complete'
+    );
+    expect(repairCall).toBeDefined();
+
+    const statusCall = mutationMocks.find(
+      mock => mock.variables?.carId === '1' && mock.variables?.status === 'available'
+    );
     expect(statusCall).toBeDefined();
     expect(statusCall?.variables).toEqual({ carId: '1', status: 'available' });
   });

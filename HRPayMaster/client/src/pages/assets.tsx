@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -59,8 +59,61 @@ export default function Assets() {
   const [docFile, setDocFile] = useState<File | null>(null);
   const [repairsAsset, setRepairsAsset] = useState<any | null>(null);
   const repairsQuery = useQuery<any[]>({ queryKey: repairsAsset ? ["/api/assets", repairsAsset.id, "repairs"] : ["noop"], queryFn: async()=>{ const r = await fetch(`/api/assets/${repairsAsset!.id}/repairs`, { credentials:'include' }); return r.json(); }, enabled: !!repairsAsset });
-  const [repairForm, setRepairForm] = useState({ repairDate: new Date().toISOString().split('T')[0], description: '', cost: '', vendor: '' });
-  const addRepair = useMutation({ mutationFn: async () => { if (!repairsAsset) return; const payload:any = { ...repairForm }; if (!payload.cost) delete payload.cost; const res = await apiPost(`/api/assets/${repairsAsset.id}/repairs`, payload); if (!(res as any).ok) throw res; }, onSuccess: ()=>{ queryClient.invalidateQueries({ queryKey:["/api/assets", repairsAsset!.id, "repairs"]}); setRepairForm({ repairDate: new Date().toISOString().split('T')[0], description:'', cost:'', vendor:'' }); } });
+
+  const createAssetRepairForm = () => ({
+    repairDate: new Date().toISOString().split('T')[0],
+    description: '',
+    cost: '',
+    vendor: '',
+  });
+
+  type AssetRepairFormState = ReturnType<typeof createAssetRepairForm>;
+
+  const [repairForm, setRepairForm] = useState<AssetRepairFormState>(createAssetRepairForm());
+  const [returnAssetDialog, setReturnAssetDialog] = useState<AssetWithAssignment | null>(null);
+  const [returnRepairForm, setReturnRepairForm] = useState<AssetRepairFormState>(createAssetRepairForm());
+
+  const buildAssetRepairPayload = (formValues: AssetRepairFormState) => {
+    const payload: Record<string, string | number> = {
+      repairDate: formValues.repairDate,
+      description: formValues.description,
+    };
+    if (formValues.cost) {
+      const numericCost = parseFloat(formValues.cost);
+      if (!Number.isNaN(numericCost)) {
+        payload.cost = numericCost;
+      }
+    }
+    if (formValues.vendor) {
+      payload.vendor = formValues.vendor;
+    }
+    return payload;
+  };
+
+  const submitAssetRepair = async (assetId: string, formValues: AssetRepairFormState) => {
+    const payload = buildAssetRepairPayload(formValues);
+    const res = await apiPost(`/api/assets/${assetId}/repairs`, payload);
+    if (!res.ok) throw res;
+  };
+
+  const addRepair = useMutation({
+    mutationFn: async () => {
+      if (!repairsAsset) throw new Error('No asset selected');
+      await submitAssetRepair(repairsAsset.id, repairForm);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey:["/api/assets", repairsAsset!.id, "repairs"]});
+      setRepairForm(createAssetRepairForm());
+    },
+    onError: (err) => toastApiError(err as any, 'Failed to log repair'),
+  });
+
+  const returnAssetRepairMutation = useMutation({
+    mutationFn: async ({ assetId, form }: { assetId: string; form: AssetRepairFormState }) => {
+      await submitAssetRepair(assetId, form);
+    },
+    onError: (err) => toastApiError(err as any, 'Failed to log repair'),
+  });
   const uploadDoc = useMutation({
     mutationFn: async () => {
       if (!docAssetId || !docTitle || !docFile) throw new Error('Missing fields');
@@ -227,6 +280,12 @@ export default function Assets() {
     asset: AssetWithAssignment,
     status: "available" | "maintenance" | "assigned"
   ) => {
+    if (asset.status === "maintenance" && status === "available") {
+      setReturnAssetDialog(asset);
+      setReturnRepairForm(createAssetRepairForm());
+      return;
+    }
+
     if (status === "maintenance") {
       const activeAssignment =
         asset.currentAssignment ??
@@ -245,6 +304,26 @@ export default function Assets() {
 
     assetStatusMutation.mutate({ assetId: asset.id, status });
   };
+
+  const handleReturnAssetToService = async () => {
+    if (!returnAssetDialog) return;
+    try {
+      await returnAssetRepairMutation.mutateAsync({
+        assetId: returnAssetDialog.id,
+        form: returnRepairForm,
+      });
+      await assetStatusMutation.mutateAsync({
+        assetId: returnAssetDialog.id,
+        status: "available",
+      });
+      setReturnAssetDialog(null);
+      setReturnRepairForm(createAssetRepairForm());
+    } catch (err) {
+      // Errors are handled by the respective mutations
+    }
+  };
+
+  const isReturningAsset = returnAssetRepairMutation.isPending || assetStatusMutation.isPending;
 
   return (
     <div className="space-y-6">
@@ -622,6 +701,73 @@ export default function Assets() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Return to service dialog */}
+      <Dialog
+        open={!!returnAssetDialog}
+        onOpenChange={(open) => {
+          if (!open) {
+            setReturnAssetDialog(null);
+            setReturnRepairForm(createAssetRepairForm());
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Return Asset to Service</DialogTitle>
+            <DialogDescription>
+              {`Record the maintenance details before returning ${returnAssetDialog?.name ?? 'this asset'} to service.`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="asset-return-repair-date">Repair Date</label>
+              <Input
+                id="asset-return-repair-date"
+                type="date"
+                value={returnRepairForm.repairDate}
+                onChange={(e) => setReturnRepairForm((s) => ({ ...s, repairDate: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="asset-return-repair-description">Description</label>
+              <Textarea
+                id="asset-return-repair-description"
+                placeholder="What was repaired?"
+                value={returnRepairForm.description}
+                onChange={(e) => setReturnRepairForm((s) => ({ ...s, description: e.target.value }))}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <label className="text-sm font-medium" htmlFor="asset-return-repair-cost">Cost (optional)</label>
+                <Input
+                  id="asset-return-repair-cost"
+                  type="number"
+                  value={returnRepairForm.cost}
+                  onChange={(e) => setReturnRepairForm((s) => ({ ...s, cost: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium" htmlFor="asset-return-repair-vendor">Vendor (optional)</label>
+                <Input
+                  id="asset-return-repair-vendor"
+                  value={returnRepairForm.vendor}
+                  onChange={(e) => setReturnRepairForm((s) => ({ ...s, vendor: e.target.value }))}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={handleReturnAssetToService}
+              disabled={isReturningAsset || !returnRepairForm.description}
+            >
+              {isReturningAsset ? 'Returning...' : 'Return to Service'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Upload document dialog */}
       <Dialog open={!!docAssetId} onOpenChange={(o)=>!o&&setDocAssetId(null)}>
