@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
-import { apiPost } from "@/lib/http";
+import { apiPost, apiPut } from "@/lib/http";
 import { toastApiError } from "@/lib/toastError";
 import { CheckCircle, Users, AlertTriangle, Package } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -119,6 +119,36 @@ export default function Assets() {
     onError: (err) => toastApiError(err as any, t('assets.statusUpdateFailed', 'Failed to update asset status')),
   });
 
+  const updateAssetAssignmentStatus = useMutation<
+    any,
+    unknown,
+    { assignmentId: string; status: string; assetId: string; returnDate?: string }
+  >({
+    mutationFn: async ({ assignmentId, status, returnDate }) => {
+      const payload: Record<string, string> = { status };
+      if (returnDate) {
+        payload.returnDate = returnDate;
+      }
+      const res = await apiPut(`/api/asset-assignments/${assignmentId}`, payload);
+      if (!res.ok) throw res;
+      return res.data;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/assets"] });
+      if (variables.assetId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/assets", variables.assetId] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/asset-assignments"] });
+      if (variables.assetId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/asset-assignments", variables.assetId] });
+      }
+      if (variables.assetId && variables.status) {
+        assetStatusMutation.mutate({ assetId: variables.assetId, status: variables.status });
+      }
+    },
+    onError: (err) => toastApiError(err as any, t('assets.statusUpdateFailed', 'Failed to update asset status')),
+  });
+
   const assignAsset = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiPost("/api/asset-assignments", data);
@@ -193,8 +223,27 @@ export default function Assets() {
   const onSubmitAsset = (data: any) => createAsset.mutate(data);
   const onSubmitAssignment = (data: any) => assignAsset.mutate(data);
 
-  const handleAssetStatusChange = (assetId: string, status: "available" | "maintenance" | "assigned") => {
-    assetStatusMutation.mutate({ assetId, status });
+  const handleAssetStatusChange = (
+    asset: AssetWithAssignment,
+    status: "available" | "maintenance" | "assigned"
+  ) => {
+    if (status === "maintenance") {
+      const activeAssignment =
+        asset.currentAssignment ??
+        activeAssignments.find(assignment => assignment.assetId === asset.id && assignment.status === "active");
+      if (activeAssignment?.id) {
+        const today = new Date().toISOString().split("T")[0];
+        updateAssetAssignmentStatus.mutate({
+          assignmentId: activeAssignment.id,
+          assetId: asset.id,
+          status: "maintenance",
+          ...(activeAssignment.returnDate ? {} : { returnDate: today }),
+        });
+        return;
+      }
+    }
+
+    assetStatusMutation.mutate({ assetId: asset.id, status });
   };
 
   return (
@@ -435,12 +484,14 @@ export default function Assets() {
                       variant="outline"
                       className="ml-2"
                       disabled={
-                        assetStatusMutation.isPending &&
-                        assetStatusMutation.variables?.assetId === asset.id
+                        (assetStatusMutation.isPending &&
+                          assetStatusMutation.variables?.assetId === asset.id) ||
+                        (updateAssetAssignmentStatus.isPending &&
+                          updateAssetAssignmentStatus.variables?.assetId === asset.id)
                       }
                       onClick={() =>
                         handleAssetStatusChange(
-                          asset.id,
+                          asset,
                           asset.status === "maintenance" ? "available" : "maintenance",
                         )
                       }

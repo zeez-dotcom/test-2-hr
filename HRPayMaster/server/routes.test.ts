@@ -21,12 +21,14 @@ vi.mock('./storage', () => {
       getLoans: vi.fn(),
       createLoan: vi.fn(),
       getAssets: vi.fn(),
+      getAsset: vi.fn(),
       updateAsset: vi.fn(),
       createAssetAssignment: vi.fn(),
       updateAssetAssignment: vi.fn(),
       getAssetAssignment: vi.fn(),
       deleteAssetAssignment: vi.fn(),
       getCars: vi.fn(),
+      getCar: vi.fn(),
       createCar: vi.fn(),
       updateCar: vi.fn(),
       createCarAssignment: vi.fn(),
@@ -147,7 +149,18 @@ describe('employee routes', () => {
     });
   });
 
-  it('POST /api/assets/:id/status updates asset status', async () => {
+  it('POST /api/assets/:id/status updates asset status and active assignment', async () => {
+    (storage.getAsset as any).mockResolvedValue({
+      id: 'asset-1',
+      status: 'assigned',
+      currentAssignment: {
+        id: 'asg-1',
+        assetId: 'asset-1',
+        employeeId: 'emp-1',
+        status: 'active',
+        returnDate: null,
+      },
+    });
     (storage.updateAsset as any).mockResolvedValue({ id: 'asset-1', status: 'maintenance' });
 
     const res = await request(app)
@@ -156,9 +169,24 @@ describe('employee routes', () => {
 
     expect(res.status).toBe(200);
     expect(storage.updateAsset).toHaveBeenCalledWith('asset-1', { status: 'maintenance' });
+    expect(storage.updateAssetAssignment).toHaveBeenCalledWith(
+      'asg-1',
+      expect.objectContaining({ status: 'maintenance', returnDate: expect.any(String) }),
+    );
   });
 
-  it('POST /api/cars/:id/status updates car status', async () => {
+  it('POST /api/cars/:id/status updates car status and active assignment', async () => {
+    (storage.getCar as any).mockResolvedValue({
+      id: 'car-1',
+      status: 'assigned',
+      currentAssignment: {
+        id: 'car-asg-1',
+        carId: 'car-1',
+        employeeId: 'emp-2',
+        status: 'active',
+        returnDate: null,
+      },
+    });
     (storage.updateCar as any).mockResolvedValue({ id: 'car-1', status: 'maintenance' });
 
     const res = await request(app)
@@ -167,6 +195,10 @@ describe('employee routes', () => {
 
     expect(res.status).toBe(200);
     expect(storage.updateCar).toHaveBeenCalledWith('car-1', { status: 'maintenance' });
+    expect(storage.updateCarAssignment).toHaveBeenCalledWith(
+      'car-asg-1',
+      expect.objectContaining({ status: 'maintenance', returnDate: expect.any(String) }),
+    );
   });
 
   it('PUT /api/asset-assignments/:id preserves maintenance status', async () => {
