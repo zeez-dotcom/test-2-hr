@@ -709,6 +709,30 @@ describe('employee routes', () => {
     expect(eventArg.addedBy).toBeUndefined();
   });
 
+  it('POST /api/employee-events creates a new employee event', async () => {
+    const payload = {
+      employeeId: 'emp-123',
+      eventType: 'bonus',
+      title: 'Performance bonus',
+      description: 'Quarterly performance bonus',
+      amount: '250.00',
+      eventDate: '2024-10-01',
+      affectsPayroll: true,
+      documentUrl: 'https://example.com/doc.pdf',
+      status: 'active',
+      addedBy: 'hr-user-1',
+    };
+
+    const stored = { id: 'evt-1', createdAt: '2024-10-01T00:00:00.000Z', ...payload };
+    (storage.createEmployeeEvent as any).mockResolvedValue(stored);
+
+    const res = await request(app).post('/api/employee-events').send(payload);
+
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual(stored);
+    expect(storage.createEmployeeEvent).toHaveBeenCalledWith(payload);
+  });
+
   it('POST /api/employees/import returns headers when no mapping provided', async () => {
     const wb = XLSX.utils.book_new();
     const data = [{ Code: 'E001', First: 'John' }];
