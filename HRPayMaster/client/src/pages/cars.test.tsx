@@ -122,7 +122,12 @@ beforeEach(() => {
   toast.mockReset();
   mutationMocks.length = 0;
   // @ts-ignore
-  global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
+  global.fetch = vi.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    json: async () => ({}),
+    headers: { get: () => null },
+  });
 });
 
 afterEach(() => {
@@ -147,6 +152,7 @@ describe('Cars page', () => {
     queryClient.setQueryData(['/api/cars'], cars);
     queryClient.setQueryData(['/api/car-assignments'], []);
     queryClient.setQueryData(['/api/employees'], []);
+    queryClient.setQueryData(['/api/vacations'], []);
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -251,6 +257,7 @@ describe('Cars page', () => {
     queryClient.setQueryData(['/api/cars'], cars);
     queryClient.setQueryData(['/api/car-assignments'], []);
     queryClient.setQueryData(['/api/employees'], []);
+    queryClient.setQueryData(['/api/vacations'], []);
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -261,6 +268,93 @@ describe('Cars page', () => {
     const img = screen.getByAltText('Registration document');
     expect(img).toBeInTheDocument();
     expect(img).toHaveAttribute('src', cars[0].registrationDocumentImage);
+  });
+
+  it('shows historical assignments when searching by plate, VIN, or serial', async () => {
+    const cars = [
+      {
+        id: 'car-1',
+        make: 'Toyota',
+        model: 'Corolla',
+        year: '2020',
+        plateNumber: 'ABC123',
+        status: 'available',
+        mileage: 1000,
+        currentAssignment: null,
+      },
+    ];
+    const assignments = [
+      {
+        id: 'assign-1',
+        carId: 'car-1',
+        employeeId: 'emp-1',
+        assignedDate: '2024-01-01',
+        returnDate: '2024-01-10',
+        status: 'completed',
+        notes: null,
+        car: {
+          id: 'car-1',
+          plateNumber: 'ABC123',
+          vin: 'VINABC',
+          serial: 'SER123',
+          make: 'Toyota',
+          model: 'Corolla',
+          year: '2020',
+        },
+        employee: {
+          id: 'emp-1',
+          firstName: 'Jane',
+          lastName: 'Doe',
+          phone: '555-1234',
+        },
+        assigner: null,
+      },
+    ];
+
+    queryClient.setQueryData(['/api/cars'], cars);
+    queryClient.setQueryData(['/api/car-assignments'], assignments);
+    queryClient.setQueryData(['/api/employees'], []);
+    queryClient.setQueryData(['/api/vacations'], []);
+
+    const fetchMock = global.fetch as Mock;
+    fetchMock.mockImplementation(async (url: any, init?: any) => {
+      if (typeof url === 'string' && url.startsWith('/api/car-assignments?')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => assignments,
+          headers: { get: () => null },
+        } as any;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({}),
+        headers: { get: () => null },
+      } as any;
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Cars />
+      </QueryClientProvider>
+    );
+
+    fireEvent.click(screen.getAllByText('Assignment History')[0]);
+    const input = screen.getByPlaceholderText('Search by plate, VIN, or serial');
+
+    fetchMock.mockClear();
+    fireEvent.change(input, { target: { value: 'ABC123' } });
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [url] = (fetchMock as Mock).mock.calls[0];
+    expect(url).toContain('plateNumber=ABC123');
+    expect(url).toContain('vin=ABC123');
+    expect(url).toContain('serial=ABC123');
+
+    await screen.findByText('ABC123');
+    expect(screen.getByText('Jan 1, 2024 – Jan 10, 2024')).toBeInTheDocument();
+    expect(screen.getAllByText('Completed')[0]).toBeInTheDocument();
   });
 });
 

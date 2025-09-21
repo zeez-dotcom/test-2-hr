@@ -156,6 +156,12 @@ export interface FleetUsage {
   notes: string | null;
 }
 
+export interface CarAssignmentFilters {
+  plateNumber?: string;
+  vin?: string;
+  serial?: string;
+}
+
 export interface IStorage {
   // Department methods
   getDepartments(): Promise<Department[]>;
@@ -272,7 +278,7 @@ export interface IStorage {
   createCarRepair(repair: InsertCarRepair): Promise<CarRepair>;
 
   // Car assignment methods
-  getCarAssignments(): Promise<CarAssignmentWithDetails[]>;
+  getCarAssignments(filters?: CarAssignmentFilters): Promise<CarAssignmentWithDetails[]>;
   getCarAssignment(id: string): Promise<CarAssignmentWithDetails | undefined>;
   createCarAssignment(carAssignment: InsertCarAssignment): Promise<CarAssignment>;
   updateCarAssignment(id: string, carAssignment: Partial<InsertCarAssignment>): Promise<CarAssignment | undefined>;
@@ -1281,7 +1287,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Car assignment methods
-  async getCarAssignments(): Promise<CarAssignmentWithDetails[]> {
+  async getCarAssignments(filters?: CarAssignmentFilters): Promise<CarAssignmentWithDetails[]> {
     const assignments = await db.query.carAssignments.findMany({
       with: {
         car: true,
@@ -1290,12 +1296,39 @@ export class DatabaseStorage implements IStorage {
       },
       orderBy: desc(carAssignments.createdAt),
     });
-    return assignments.map(assignment => ({
+    const normalizedAssignments = assignments.map(assignment => ({
       ...assignment,
       car: assignment.car || undefined,
       employee: assignment.employee || undefined,
       assigner: assignment.assigner || undefined,
     }));
+    if (!filters) return normalizedAssignments;
+
+    const normalizedFilters = {
+      plateNumber: filters.plateNumber?.trim().toLowerCase() || "",
+      vin: filters.vin?.trim().toLowerCase() || "",
+      serial: filters.serial?.trim().toLowerCase() || "",
+    };
+
+    const hasFilter = Object.values(normalizedFilters).some(value => value.length > 0);
+    if (!hasFilter) return normalizedAssignments;
+
+    return normalizedAssignments.filter(assignment => {
+      const car = assignment.car;
+      if (!car) return false;
+
+      const plateMatches = normalizedFilters.plateNumber
+        ? car.plateNumber?.toLowerCase().includes(normalizedFilters.plateNumber) ?? false
+        : true;
+      const vinMatches = normalizedFilters.vin
+        ? car.vin?.toLowerCase().includes(normalizedFilters.vin) ?? false
+        : true;
+      const serialMatches = normalizedFilters.serial
+        ? car.serial?.toLowerCase().includes(normalizedFilters.serial) ?? false
+        : true;
+
+      return plateMatches && vinMatches && serialMatches;
+    });
   }
 
   async getCarAssignment(id: string): Promise<CarAssignmentWithDetails | undefined> {

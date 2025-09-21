@@ -24,6 +24,7 @@ vi.mock('./storage', () => {
       createCar: vi.fn(),
       updateCar: vi.fn(),
       createCarAssignment: vi.fn(),
+      getCarAssignments: vi.fn(),
       createEmployeeEvent: vi.fn(),
       getEmployeeReport: vi.fn(),
       getCompanyPayrollSummary: vi.fn(),
@@ -120,6 +121,21 @@ describe('employee routes', () => {
     const res = await request(app).get('/api/employees');
     expect(res.status).toBe(200);
     expect(res.body).toEqual(mockEmployees);
+  });
+
+  it('GET /api/car-assignments forwards filters to storage', async () => {
+    (storage.getCarAssignments as any).mockResolvedValue([]);
+
+    const res = await request(app)
+      .get('/api/car-assignments')
+      .query({ plateNumber: 'ABC123', vin: 'VIN123', serial: 'SER123' });
+
+    expect(res.status).toBe(200);
+    expect(storage.getCarAssignments).toHaveBeenCalledWith({
+      plateNumber: 'ABC123',
+      vin: 'VIN123',
+      serial: 'SER123',
+    });
   });
 
   it('GET /api/employees/import/template returns xlsx with headers', async () => {

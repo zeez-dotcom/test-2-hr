@@ -1488,7 +1488,8 @@ const upload = multer({ storage: multer.memoryStorage() });
   // Car assignment routes
   employeesRouter.get("/api/car-assignments", async (req, res, next) => {
     try {
-      const assignments = await storage.getCarAssignments();
+      const { plateNumber, vin, serial } = req.query as Record<string, string | undefined>;
+      const assignments = await storage.getCarAssignments({ plateNumber, vin, serial });
       res.json(assignments);
     } catch (error) {
       next(new HttpError(500, "Failed to fetch car assignments"));
