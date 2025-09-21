@@ -566,5 +566,16 @@ describe('getFleetUsage', () => {
       },
     ]);
   });
+
+  it('treats blank date filters as undefined', async () => {
+    carAssignmentsFindManyMock.mockResolvedValue([]);
+
+    const result = await storage.getFleetUsage({ startDate: '', endDate: '   ' });
+
+    expect(result).toEqual([]);
+    expect(carAssignmentsFindManyMock).toHaveBeenCalledTimes(1);
+    const callArgs = carAssignmentsFindManyMock.mock.calls[0]?.[0];
+    expect(callArgs?.where).toBeUndefined();
+  });
 });
 
