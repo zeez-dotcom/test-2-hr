@@ -3,7 +3,8 @@ import 'dotenv/config';
 
 import { Pool as NeonPool, neonConfig } from '@neondatabase/serverless';
 import { drizzle as drizzleNeon } from 'drizzle-orm/neon-serverless';
-import { Pool as PgPool } from 'pg';
+import pg from 'pg';
+import type { Pool as PgPoolType } from 'pg';
 import { drizzle as drizzlePg } from 'drizzle-orm/node-postgres';
 import ws from 'ws';
 import * as schema from '@shared/schema';
@@ -23,7 +24,9 @@ const isLocalConnection =
   databaseHost === '127.0.0.1' ||
   databaseHost === '::1';
 
-let pool: NeonPool | PgPool;
+const { Pool: PgPool } = pg;
+
+let pool: NeonPool | PgPoolType;
 
 if (isLocalConnection) {
   pool = new PgPool({ connectionString });
@@ -37,5 +40,5 @@ export { pool };
 
 // Initialize Drizzle with the appropriate driver for the pool
 export const db = isLocalConnection
-  ? drizzlePg(pool as PgPool, { schema })
+  ? drizzlePg(pool as PgPoolType, { schema })
   : drizzleNeon({ client: pool as NeonPool, schema });
