@@ -1,4 +1,5 @@
 {
+  "installCommand": "npm install --prefix HRPayMaster --include=dev",
   "buildCommand": "npm run build --prefix HRPayMaster",
   "outputDirectory": "HRPayMaster/dist/public"
 }
