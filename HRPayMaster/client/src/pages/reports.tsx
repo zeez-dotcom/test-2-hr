@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,6 +43,8 @@ import type {
   EmployeeEvent,
   PayrollRun,
   Department,
+  AssetAssignmentWithDetails,
+  CarAssignmentWithDetails,
 } from "@shared/schema";
 // Types for company-level reports
 type PayrollSummary = { period: string; totals: { grossPay: number; netPay: number } };
@@ -160,24 +162,26 @@ export default function Reports() {
     enabled: Boolean(startDate && endDate),
   });
 
-  const { data: assetUsage, error: assetUsageError } = useQuery<AssetUsage[]>({
-    queryKey: ["/api/reports/asset-usage", startDate, endDate],
+  const {
+    data: assetAssignments = [],
+    error: assetAssignmentsError,
+  } = useQuery<AssetAssignmentWithDetails[]>({
+    queryKey: ["/api/asset-assignments", startDate, endDate],
     queryFn: async () => {
-      const res = await apiGet(
-        `/api/reports/asset-usage?startDate=${startDate}&endDate=${endDate}`,
-      );
+      const res = await apiGet("/api/asset-assignments");
       if (!res.ok) throw new Error(res.error || "Failed to fetch");
       return res.data;
     },
     enabled: Boolean(startDate && endDate),
   });
 
-  const { data: fleetUsage, error: fleetUsageError } = useQuery<FleetUsage[]>({
-    queryKey: ["/api/reports/fleet-usage", startDate, endDate],
+  const {
+    data: carAssignments = [],
+    error: carAssignmentsError,
+  } = useQuery<CarAssignmentWithDetails[]>({
+    queryKey: ["/api/car-assignments", startDate, endDate],
     queryFn: async () => {
-      const res = await apiGet(
-        `/api/reports/fleet-usage?startDate=${startDate}&endDate=${endDate}`,
-      );
+      const res = await apiGet("/api/car-assignments");
       if (!res.ok) throw new Error(res.error || "Failed to fetch");
       return res.data;
     },
@@ -194,36 +198,122 @@ export default function Reports() {
     enabled: Boolean(startDate && endDate),
   });
 
-  const sortedAssetUsage = assetUsage
-    ? [...assetUsage].sort((a, b) => {
+  const toTimestamp = (value?: string | Date | null) => {
+    if (!value) return undefined;
+    const date = value instanceof Date ? value : new Date(value);
+    const timestamp = date.getTime();
+    return Number.isNaN(timestamp) ? undefined : timestamp;
+  };
+
+  const normalizeDateValue = (value?: string | Date | null) => {
+    if (!value) return null;
+    if (value instanceof Date) {
+      return toLocalYMD(value);
+    }
+    return value;
+  };
+
+  const sortedAssetUsage = useMemo(() => {
+    const rangeStart = toTimestamp(startDate) ?? Number.NEGATIVE_INFINITY;
+    const rangeEnd = toTimestamp(endDate) ?? Number.POSITIVE_INFINITY;
+
+    return assetAssignments
+      .filter(assignment => {
+        const assignmentStart = toTimestamp(assignment.assignedDate);
+        if (assignmentStart === undefined) return false;
+        const assignmentEnd = toTimestamp(assignment.returnDate) ?? Number.POSITIVE_INFINITY;
+        return assignmentStart <= rangeEnd && assignmentEnd >= rangeStart;
+      })
+      .map<AssetUsage>(assignment => {
+        const asset = assignment.asset;
+        const employee = assignment.employee;
+        const assignedDate = normalizeDateValue(assignment.assignedDate) ?? "";
+        const returnDate = normalizeDateValue(assignment.returnDate);
+        const employeeName = [employee?.firstName, employee?.lastName]
+          .filter(Boolean)
+          .join(" ")
+          .trim();
+
+        return {
+          assignmentId: assignment.id,
+          assetId: assignment.assetId,
+          assetName: asset?.name ?? assignment.assetId,
+          assetType: asset?.type ?? "",
+          assetStatus: asset?.status ?? "",
+          assetDetails: asset?.details ?? null,
+          employeeId: assignment.employeeId,
+          employeeCode: employee?.employeeCode ?? null,
+          employeeName:
+            employeeName ||
+            employee?.firstName ||
+            employee?.lastName ||
+            assignment.employeeId,
+          assignedDate,
+          returnDate,
+          status: assignment.status,
+          notes: assignment.notes ?? null,
+        };
+      })
+      .sort((a, b) => {
         const assetCompare = a.assetName.localeCompare(b.assetName);
         if (assetCompare !== 0) return assetCompare;
-        const dateA = new Date(a.assignedDate).getTime();
-        const dateB = new Date(b.assignedDate).getTime();
+        const dateA = toTimestamp(a.assignedDate) ?? 0;
+        const dateB = toTimestamp(b.assignedDate) ?? 0;
         return dateA - dateB;
-      })
-    : [];
-
-  useEffect(() => {
-    if (fleetUsage && !Array.isArray(fleetUsage)) {
-      console.warn("Expected fleet usage data to be an array", fleetUsage);
-      toast({
-        title: "Invalid Data",
-        description: "Fleet usage report returned unexpected data.",
-        variant: "destructive",
       });
-    }
-  }, [fleetUsage, toast]);
+  }, [assetAssignments, startDate, endDate]);
 
-  const sortedFleetUsage = Array.isArray(fleetUsage)
-    ? [...fleetUsage].sort((a, b) => {
+  const sortedFleetUsage = useMemo(() => {
+    const rangeStart = toTimestamp(startDate) ?? Number.NEGATIVE_INFINITY;
+    const rangeEnd = toTimestamp(endDate) ?? Number.POSITIVE_INFINITY;
+
+    return carAssignments
+      .filter(assignment => {
+        const assignmentStart = toTimestamp(assignment.assignedDate);
+        if (assignmentStart === undefined) return false;
+        const assignmentEnd = toTimestamp(assignment.returnDate) ?? Number.POSITIVE_INFINITY;
+        return assignmentStart <= rangeEnd && assignmentEnd >= rangeStart;
+      })
+      .map<FleetUsage>(assignment => {
+        const car = assignment.car;
+        const employee = assignment.employee;
+        const assignedDate = normalizeDateValue(assignment.assignedDate) ?? "";
+        const returnDate = normalizeDateValue(assignment.returnDate);
+        const vehicleParts = [car?.make, car?.model, car?.year ? String(car.year) : null].filter(Boolean);
+        const vehicleName = vehicleParts.join(" ") || car?.plateNumber || assignment.carId;
+        const employeeName = [employee?.firstName, employee?.lastName]
+          .filter(Boolean)
+          .join(" ")
+          .trim();
+
+        return {
+          assignmentId: assignment.id,
+          carId: assignment.carId,
+          vehicle: vehicleName,
+          plateNumber: car?.plateNumber ?? "",
+          vin: car?.vin ?? null,
+          serial: car?.serial ?? null,
+          employeeId: assignment.employeeId,
+          employeeCode: employee?.employeeCode ?? null,
+          employeeName:
+            employeeName ||
+            employee?.firstName ||
+            employee?.lastName ||
+            assignment.employeeId,
+          assignedDate,
+          returnDate,
+          status: assignment.status,
+          notes: assignment.notes ?? null,
+        };
+      })
+      .sort((a, b) => {
         const vehicleCompare = a.vehicle.localeCompare(b.vehicle);
         if (vehicleCompare !== 0) return vehicleCompare;
-        const dateA = new Date(a.assignedDate).getTime();
-        const dateB = new Date(b.assignedDate).getTime();
+        const dateA = toTimestamp(a.assignedDate) ?? 0;
+        const dateB = toTimestamp(b.assignedDate) ?? 0;
         return dateA - dateB;
-      })
-    : [];
+      });
+  }, [carAssignments, startDate, endDate]);
 
   if (
     employeesError ||
@@ -231,8 +321,8 @@ export default function Reports() {
     payrollRunsError ||
     payrollSummaryError ||
     loanDetailsError ||
-    assetUsageError ||
-    fleetUsageError ||
+    assetAssignmentsError ||
+    carAssignmentsError ||
     payrollByDeptError
   ) {
     return <div>Error loading reports data</div>;
