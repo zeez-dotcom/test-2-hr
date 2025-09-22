@@ -28,6 +28,7 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
+    "@vercel/speed-insights": "^1.2.0",
     "i18next": "^25.4.2",
     "pdfmake": "^0.2.20",
     "react-i18next": "^15.7.2"
