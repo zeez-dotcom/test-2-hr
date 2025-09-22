@@ -23,8 +23,8 @@ describe('Reports page - Dept Summary tab', () => {
     queryClient.setQueryData(['/api/payroll'], []);
     queryClient.setQueryData(['/api/reports/payroll', start, end], []);
     queryClient.setQueryData(['/api/reports/loan-balances', start, end], []);
-    queryClient.setQueryData(['/api/reports/asset-usage', start, end], []);
-    queryClient.setQueryData(['/api/reports/fleet-usage', start, end], []);
+    queryClient.setQueryData(['/api/asset-assignments', start, end], []);
+    queryClient.setQueryData(['/api/car-assignments', start, end], []);
     queryClient.setQueryData(['/api/reports/payroll-by-department', start, end], []);
 
     render(
