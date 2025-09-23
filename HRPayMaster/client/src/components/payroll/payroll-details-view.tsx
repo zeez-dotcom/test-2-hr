@@ -6,6 +6,38 @@ import { DollarSign, User, Calendar, FileText } from "lucide-react";
 import type { PayrollRunWithEntries } from "@shared/schema";
 import { formatCurrency, formatDate, calculateWorkingDaysAdjustment } from "@/lib/utils";
 
+type PayrollEntryWithEmployee = NonNullable<PayrollRunWithEntries["entries"]>[number];
+
+const getEmployeeDisplayName = (entry: PayrollEntryWithEmployee) => {
+  const employee = entry.employee;
+  if (employee) {
+    const fullName = [employee.firstName, employee.lastName]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+
+    if (fullName) {
+      return fullName;
+    }
+
+    const alternateName = employee.arabicName || employee.nickname;
+    if (alternateName) {
+      return alternateName;
+    }
+  }
+
+  return `Employee ${entry.employeeId}`;
+};
+
+const getEmployeeIdentifier = (entry: PayrollEntryWithEmployee) => {
+  const code = entry.employee?.employeeCode?.trim();
+  if (code) {
+    return `Code: ${code}`;
+  }
+
+  return `ID: ${entry.employeeId}`;
+};
+
 interface PayrollDetailsViewProps {
   payrollId: string;
 }
@@ -167,10 +199,10 @@ export default function PayrollDetailsView({ payrollId }: PayrollDetailsViewProp
                       <tr key={entry.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-gray-900">
-                            Employee {entry.employeeId}
+                            {getEmployeeDisplayName(entry)}
                           </div>
                           <div className="text-sm text-gray-500">
-                            ID: {entry.employeeId}
+                            {getEmployeeIdentifier(entry)}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
