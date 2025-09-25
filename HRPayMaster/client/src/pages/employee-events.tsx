@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, Calendar as CalendarIcon, TrendingUp, TrendingDown, Award, AlertTriangle, Clock, Trash2, Edit, User, FileText, Car, Info } from "lucide-react";
+import { Plus, Calendar as CalendarIcon, TrendingUp, TrendingDown, Award, AlertTriangle, Clock, Trash2, Edit, User, FileText, Car, Info, Printer } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
@@ -31,6 +31,7 @@ export default function EmployeeEvents() {
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [eventToDelete, setEventToDelete] = useState<string | null>(null);
   const [eventToEdit, setEventToEdit] = useState<(EmployeeEvent & { employee?: Employee }) | null>(null);
+  const [printingEventId, setPrintingEventId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const {
@@ -171,6 +172,33 @@ export default function EmployeeEvents() {
       });
     },
   });
+
+  const handlePrintEvent = async (event: EmployeeEvent & { employee?: Employee }) => {
+    setPrintingEventId(event.id);
+
+    try {
+      if (event.documentUrl) {
+        window.open(event.documentUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
+
+      const employee = employees?.find((e) => e.id === event.employeeId);
+      await generateEventReceipt({
+        event,
+        employee,
+        queryClient,
+      });
+    } catch (error) {
+      console.error("Failed to print event receipt", error);
+      toast({
+        title: "Unable to print event",
+        description: "We couldn't generate the event receipt. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setPrintingEventId(null);
+    }
+  };
 
   if (eventsError || employeesError) {
     return <div>Error loading employee events</div>;
@@ -614,6 +642,17 @@ export default function EmployeeEvents() {
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handlePrintEvent(event)}
+                        disabled={printingEventId === event.id}
+                        className="text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                        aria-label="Print event receipt"
+                      >
+                        <Printer className="h-4 w-4" />
+                        <span className="ml-1 hidden sm:inline">Print</span>
+                      </Button>
                       {financialEventTypes.includes(event.eventType as any) && (
                         <div className="text-right">
                           <div className={`text-lg font-semibold ${

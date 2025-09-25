@@ -2,8 +2,10 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "@/lib/http";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { EmployeeEvent } from "@shared/schema";
+import { Printer } from "lucide-react";
 
 export default function Logs() {
   const [range, setRange] = useState(() => {
@@ -70,8 +72,12 @@ export default function Logs() {
         <Input type="date" value={range.end} onChange={e => setRange(r => ({ ...r, end: e.target.value }))} />
       </div>
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle>Company Activity Log</CardTitle>
+          <Button variant="outline" size="sm" onClick={() => window.print()}>
+            <Printer className="mr-2 h-4 w-4" />
+            Print
+          </Button>
         </CardHeader>
         <CardContent>
           <ul className="space-y-2 list-disc pl-5 text-sm">
