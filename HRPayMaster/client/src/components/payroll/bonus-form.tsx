@@ -14,6 +14,8 @@ import { apiPut, apiPost } from "@/lib/http";
 import ImageUpload from "@/components/ui/image-upload";
 import { Gift, FileImage } from "lucide-react";
 import { toastApiError } from "@/lib/toastError";
+import { generateEventReceipt } from "@/lib/event-receipts";
+import type { Employee, EmployeeEvent } from "@shared/schema";
 
 const bonusFormSchema = z.object({
   amount: z.number().min(0.01, "Amount must be greater than 0"),
@@ -85,13 +87,32 @@ export function BonusForm({
     },
   });
 
-  const createEmployeeEventMutation = useMutation({
+  const createEmployeeEventMutation = useMutation<EmployeeEvent, any, any>({
     mutationFn: async (data: any) => {
       const res = await apiPost("/api/employee-events", data);
       if (!res.ok) throw res;
+      return res.data as EmployeeEvent;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/employee-events"] });
+    onSuccess: async (createdEvent) => {
+      let receiptError: unknown = null;
+      const employees = queryClient.getQueryData<Employee[]>(["/api/employees"]);
+      const employee = employees?.find((e) => e.id === createdEvent.employeeId);
+      try {
+        await generateEventReceipt({ event: createdEvent, employee, queryClient });
+      } catch (error) {
+        receiptError = error;
+        console.error("Failed to generate bonus receipt", error);
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ["/api/employee-events"] });
+
+      if (receiptError) {
+        toast({
+          title: "Receipt not generated",
+          description: "The bonus event was saved but the receipt could not be created.",
+          variant: "destructive",
+        });
+      }
     },
     onError: (err) => toastApiError(err as any, "Failed to record event"),
   });
