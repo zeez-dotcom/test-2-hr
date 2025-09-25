@@ -18,6 +18,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { openPdf } from "@/lib/pdf";
+import { getQueryFn } from "@/lib/queryClient";
 import type { TDocumentDefinitions } from "pdfmake/interfaces";
 import type { PayrollRunWithEntries, PayrollEntry, Employee, Department } from "@shared/schema";
 
@@ -36,9 +37,11 @@ export function SimpleExportModal({ payrollRun, isOpen, onClose }: SimpleExportM
 
   const { data: employees } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
+    queryFn: getQueryFn<Employee[]>(),
   });
   const { data: departments } = useQuery<Department[]>({
     queryKey: ["/api/departments"],
+    queryFn: getQueryFn<Department[]>(),
   });
 
   const entries: (PayrollEntry & { employee?: Employee })[] =

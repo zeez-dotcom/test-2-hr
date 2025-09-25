@@ -72,9 +72,12 @@ export default function DocumentGenerator() {
       [brand.phone, brand.email, brand.website].filter(Boolean).join(' • ') || null,
     ].filter(Boolean) as string[];
     const headerColumns: any[] = [];
+    const headerColumns: any[] = [];
     const brandLogo = brand.logo ? sanitizeImageSrc(brand.logo) : "";
     if (brandLogo) {
       headerColumns.push({ image: brandLogo, width: 72, margin: [0, 0, 12, 0] });
+    }
+
     }
     headerColumns.push({
       width: '*',
