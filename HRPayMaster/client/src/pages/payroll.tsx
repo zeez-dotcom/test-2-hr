@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Calculator, DollarSign, FileText, Trash2, Eye, Edit, RefreshCcw } from "lucide-react";
-import { getQueryFn, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
 import { apiPost, apiDelete } from "@/lib/http";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -67,25 +67,13 @@ export default function Payroll() {
     refetch,
   } = useQuery<PayrollRun[]>({
     queryKey: ["/api/payroll"],
-    queryFn: getQueryFn<PayrollRun[]>(),
     enabled: canGenerate,
   });
 
   const generatePayrollMutation = useMutation({
     mutationFn: async (data: PayrollGenerateRequest) => {
       const res = await apiPost("/api/payroll/generate", data);
-      if (!res.ok) {
-        const error = new Error(
-          typeof res.error === "string"
-            ? res.error
-            : typeof res.error?.message === "string"
-              ? res.error.message
-              : "Failed to generate payroll",
-        );
-        (error as Error & { response?: typeof res }).response = res;
-        throw error;
-      }
-      return res.data;
+      if (!res.ok) throw res;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
@@ -96,20 +84,10 @@ export default function Payroll() {
         description: "Payroll generated successfully",
       });
     },
-    onError: (err: unknown) => {
-      const response =
-        err && typeof err === "object" && "response" in err
-          ? (err as { response?: { status?: number; error?: unknown } }).response
-          : undefined;
-      const result = (response ?? err) as { status?: number; error?: unknown } | undefined;
-      const status = result?.status;
+    onError: (res: any) => {
+      const status = res?.status;
       if (status === 409) {
-        const description =
-          typeof (result?.error as any)?.message === "string"
-            ? (result?.error as any).message
-            : typeof result?.error === "string"
-              ? result.error
-              : undefined;
+        const description = res?.error?.message ?? res?.error;
         toast({ title: "Duplicate period", description, variant: "destructive" });
         return;
       }
@@ -117,12 +95,11 @@ export default function Payroll() {
         navigate("/login");
         return;
       }
+      // Tests expect generic errors to use title 'Error' and a descriptive message
       const serverMessage =
-        typeof (result?.error as any)?.message === "string"
-          ? (result?.error as any).message
-          : typeof result?.error === "string"
-            ? result.error
-            : undefined;
+        (res?.error && typeof res.error === "object" && (res.error as any)?.message)
+          ? (res.error as any).message
+          : (typeof res?.error === "string" ? res.error : undefined);
       if (serverMessage) {
         toast({ title: "Error", description: serverMessage, variant: "destructive" });
       } else {
