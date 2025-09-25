@@ -3,8 +3,22 @@ import pdfFonts from 'pdfmake/build/vfs_fonts';
 import type { TDocumentDefinitions, Content, TableLayout } from 'pdfmake/interfaces';
 import { getBrand } from './brand';
 import { sanitizeImageSrc } from './sanitizeImageSrc';
+import { arabicFontConfig, arabicFontVfs } from './pdf-fonts';
 
-pdfMake.vfs = pdfFonts as any;
+const baseVfs = (pdfFonts as any)?.pdfMake?.vfs ?? (pdfFonts as any);
+pdfMake.vfs = { ...baseVfs, ...arabicFontVfs } as any;
+
+const existingFonts = (pdfMake as any).fonts ?? {};
+(pdfMake as any).fonts = {
+  ...existingFonts,
+  Roboto: existingFonts.Roboto ?? {
+    normal: 'Roboto-Regular.ttf',
+    bold: 'Roboto-Medium.ttf',
+    italics: 'Roboto-Italic.ttf',
+    bolditalics: 'Roboto-MediumItalic.ttf',
+  },
+  ...arabicFontConfig,
+};
 
 export const sanitizeString = (str: string): string =>
   str.replace(/[&<>"']/g, c => {

@@ -67,21 +67,38 @@ export default function DocumentGenerator() {
     const brand = getBrand();
     const now = new Date();
     const docNo = controllerNumber();
+    const contactLines = [
+      brand.address,
+      [brand.phone, brand.email, brand.website].filter(Boolean).join(' • ') || null,
+    ].filter(Boolean) as string[];
     const headerColumns: any[] = [];
-    if (brand.logo) headerColumns.push({ image: sanitizeImageSrc(brand.logo), width: 80, margin: [0,0,10,0] });
-    headerColumns.push({ text: brand.name || 'HRPayMaster', style: 'title' });
+    const brandLogo = brand.logo ? sanitizeImageSrc(brand.logo) : "";
+    if (brandLogo) {
+      headerColumns.push({ image: brandLogo, width: 72, margin: [0, 0, 12, 0] });
+    }
+    headerColumns.push({
+      width: '*',
+      stack: [
+        { text: brand.name || 'HRPayMaster', style: 'brandName' },
+        ...contactLines.map((line) => ({ text: line, style: 'muted' })),
+      ],
+    });
+    headerColumns.push({
+      width: 'auto',
+      stack: [
+        { text: `Document No: ${docNo}`, alignment: 'right', style: 'muted' },
+        { text: `Date: ${now.toLocaleString()}`, alignment: 'right', style: 'muted' },
+      ],
+    });
 
-    const content: any[] = [
-      { columns: headerColumns, columnGap: 10 },
-      { text: `Document No: ${docNo}`, alignment: 'right', margin: [0,6,0,10], style: 'muted' },
-      { text: `Date: ${now.toLocaleString()}`, alignment: 'right', margin: [0,0,0,10], style: 'muted' },
-    ];
+    const content: any[] = [];
 
     if (mode === 'employee' && selectedEmployee) {
       const emp = selectedEmployee;
       content.push({ text: 'Employee', style: 'section' });
       const empCols: any[] = [];
-      if (includeImages.profile && emp.profileImage) empCols.push({ image: sanitizeImageSrc(emp.profileImage), width: 80, margin: [0,0,10,0] });
+      const profileImage = includeImages.profile && emp.profileImage ? sanitizeImageSrc(emp.profileImage) : "";
+      if (profileImage) empCols.push({ image: profileImage, width: 80, margin: [0,0,10,0] });
       empCols.push({
         stack: [
           { text: `${emp.firstName || ''} ${emp.lastName || ''}`.trim(), style: 'title' },
@@ -91,10 +108,14 @@ export default function DocumentGenerator() {
       content.push({ columns: empCols, columnGap: 10, margin: [0,0,0,10] });
 
       const pics: any[] = [];
-      if (includeImages.civilId && emp.civilIdImage) pics.push({ image: sanitizeImageSrc(emp.civilIdImage), width: 180 });
-      if (includeImages.passport && emp.passportImage) pics.push({ image: sanitizeImageSrc(emp.passportImage), width: 180 });
-      if (includeImages.visa && emp.visaImage) pics.push({ image: sanitizeImageSrc(emp.visaImage), width: 180 });
-      if (includeImages.driving && emp.drivingLicenseImage) pics.push({ image: sanitizeImageSrc(emp.drivingLicenseImage), width: 180 });
+      const civilIdImage = includeImages.civilId && emp.civilIdImage ? sanitizeImageSrc(emp.civilIdImage) : "";
+      if (civilIdImage) pics.push({ image: civilIdImage, width: 180 });
+      const passportImage = includeImages.passport && emp.passportImage ? sanitizeImageSrc(emp.passportImage) : "";
+      if (passportImage) pics.push({ image: passportImage, width: 180 });
+      const visaImage = includeImages.visa && emp.visaImage ? sanitizeImageSrc(emp.visaImage) : "";
+      if (visaImage) pics.push({ image: visaImage, width: 180 });
+      const drivingImage = includeImages.driving && emp.drivingLicenseImage ? sanitizeImageSrc(emp.drivingLicenseImage) : "";
+      if (drivingImage) pics.push({ image: drivingImage, width: 180 });
       if (pics.length) content.push({ columns: pics, columnGap: 10, margin: [0,10,0,10] });
 
       const kinds = Object.entries(includeEvents).filter(([, v]) => v).map(([k]) => k);
@@ -130,10 +151,20 @@ export default function DocumentGenerator() {
     const blockEn = applyTemplate((customEn || tpl.en)?.trim());
     const blockAr = applyTemplate((customAr || tpl.ar)?.trim());
     if (blockEn || blockAr) {
-      content.push({ columns: [
-        [ { text: 'English', bold: true, margin: [0,0,0,4] }, { text: blockEn || '-', margin: [0,0,10,0] } ],
-        [ { text: 'Arabic', bold: true, margin: [0,0,0,4], alignment: 'right' }, { text: blockAr || '-', alignment: 'right' } ],
-      ], columnGap: 20, margin: [0,10,0,10] });
+      content.push({
+        columns: [
+          [
+            { text: 'English', bold: true, margin: [0, 0, 0, 4] },
+            { text: blockEn || '-', margin: [0, 0, 10, 0] },
+          ],
+          [
+            { text: 'Arabic', style: 'arabicHeading', margin: [0, 0, 0, 4] },
+            { text: blockAr || '-', style: 'arabic' },
+          ],
+        ],
+        columnGap: 20,
+        margin: [0, 10, 0, 10],
+      });
     }
 
     // signatures
@@ -145,16 +176,59 @@ export default function DocumentGenerator() {
       content.push({ columns: cols, columnGap: 20 });
     }
 
+    const footerLeft = [
+      brand.name || 'HRPayMaster',
+      [brand.website, brand.email, brand.phone].filter(Boolean).join(' • ') || null,
+    ]
+      .filter(Boolean)
+      .join(' • ');
+
     return {
       info: { title: 'Generated Document' },
       pageMargins: [40, 56, 40, 56],
+      header: {
+        margin: [40, 20, 40, 10],
+        stack: [
+          { columns: headerColumns, columnGap: 12 },
+          {
+            canvas: [
+              {
+                type: 'line',
+                x1: 0,
+                y1: 0,
+                x2: 515,
+                y2: 0,
+                lineWidth: 1,
+                color: brand.primaryColor || '#0F172A',
+              },
+            ],
+            margin: [0, 10, 0, 0],
+          },
+        ],
+      },
+      footer: (currentPage: number, pageCount: number) => ({
+        margin: [40, 0, 40, 20],
+        columns: [
+          { text: footerLeft, style: 'muted' },
+          { text: `Page ${currentPage} of ${pageCount}`, alignment: 'right', style: 'muted' },
+        ],
+      }),
       content,
       styles: {
         title: { fontSize: 16, bold: true, color: brand.primaryColor || '#0F172A' },
         section: { fontSize: 12, bold: true, color: brand.primaryColor || '#0F172A', margin: [0, 14, 0, 6] },
         muted: { fontSize: 10, color: '#64748B' },
+        brandName: { fontSize: 18, bold: true, color: brand.primaryColor || '#0F172A' },
+        arabicHeading: {
+          font: 'NotoSansArabic',
+          fontSize: 10,
+          bold: true,
+          alignment: 'right',
+          color: brand.primaryColor || '#0F172A',
+        },
+        arabic: { font: 'NotoSansArabic', fontSize: 10, alignment: 'right', color: '#111827' },
       },
-      defaultStyle: { fontSize: 10, color: '#111827' },
+      defaultStyle: { font: 'Roboto', fontSize: 10, color: '#111827' },
     } as any;
   };
 
