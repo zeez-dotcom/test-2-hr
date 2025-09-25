@@ -72,12 +72,8 @@ export default function DocumentGenerator() {
       [brand.phone, brand.email, brand.website].filter(Boolean).join(' • ') || null,
     ].filter(Boolean) as string[];
     const headerColumns: any[] = [];
-    const headerColumns: any[] = [];
-    const brandLogo = brand.logo ? sanitizeImageSrc(brand.logo) : "";
-    if (brandLogo) {
-      headerColumns.push({ image: brandLogo, width: 72, margin: [0, 0, 12, 0] });
-    }
-
+    if (brand.logo) {
+      headerColumns.push({ image: sanitizeImageSrc(brand.logo), width: 72, margin: [0, 0, 12, 0] });
     }
     headerColumns.push({
       width: '*',
@@ -100,8 +96,7 @@ export default function DocumentGenerator() {
       const emp = selectedEmployee;
       content.push({ text: 'Employee', style: 'section' });
       const empCols: any[] = [];
-      const profileImage = includeImages.profile && emp.profileImage ? sanitizeImageSrc(emp.profileImage) : "";
-      if (profileImage) empCols.push({ image: profileImage, width: 80, margin: [0,0,10,0] });
+      if (includeImages.profile && emp.profileImage) empCols.push({ image: sanitizeImageSrc(emp.profileImage), width: 80, margin: [0,0,10,0] });
       empCols.push({
         stack: [
           { text: `${emp.firstName || ''} ${emp.lastName || ''}`.trim(), style: 'title' },
@@ -111,14 +106,10 @@ export default function DocumentGenerator() {
       content.push({ columns: empCols, columnGap: 10, margin: [0,0,0,10] });
 
       const pics: any[] = [];
-      const civilIdImage = includeImages.civilId && emp.civilIdImage ? sanitizeImageSrc(emp.civilIdImage) : "";
-      if (civilIdImage) pics.push({ image: civilIdImage, width: 180 });
-      const passportImage = includeImages.passport && emp.passportImage ? sanitizeImageSrc(emp.passportImage) : "";
-      if (passportImage) pics.push({ image: passportImage, width: 180 });
-      const visaImage = includeImages.visa && emp.visaImage ? sanitizeImageSrc(emp.visaImage) : "";
-      if (visaImage) pics.push({ image: visaImage, width: 180 });
-      const drivingImage = includeImages.driving && emp.drivingLicenseImage ? sanitizeImageSrc(emp.drivingLicenseImage) : "";
-      if (drivingImage) pics.push({ image: drivingImage, width: 180 });
+      if (includeImages.civilId && emp.civilIdImage) pics.push({ image: sanitizeImageSrc(emp.civilIdImage), width: 180 });
+      if (includeImages.passport && emp.passportImage) pics.push({ image: sanitizeImageSrc(emp.passportImage), width: 180 });
+      if (includeImages.visa && emp.visaImage) pics.push({ image: sanitizeImageSrc(emp.visaImage), width: 180 });
+      if (includeImages.driving && emp.drivingLicenseImage) pics.push({ image: sanitizeImageSrc(emp.drivingLicenseImage), width: 180 });
       if (pics.length) content.push({ columns: pics, columnGap: 10, margin: [0,10,0,10] });
 
       const kinds = Object.entries(includeEvents).filter(([, v]) => v).map(([k]) => k);
