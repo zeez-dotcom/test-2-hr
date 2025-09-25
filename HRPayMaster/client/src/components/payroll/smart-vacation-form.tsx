@@ -14,6 +14,8 @@ import { apiPut, apiPost } from "@/lib/http";
 import { Calendar, AlertTriangle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toastApiError } from "@/lib/toastError";
+import { generateEventReceipt } from "@/lib/event-receipts";
+import type { Employee, EmployeeEvent } from "@shared/schema";
 
 const vacationFormSchema = z.object({
   days: z.number().min(1, "Days must be at least 1"),
@@ -98,6 +100,19 @@ export function SmartVacationForm({
     try {
       const res = await apiPost("/api/employee-events", eventData);
       if (!res.ok) throw res;
+      const createdEvent = res.data as EmployeeEvent;
+      const employees = queryClient.getQueryData<Employee[]>(["/api/employees"]);
+      const employee = employees?.find((e) => e.id === employeeId);
+      try {
+        await generateEventReceipt({ event: createdEvent, employee, queryClient });
+      } catch (receiptError) {
+        console.error("Failed to generate vacation event receipt", receiptError);
+        toast({
+          title: "Receipt not generated",
+          description: "The vacation event was logged but the receipt could not be created.",
+          variant: "destructive",
+        });
+      }
     } catch (error) {
       console.error("Failed to create employee event:", error);
       toastApiError(error as any, "Failed to create employee event");

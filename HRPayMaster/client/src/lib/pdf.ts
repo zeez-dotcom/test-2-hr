@@ -243,12 +243,13 @@ export function buildBilingualActionReceipt(params: {
   detailsEn: string[];
   detailsAr: string[];
   logo?: string | null;
+  docNumber?: string;
 }): TDocumentDefinitions {
   const brand = getBrand();
   const { titleEn, titleAr, employee, detailsEn, detailsAr } = params;
   const logo = (params as any).logo ?? brand.logo ?? null;
   const fullName = `${sanitizeString(employee.firstName)} ${sanitizeString(employee.lastName)}`;
-  const docNo = controllerNumber();
+  const docNo = params.docNumber ?? controllerNumber();
   const header: any[] = [];
   if (logo) header.push({ image: sanitizeImageSrc(logo), width: 80, margin: [0,0,10,0] });
   header.push({ text: 'HR Action Receipt / إيصال إجراء الموارد البشرية', style: 'title' });

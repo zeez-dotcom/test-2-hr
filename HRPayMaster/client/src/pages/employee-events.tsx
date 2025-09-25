@@ -22,6 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { EmployeeEvent, Employee, InsertEmployeeEvent } from "@shared/schema";
 import { insertEmployeeEventSchema } from "@shared/schema";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
+import { generateEventReceipt } from "@/lib/event-receipts";
 
 const financialEventTypes = ["bonus", "commission", "deduction", "allowance", "overtime", "penalty"] as const;
 
@@ -79,19 +80,43 @@ export default function EmployeeEvents() {
     }
   }, [selectedEventType, form]);
 
-  const createEventMutation = useMutation({
+  const createEventMutation = useMutation<EmployeeEvent, Error, InsertEmployeeEvent>({
     mutationFn: async (data: InsertEmployeeEvent) => {
       const res = await apiPost("/api/employee-events", data);
       if (!res.ok) throw new Error(res.error || "Failed to record employee event");
+      return res.data as EmployeeEvent;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/employee-events"] });
+    onSuccess: async (createdEvent) => {
       setIsDialogOpen(false);
       form.reset();
+
+      let receiptError: unknown = null;
+      const employee = employees?.find((e) => e.id === createdEvent.employeeId);
+      try {
+        await generateEventReceipt({
+          event: createdEvent,
+          employee,
+          queryClient,
+        });
+      } catch (error) {
+        receiptError = error;
+        console.error("Failed to generate event receipt", error);
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ["/api/employee-events"] });
+
       toast({
         title: "Success",
         description: "Employee event recorded successfully",
       });
+
+      if (receiptError) {
+        toast({
+          title: "Receipt not generated",
+          description: "The event was saved but the receipt could not be generated.",
+          variant: "destructive",
+        });
+      }
     },
     onError: () => {
       toast({

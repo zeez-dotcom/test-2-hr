@@ -13,6 +13,8 @@ import { useToast } from "@/hooks/use-toast";
 import { apiPut, apiPost } from "@/lib/http";
 import { Minus } from "lucide-react";
 import { toastApiError } from "@/lib/toastError";
+import { generateEventReceipt } from "@/lib/event-receipts";
+import type { Employee, EmployeeEvent } from "@shared/schema";
 
 const deductionFormSchema = z.object({
   amount: z.number().min(0.01, "Amount must be greater than 0"),
@@ -112,6 +114,19 @@ export function SmartDeductionForm({
     try {
       const res = await apiPost("/api/employee-events", eventData);
       if (!res.ok) throw res;
+      const createdEvent = res.data as EmployeeEvent;
+      const employees = queryClient.getQueryData<Employee[]>(["/api/employees"]);
+      const employee = employees?.find((e) => e.id === employeeId);
+      try {
+        await generateEventReceipt({ event: createdEvent, employee, queryClient });
+      } catch (receiptError) {
+        console.error("Failed to generate deduction receipt", receiptError);
+        toast({
+          title: "Receipt not generated",
+          description: "The deduction event was logged but the receipt could not be created.",
+          variant: "destructive",
+        });
+      }
     } catch (error: any) {
       console.error("Failed to create employee event:", error);
       toastApiError(error as any, "Failed to create employee event");
