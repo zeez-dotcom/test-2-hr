@@ -5,6 +5,7 @@ import { Separator } from "@/components/ui/separator";
 import { DollarSign, User, Calendar, FileText } from "lucide-react";
 import type { PayrollRunWithEntries } from "@shared/schema";
 import { formatCurrency, formatDate, calculateWorkingDaysAdjustment } from "@/lib/utils";
+import { getQueryFn } from "@/lib/queryClient";
 
 type PayrollEntryWithEmployee = NonNullable<PayrollRunWithEntries["entries"]>[number];
 
@@ -45,6 +46,7 @@ interface PayrollDetailsViewProps {
 export default function PayrollDetailsView({ payrollId }: PayrollDetailsViewProps) {
   const { data: payrollRun, isLoading } = useQuery<PayrollRunWithEntries>({
     queryKey: ["/api/payroll", payrollId],
+    queryFn: getQueryFn<PayrollRunWithEntries>(),
   });
 
 

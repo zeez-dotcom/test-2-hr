@@ -14,7 +14,7 @@ import {
   Edit3,
   Download,
 } from "lucide-react";
-import { queryClient } from "@/lib/queryClient";
+import { getQueryFn, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { PayrollRunWithEntries, PayrollEntry } from "@shared/schema";
@@ -44,6 +44,7 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
 
   const { data: payrollRun, isLoading } = useQuery<PayrollRunWithEntries>({
     queryKey: ["/api/payroll", payrollId],
+    queryFn: getQueryFn<PayrollRunWithEntries>(),
   });
 
   const updatePayrollEntryMutation = useMutation({
