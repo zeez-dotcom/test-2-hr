@@ -1,3 +1,4 @@
+
 import type { QueryClient } from "@tanstack/react-query";
 import type { Employee, EmployeeEvent } from "@shared/schema";
 import type { Content } from "pdfmake/interfaces";
@@ -7,18 +8,19 @@ import { buildAndEncodePdf, buildBilingualActionReceipt, controllerNumber, openP
 import { sanitizeImageSrc } from "@/lib/sanitizeImageSrc";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
-type MinimalEmployee = Pick<Employee, "firstName" | "lastName" | "id" | "position">;
+type MinimalEmployee = Pick<Employee, "firstName" | "lastName" | "id" | "position" | "phone">;
 
 function normalizeEmployee(
   employee?: MinimalEmployee | null,
   fallbackId?: string
 ): MinimalEmployee {
   return {
-    firstName: employee?.firstName || "Employee",
-    lastName: employee?.lastName || "",
-    id: employee?.id || fallbackId || "",
-    position: employee?.position || null,
-  };
+    firstName: employee?.firstName ?? "Employee",
+    lastName: employee?.lastName ?? "",
+    id: employee?.id ?? fallbackId ?? "",
+    position: employee?.position ?? null,
+    phone: employee?.phone ?? null,
+  } as MinimalEmployee;
 }
 
 function appendSupportingDocument(
@@ -47,6 +49,54 @@ function appendSupportingDocument(
   doc.content = content;
 }
 
+function titleCase(value?: string | null): string {
+  if (!value) return "";
+  return value
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map(part => part[0]?.toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function buildEventNarrative(event: EmployeeEvent, employeeLine: string) {
+  const dateText = formatDate(event.eventDate);
+  const amountText = event.amount ? formatCurrency(event.amount) : null;
+  const typeLabel = event.eventType ? titleCase(event.eventType) : "Event";
+  const baseTitle = event.title?.trim() || typeLabel;
+  const description = event.description?.trim();
+
+  const bodyParts: string[] = [
+    `This document confirms that ${employeeLine} has a "${baseTitle}" record dated ${dateText}.`,
+  ];
+  if (amountText) {
+    bodyParts.push(`Recorded amount: ${amountText}.`);
+  }
+  if (description) {
+    bodyParts.push(`Notes: ${description}.`);
+  }
+
+  const details: string[] = [
+    `Title: ${baseTitle}`,
+    `Type: ${typeLabel}`,
+    `Recorded on: ${dateText}`,
+    `Status: ${titleCase(event.status) || event.status}`,
+    `Affects payroll: ${event.affectsPayroll ? "Yes" : "No"}`,
+  ];
+  if (amountText) {
+    details.push(`Amount: ${amountText}`);
+  }
+  if (description) {
+    details.push(`Description: ${description}`);
+  }
+
+  return {
+    title: `${baseTitle} Receipt`,
+    subheading: typeLabel,
+    body: bodyParts.join(" "),
+    details,
+  };
+}
+
 export async function generateEventReceipt(options: {
   event: EmployeeEvent;
   employee?: MinimalEmployee | null;
@@ -57,33 +107,28 @@ export async function generateEventReceipt(options: {
   const normalized = normalizeEmployee(employee, event.employeeId);
   const docNumber = controllerNumber();
 
-  const detailsEn = [
-    `Title: ${event.title}`,
-    `Type: ${event.eventType}`,
-    `Date: ${formatDate(event.eventDate)}`,
-    `Amount: ${formatCurrency(event.amount ?? "0")}`,
-    `Affects Payroll: ${event.affectsPayroll ? "Yes" : "No"}`,
-    `Status: ${event.status}`,
-    `Description: ${event.description}`,
-  ];
-
-  const detailsAr = [
-    `العنوان: ${event.title}`,
-    `نوع الحدث: ${event.eventType}`,
-    `التاريخ: ${formatDate(event.eventDate)}`,
-    `المبلغ: ${formatCurrency(event.amount ?? "0")}`,
-    `يؤثر على الراتب: ${event.affectsPayroll ? "نعم" : "لا"}`,
-    `الحالة: ${event.status}`,
-    `الوصف: ${event.description}`,
-  ];
+  const fullName = `${normalized.firstName} ${normalized.lastName}`.trim() || normalized.id || "Employee";
+  const phoneText = normalized.phone?.trim() || "N/A";
+  const employeeLine = `${fullName} (Phone: ${phoneText})`;
+  const narrative = buildEventNarrative(event, employeeLine);
 
   const doc = buildBilingualActionReceipt({
-    titleEn: "Employee Event Receipt",
-    titleAr: "إيصال حدث الموظف",
-    employee: normalized,
-    detailsEn,
-    detailsAr,
+    titleEn: narrative.title,
+    titleAr: narrative.title,
+    subheadingEn: narrative.subheading,
+    subheadingAr: narrative.subheading,
+    bodyEn: narrative.body,
+    bodyAr: narrative.body,
+    detailsEn: narrative.details,
+    detailsAr: narrative.details,
     docNumber,
+    employee: {
+      firstName: normalized.firstName,
+      lastName: normalized.lastName ?? "",
+      id: normalized.id,
+      position: normalized.position ?? null,
+      phone: normalized.phone ?? null,
+    },
   });
 
   appendSupportingDocument(doc, event.documentUrl);
@@ -108,3 +153,4 @@ export async function generateEventReceipt(options: {
 
   return { docNumber };
 }
+

@@ -131,8 +131,8 @@ export default function DocumentGenerator() {
     const blockAr = applyTemplate((customAr || tpl.ar)?.trim());
     if (blockEn || blockAr) {
       content.push({ columns: [
-        [ { text: 'English', bold: true, margin: [0,0,0,4] }, { text: blockEn || '-', margin: [0,0,10,0] } ],
-        [ { text: 'Arabic', bold: true, margin: [0,0,0,4], alignment: 'right' }, { text: blockAr || '-', alignment: 'right' } ],
+        [ { text: 'English', bold: true, margin: [0,0,0,4], style: 'latin' }, { text: blockEn || '-', margin: [0,0,10,0], style: 'latin' } ],
+        [ { text: 'Arabic', bold: true, margin: [0,0,0,4], alignment: 'right', style: 'arabic' }, { text: blockAr || '-', alignment: 'right', style: 'arabic' } ],
       ], columnGap: 20, margin: [0,10,0,10] });
     }
 
@@ -150,11 +150,13 @@ export default function DocumentGenerator() {
       pageMargins: [40, 56, 40, 56],
       content,
       styles: {
-        title: { fontSize: 16, bold: true, color: brand.primaryColor || '#0F172A' },
-        section: { fontSize: 12, bold: true, color: brand.primaryColor || '#0F172A', margin: [0, 14, 0, 6] },
-        muted: { fontSize: 10, color: '#64748B' },
+        title: { fontSize: 16, bold: true, color: brand.primaryColor || '#0F172A', font: 'Amiri' },
+        section: { fontSize: 12, bold: true, color: brand.primaryColor || '#0F172A', margin: [0, 14, 0, 6], font: 'Amiri' },
+        muted: { fontSize: 10, color: '#64748B', font: 'Amiri' },
+        arabic: { font: 'Amiri', alignment: 'right' },
+        latin: { font: 'Roboto' },
       },
-      defaultStyle: { fontSize: 10, color: '#111827' },
+      defaultStyle: { fontSize: 10, color: '#111827', font: 'Amiri' },
     } as any;
   };
 
@@ -526,7 +528,7 @@ function EmployeesDrawer({ employees, assignments }: { employees: any[]; assignm
                   for (const ev of empEvents) rows.push([ new Date(ev.eventDate).toLocaleDateString(), ev.eventType, ev.title, String(ev.amount||'0') ]);
                   content.push({ text: 'Timeline', style:'section', margin:[0,10,0,6] });
                   content.push({ table: { headerRows:1, widths:['auto','auto','*','auto'], body: rows } });
-                  openPdf({ pageMargins:[40,56,40,56], content, styles:{ title:{ fontSize:16, bold:true, color: brand.primaryColor||'#0F172A' }, section:{ fontSize:12, bold:true, color: brand.primaryColor||'#0F172A' }, muted:{ fontSize:10, color:'#64748B' } }, defaultStyle:{ fontSize:10, color:'#111827' } } as any);
+                  openPdf({ pageMargins:[40,56,40,56], content, styles:{ title:{ fontSize:16, bold:true, color: brand.primaryColor||'#0F172A', font: 'Amiri' }, section:{ fontSize:12, bold:true, color: brand.primaryColor||'#0F172A', font: 'Amiri' }, muted:{ fontSize:10, color:'#64748B', font: 'Amiri' }, arabic:{ font:'Amiri', alignment:'right' }, latin:{ font:'Roboto' } }, defaultStyle:{ fontSize:10, color:'#111827', font:'Amiri' } } as any);
                 }}>Export PDF</Button>
               </div>
             </div>

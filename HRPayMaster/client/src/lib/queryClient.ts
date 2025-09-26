@@ -5,7 +5,7 @@ export const getQueryFn = <T = unknown>(
   options?: { on401?: "returnNull" },
 ): QueryFunction<T, QueryKey> => {
   return (async ({ queryKey }) => {
-    const res = await apiGet(queryKey.join("/") as string);
+    const rces = await apiGet(queryKey.join("/") as string);
     if (!res.ok) {
       if (res.status === 401 && options?.on401 === "returnNull") {
         return null as T;

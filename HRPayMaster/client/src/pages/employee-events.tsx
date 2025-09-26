@@ -15,7 +15,7 @@ import { Plus, Calendar as CalendarIcon, TrendingUp, TrendingDown, Award, AlertT
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
-import { cn, formatCurrency, formatDate } from "@/lib/utils";
+import { cn, formatCurrency, formatDate, getNewTabRel, openUrlInNewTab } from "@/lib/utils";
 import { queryClient } from "@/lib/queryClient";
 import { apiPost, apiPut, apiDelete } from "@/lib/http";
 import { useToast } from "@/hooks/use-toast";
@@ -178,7 +178,7 @@ export default function EmployeeEvents() {
 
     try {
       if (event.documentUrl) {
-        window.open(event.documentUrl, "_blank", "noopener,noreferrer");
+        openUrlInNewTab(event.documentUrl);
         return;
       }
 
@@ -633,7 +633,7 @@ export default function EmployeeEvents() {
                           <a 
                             href={event.documentUrl} 
                             target="_blank" 
-                            rel="noopener noreferrer"
+                            rel={getNewTabRel(event.documentUrl)}
                             className="text-xs text-blue-600 hover:underline"
                           >
                             View Document

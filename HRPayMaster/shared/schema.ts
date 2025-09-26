@@ -252,7 +252,12 @@ export const genericDocuments = pgTable("generic_documents", {
   title: text("title").notNull(),
   description: text("description"),
   documentUrl: text("document_url").notNull(),
+  category: text("category"),
+  tags: text("tags"),
+  referenceNumber: text("reference_number"),
   controllerNumber: text("controller_number"),
+  expiryDate: date("expiry_date"),
+  alertDays: integer("alert_days"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

@@ -297,16 +297,34 @@ export default function Employees() {
                   <Button
                     variant="outline"
                     onClick={async () => {
-                      const doc = buildBilingualActionReceipt({
-                        titleEn: 'Employee Update', titleAr: 'تحديث الموظف',
-                        employee: { id: editingEmployee.id, firstName: editingEmployee.firstName || '', lastName: editingEmployee.lastName || '' },
-                        detailsEn: [ `Position: ${editingEmployee.position}`, `Department: ${editingEmployee.department?.name || ''}`],
-                        detailsAr: [ `الوظيفة: ${editingEmployee.position}`, `القسم: ${editingEmployee.department?.name || ''}`],
-                        // logo will be injected from company settings via pdf brand helper
-                        logo: null,
-                      });
-                      const pdfDataUrl = await buildAndEncodePdf(doc);
-                      await apiPost(`/api/employees/${editingEmployee.id}/documents`, { title: 'Employee Update', description: 'Employee update receipt', pdfDataUrl });
+                      
+                    const employeeFullName = [editingEmployee.firstName, editingEmployee.lastName].filter(Boolean).join(' ').trim() || editingEmployee.employeeCode || editingEmployee.id;
+                    const phoneText = editingEmployee.phone?.trim() || 'N/A';
+                    const doc = buildBilingualActionReceipt({
+                      titleEn: 'Employee Update',
+                      titleAr: 'Employee Update',
+                      subheadingEn: employeeFullName,
+                      subheadingAr: employeeFullName,
+                      bodyEn: `This document confirms that ${employeeFullName} (Phone: ${phoneText}) has updated employment records.`,
+                      bodyAr: `This document confirms that ${employeeFullName} (Phone: ${phoneText}) has updated employment records.`,
+                      detailsEn: [
+                        `Position: ${editingEmployee.position || 'N/A'}`,
+                        `Department: ${editingEmployee.department?.name || 'N/A'}`,
+                      ],
+                      detailsAr: [
+                        `Position: ${editingEmployee.position || 'N/A'}`,
+                        `Department: ${editingEmployee.department?.name || 'N/A'}`,
+                      ],
+                      employee: {
+                        id: editingEmployee.id,
+                        firstName: editingEmployee.firstName || employeeFullName,
+                        lastName: editingEmployee.lastName || '',
+                        position: editingEmployee.position || null,
+                        phone: editingEmployee.phone || null,
+                      },
+                    });
+                    const pdfDataUrl = await buildAndEncodePdf(doc);
+                    await apiPost(`/api/employees/${editingEmployee.id}/documents`, { title: 'Employee Update', description: 'Employee update receipt', pdfDataUrl });
                     }}
                   >
                     {t('employeesPage.saveUpdateDoc', 'Save Update Document')}
@@ -327,3 +345,6 @@ export default function Employees() {
     </div>
   );
 }
+
+
+

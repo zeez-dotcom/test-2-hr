@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Upload, X, User, FileText } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { getNewTabRel } from "@/lib/utils";
 
 interface ImageUploadProps {
   label: string;
@@ -146,7 +147,7 @@ export default function ImageUpload({
                   <a
                     href={value}
                     target="_blank"
-                    rel="noopener noreferrer"
+                    rel={getNewTabRel(value)}
                     className="text-xs text-blue-600 underline"
                   >
                     View PDF

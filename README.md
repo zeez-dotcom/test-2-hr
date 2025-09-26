@@ -1,106 +1,103 @@
-# test 2 hr
-test2hr
+# HRPayMaster Deployment Guide
 
-To push database changes for the `HRPayMaster` project, run the following command from the repository root:
+This repository contains the HRPayMaster application. All application code lives in the `HRPayMaster/` folder:
 
+- `HRPayMaster/server` – Express API + Passport auth + Drizzle ORM
+- `HRPayMaster/client` – React (Vite) front end
+- `HRPayMaster/shared` – Shared schemas, types, helpers
+- `HRPayMaster/migrations` – SQL migrations managed by Drizzle
+
+## Prerequisites
+
+- Node.js 20.x LTS
+- npm 10.x
+- Postgres instance (Neon URL works out of the box)
+
+## Environment Variables
+
+Copy `HRPayMaster/.env.example` to `HRPayMaster/.env` and update the values before running locally or deploying:
+
+```bash
+cp HRPayMaster/.env.example HRPayMaster/.env
 ```
+
+Required values:
+
+- `DATABASE_URL` – Postgres connection string
+- `SESSION_SECRET` – Long random string for signing sessions
+- `VITE_API_BASE_URL` – Base URL the client uses to call the API (e.g. `http://localhost:5000` in dev)
+- `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_EMAIL` (recommended for production). If these are omitted, the server falls back to `admin / admin / admin@example.com` for local development only.
+
+## Install Dependencies
+
+From the repository root:
+
+```bash
+npm install --prefix HRPayMaster
+```
+
+## Database
+
+Apply the current schema (including the `generic_documents` metadata migration) from the repo root:
+
+```bash
 npm run db:push
 ```
 
-## Start development server
+Seeding commands (optional, repo root):
 
-Before starting the server, install dependencies and configure environment variables:
+```bash
+npm run db:seed    # populate demo data, including employees and documents
+npm run db:unseed  # remove records inserted by the seed script
+```
 
-1. Install packages:
+## Development
 
-   ```bash
-   npm install --prefix HRPayMaster
-   ```
-
-2. Copy `.env.example` to `.env` in `HRPayMaster` and set at least:
-
-   ```bash
-   DATABASE_URL="<your Neon connection string>"
-   SESSION_SECRET="<random session secret>"
-   VITE_API_BASE_URL="http://localhost:5000"
-   ```
-
-Then start the development server:
+Start the dev servers (Express API + Vite client):
 
 ```bash
 npm run dev --prefix HRPayMaster
 ```
 
-Alternatively, run `cd HRPayMaster && npm run dev`.
+The app serves both API and client on `http://localhost:5000`. Login with the admin credentials defined in the environment variables (or the `admin / admin` fallbacks if you are in development and left them unset).
 
-> **Note**
-> Error responses include detailed messages and stack traces only when `NODE_ENV` is not set to `"production"`. The development script above already sets `NODE_ENV=development`; ensure your environment uses a non-production value to see error details during development.
-
-## Database seed data
-
-Seed realistic demo data across companies, departments, employees, payroll, assets, cars, attendance, and notifications.
-
-- Seed:
-
-  ```bash
-  npm run db:seed
-  ```
-
-- Unseed (removes only records created by the seed script):
-
-  ```bash
-  npm run db:unseed
-  ```
-
-Seeded records use a `SEED-` prefix (e.g., `SEED-EMP-001`, `SEED-2025-09`) so removal is targeted and safe.
-
-## Auth & test login
-
-- The app includes a hardcoded super admin for local testing:
-  - Username: `admin1`
-  - Password: `admin1`
-
-Start the server (default port is `5000`; use `PORT=5001` if `5000` is busy):
+## Tests & Type Checks
 
 ```bash
-# default
-npm run dev --prefix HRPayMaster
-
-# or choose another free port
-PORT=5001 npm run dev --prefix HRPayMaster
+npm run check --prefix HRPayMaster    # TypeScript project references
+npm test                               # Vitest + Playwright from repo root
 ```
 
-Log in and call APIs with curl (cookies required for session):
+## Production Build & Deployment
 
-```bash
-# Replace port if different
-PORT=5000
+1. Ensure `NODE_ENV=production` and all required env vars are set (especially `SESSION_SECRET`, `ADMIN_*`, `DATABASE_URL`).
+2. Build the client bundle and server entry point:
 
-# Login (stores session cookie)
-curl -i -c cookie.txt \
-  -H 'Content-Type: application/x-www-form-urlencoded' \
-  --data 'username=admin1&password=admin1' \
-  http://localhost:$PORT/login
+   ```bash
+   npm run build --prefix HRPayMaster
+   ```
 
-# Verify session
-curl -b cookie.txt http://localhost:$PORT/api/me
+3. Start the production server (serves API + built client on the same port):
 
-# Employees
-curl -s -b cookie.txt http://localhost:$PORT/api/employees | jq 'map({code: .employeeCode, name: (.firstName+" "+(.lastName//"")), role: .role, dept: .department?.name})'
+   ```bash
+   npm run start --prefix HRPayMaster
+   ```
 
-# Payroll runs
-curl -s -b cookie.txt http://localhost:$PORT/api/payroll | jq 'map({id, period, grossAmount, netAmount, status})'
+The server exposes:
 
-# Assets
-curl -s -b cookie.txt http://localhost:$PORT/api/assets | jq 'map({name, status})'
-```
+- `GET /healthz` – unauthenticated health check
+- `POST /login`, `POST /logout` – authentication endpoints
+- `/metrics` – Prometheus metrics (unauthenticated by default; wrap with auth if you need to restrict it)
+- `/api/**` – all other routes, protected by session authentication
 
-If you change the port for the server, update `VITE_API_BASE_URL` in `HRPayMaster/.env` accordingly so the client can reach the API.
+## Deployment Checklist
 
-## Error handling & date formatting
+- [ ] `HRPayMaster/.env` (or platform secrets) populated with production values
+- [ ] `npm run db:push` executed against the production database
+- [ ] Optional: `npm run db:seed` if you want starter data, followed by `npm run db:unseed` to clean up
+- [ ] `npm run build --prefix HRPayMaster`
+- [ ] `npm run start --prefix HRPayMaster`
+- [ ] Verify login using the configured admin credentials and confirm `/api/me` succeeds
+- [ ] Hit `GET /healthz` for smoke testing
 
-- [`http.ts`](HRPayMaster/client/src/lib/http.ts) wraps fetch and returns an `ApiResult` rather than throwing on failed requests.
-- [`toastError`](HRPayMaster/client/src/lib/toastError.ts) converts failed results into user-friendly toast messages.
-- [`toLocalYMD`](HRPayMaster/client/src/lib/date.ts) formats `Date` objects into `YYYY-MM-DD` strings.
-
-Uploads have a default 1Â MB limit enforced by Express. Requests exceeding this size respond with **413Â PayloadÂ TooÂ Large**, and unsupported file types yield **415Â UnsupportedÂ MediaÂ Type**. Import interfaces surface these errors to users via destructive toasts.
+That’s it—the application is ready for a managed host (Render, Fly.io, Heroku, container platform, etc.) as long as it can run Node 20, supply the environment variables, and expose the single port.

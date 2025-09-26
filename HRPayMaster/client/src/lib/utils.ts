@@ -72,3 +72,27 @@ export function formatDate(date: string | Date): string {
     day: 'numeric',
   }).format(d);
 }
+
+const DATA_URL_PATTERN = /^data:/i
+
+export function isDataUrl(url?: string | null): boolean {
+  if (typeof url !== 'string') {
+    return false
+  }
+  return DATA_URL_PATTERN.test(url.trim())
+}
+
+export function getNewTabRel(url?: string | null): string | undefined {
+  if (!url) {
+    return undefined
+  }
+  return isDataUrl(url) ? 'noopener' : 'noopener noreferrer'
+}
+
+export function openUrlInNewTab(url?: string | null) {
+  if (!url || typeof window === 'undefined') {
+    return
+  }
+  const features = isDataUrl(url) ? 'noopener' : 'noopener,noreferrer'
+  window.open(url, '_blank', features)
+}

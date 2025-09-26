@@ -99,7 +99,7 @@ vi.mock('@/components/ui/select', () => ({
     <div>
       {React.Children.map(children, child =>
         React.isValidElement(child)
-          ? React.cloneElement(child, { onValueChange })
+          ? React.cloneElement(child as any, { onValueChange })
           : child
       )}
     </div>
@@ -108,13 +108,13 @@ vi.mock('@/components/ui/select', () => ({
     <div>
       {React.Children.map(children, child =>
         React.isValidElement(child)
-          ? React.cloneElement(child, { onValueChange: (child as any).props?.onValueChange })
+          ? React.cloneElement(child as any, { onValueChange: (child as any).props?.onValueChange })
           : child
       )}
     </div>
   ),
   SelectItem: ({ children, value, onValueChange }: any) => (
-    <div data-value={value} onClick={() => onValueChange?.(value)}>
+    <div data-value={value} onClick={() => (onValueChange as ((value: any) => void) | undefined)?.(value)}>
       {children}
     </div>
   ),

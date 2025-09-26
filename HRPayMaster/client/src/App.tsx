@@ -28,21 +28,30 @@ function Router() {
   });
   const [location, navigate] = useLocation();
 
+  useEffect(() => {
+    if (isLoading) return;
+    if (!user && location !== "/login") {
+      navigate("/login");
+    }
+  }, [isLoading, user, location, navigate]);
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (user && location === "/login") {
+      navigate("/");
+    }
+  }, [isLoading, user, location, navigate]);
+
   if (isLoading) return null;
 
   if (!user) {
-    if (location !== "/login") navigate("/login");
     return <Login />;
-  }
-
-  if (location === "/login") {
-    navigate("/");
   }
 
   const Redirect = ({ to }: { to: string }) => {
     useEffect(() => {
       navigate(to);
-    }, [to]);
+    }, [to, navigate]);
     return null;
   };
 

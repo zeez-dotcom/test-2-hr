@@ -2,50 +2,126 @@ import express from "express";
 import session from "express-session";
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
+import bcrypt from "bcryptjs";
 import createMemoryStore from "memorystore";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { errorHandler } from "./errorHandler";
 import { storage } from "./storage";
 import { generateExpiryWarningEmail, shouldSendAlert, sendEmail } from "./emailService";
+import type { User } from "@shared/schema";
+import { users } from "@shared/schema";
 
-interface User {
-  id: string;
-  username: string;
-  email: string;
-  employeeId?: string;
-  role: string;
+type InsertUser = typeof users.$inferInsert;
+
+type AuthUser = Omit<User, "passwordHash">;
+
+const toAuthUser = (user: User): AuthUser => {
+  const { passwordHash, ...safe } = user;
+  return safe;
+};
+
+declare global {
+  namespace Express {
+    interface User extends AuthUser {}
+  }
 }
 
-const ADMIN_USER: User = {
-  id: "1",
-  username: "admin",
-  email: "admin1@gmail.com",
-  role: "admin",
+const resolveAdminConfig = () => {
+  const nodeEnv = process.env.NODE_ENV ?? 'development';
+  const isProduction = nodeEnv === 'production';
+  const username = process.env.ADMIN_USERNAME ?? (isProduction ? undefined : 'admin');
+  const password = process.env.ADMIN_PASSWORD ?? (isProduction ? undefined : 'admin');
+  const email = process.env.ADMIN_EMAIL ?? (isProduction ? undefined : 'admin@example.com');
+  if (!username || !password || !email) {
+    throw new Error('ADMIN_USERNAME, ADMIN_PASSWORD, and ADMIN_EMAIL environment variables must be configured');
+  }
+  if (!process.env.ADMIN_USERNAME && !isProduction) {
+    log("warning: ADMIN_USERNAME not set; using development default 'admin'");
+  }
+  if (!process.env.ADMIN_PASSWORD && !isProduction) {
+    log("warning: ADMIN_PASSWORD not set; using development default 'admin'");
+  }
+  if (!process.env.ADMIN_EMAIL && !isProduction) {
+    log("warning: ADMIN_EMAIL not set; using development default 'admin@example.com'");
+  }
+  return { username, password, email };
 };
-const ADMIN_PASSWORD = "admin";
+
+const ensureAdminUser = async (): Promise<User> => {
+  const { username, password, email } = resolveAdminConfig();
+  const existing = await storage.getUserByUsername(username);
+  if (!existing) {
+    const passwordHash = await bcrypt.hash(password, 12);
+    const created = await storage.createUser({
+      username,
+      email,
+      passwordHash,
+      role: 'admin',
+    });
+    log(`bootstrap admin user '${username}' created`);
+    return created;
+  }
+
+  const updates: Partial<InsertUser> = {};
+  const passwordMatches = await bcrypt.compare(password, existing.passwordHash);
+  if (!passwordMatches) {
+    updates.passwordHash = await bcrypt.hash(password, 12);
+  }
+  if (existing.email !== email) {
+    updates.email = email;
+  }
+  if (existing.role !== 'admin') {
+    updates.role = 'admin';
+  }
+
+  if (Object.keys(updates).length > 0) {
+    const updated = await storage.updateUser(existing.id, updates);
+    if (updated) {
+      log(`bootstrap admin user '${username}' updated from environment configuration`);
+      return updated;
+    }
+  }
+
+  return existing;
+};
+
+const adminBootstrap = ensureAdminUser();
 
 passport.use(
-  new LocalStrategy((username, password, done) => {
-    if (
-      username === ADMIN_USER.username &&
-      password === ADMIN_PASSWORD
-    ) {
-      return done(null, ADMIN_USER);
+  new LocalStrategy(async (username, password, done) => {
+    try {
+      await adminBootstrap;
+      const userRecord = await storage.getUserByUsername(username);
+      if (!userRecord) {
+        return done(null, false);
+      }
+      const matches = await bcrypt.compare(password, userRecord.passwordHash);
+      if (!matches) {
+        return done(null, false);
+      }
+      return done(null, toAuthUser(userRecord));
+    } catch (error) {
+      return done(error as Error);
     }
-    return done(null, false);
   }),
 );
 
 passport.serializeUser((user: Express.User, done) => {
-  done(null, ADMIN_USER.id);
+  done(null, (user as AuthUser).id);
 });
 
-passport.deserializeUser((id: string, done) => {
-  if (id === ADMIN_USER.id) {
-    return done(null, ADMIN_USER);
+passport.deserializeUser(async (id: string, done) => {
+  try {
+    await adminBootstrap;
+    const userRecord = await storage.getUserById(id);
+    if (!userRecord) {
+      return done(null, false);
+    }
+    return done(null, toAuthUser(userRecord));
+  } catch (error) {
+    return done(error as Error);
   }
-  return done(null, false);
 });
 
 const MemoryStore = createMemoryStore(session);
@@ -102,7 +178,7 @@ app.use((req, res, next) => {
       }
 
       if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
+        logLine = logLine.slice(0, 79) + "...";
       }
 
       log(logLine);
@@ -113,6 +189,7 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  await adminBootstrap;
   const server = await registerRoutes(app);
 
   app.use(errorHandler);
@@ -219,3 +296,10 @@ app.use((req, res, next) => {
   processDocumentExpiryAlerts();
   setInterval(processDocumentExpiryAlerts, 12 * 60 * 60 * 1000);
 })();
+
+
+
+
+
+
+

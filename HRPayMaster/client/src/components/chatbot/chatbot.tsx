@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type {
   Employee,
@@ -9,16 +9,27 @@ import type {
 import { resolveDate, ChatIntent } from "@shared/chatbot";
 import { differenceInCalendarDays } from "date-fns";
 import { apiGet, apiPost } from "@/lib/http";
+import { getNewTabRel } from "@/lib/utils";
 import { buildBilingualActionReceipt, buildAndEncodePdf } from "@/lib/pdf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTranslation } from "react-i18next";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import ImageUpload from "@/components/ui/image-upload";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2, Plus } from "lucide-react";
 
 interface Message {
   from: "bot" | "user";
   text: string;
 }
+
+type DocumentStatus = 'no-expiry' | 'active' | 'expiring' | 'expired';
 
 interface PendingIntent {
   type: ChatIntent;
@@ -54,6 +65,249 @@ export function Chatbot() {
   const [pending, setPending] = useState<PendingIntent | null>(null);
   const [currentDate] = useState(new Date());
   const [docs, setDocs] = useState<any[] | null>(null);
+  const [tab, setTab] = useState<"chat" | "drawer">("chat");
+  const [drawerQuery, setDrawerQuery] = useState("");
+  const [drawerEmployeeId, setDrawerEmployeeId] = useState<string>("");
+  const [docCategoryFilter, setDocCategoryFilter] = useState<string>("");
+  const [docStatusFilter, setDocStatusFilter] = useState<"all" | "active" | "expiring" | "expired">("all");
+  const [docForm, setDocForm] = useState({
+    title: "",
+    description: "",
+    employeeId: "",
+    category: "",
+    tags: "",
+    referenceNumber: "",
+    controllerNumber: "",
+    expiryDate: "",
+    alertDays: "30",
+  });
+  const [docUpload, setDocUpload] = useState<string | undefined>();
+  const [docSaving, setDocSaving] = useState(false);
+
+  const { toast } = useToast();
+
+  const { data: companyDocuments = [], refetch: refetchCompanyDocuments, isFetching: documentsLoading } = useQuery<any[]>({
+    queryKey: ["/api/documents"],
+    enabled: tab === "drawer",
+  });
+  const employeeLookup = useMemo(() => {
+    const lookup = new Map<string, Employee>();
+    employees.forEach((emp) => {
+      if (emp?.id) {
+        lookup.set(emp.id, emp);
+      }
+    });
+    return lookup;
+  }, [employees]);
+
+  const uniqueCategories = useMemo(() => {
+    const categories = new Set<string>();
+    (companyDocuments || []).forEach((doc: any) => {
+      if (doc?.category) {
+        categories.add(doc.category);
+      }
+    });
+    return Array.from(categories).sort((a, b) => a.localeCompare(b));
+  }, [companyDocuments]);
+
+    const computeDocumentStatus = (doc: any): { status: DocumentStatus; daysRemaining: number | null } => {
+    if (!doc?.expiryDate) {
+      return { status: 'no-expiry', daysRemaining: null };
+    }
+    const diff = differenceInCalendarDays(new Date(doc.expiryDate), new Date());
+    if (Number.isNaN(diff)) {
+      return { status: 'no-expiry', daysRemaining: null };
+    }
+    if (diff < 0) {
+      return { status: 'expired', daysRemaining: diff };
+    }
+    const parsedAlert = Number(doc.alertDays ?? 30);
+    const threshold = Number.isNaN(parsedAlert) ? 30 : parsedAlert;
+    if (diff <= threshold) {
+      return { status: 'expiring', daysRemaining: diff };
+    }
+    return { status: 'active', daysRemaining: diff };
+  };
+
+  const expiryStats = useMemo(() => {
+    let expired = 0;
+    let expiring = 0;
+    (companyDocuments || []).forEach((doc: any) => {
+      const { status } = computeDocumentStatus(doc);
+      if (status === 'expired') expired += 1;
+      if (status === 'expiring') expiring += 1;
+    });
+    return {
+      total: (companyDocuments || []).length,
+      expired,
+      expiring,
+    };
+  }, [companyDocuments]);
+
+  const selectedEmployeeRecord = selectedEmployee ? employeeLookup.get(selectedEmployee) : undefined;
+  const employeeDisplayName = selectedEmployeeRecord
+    ? [selectedEmployeeRecord.firstName, selectedEmployeeRecord.lastName].filter(Boolean).join(" ").trim() ||
+      selectedEmployeeRecord.employeeCode ||
+      selectedEmployeeRecord.id ||
+      "Employee"
+    : "Employee";
+  const employeePhoneLabel = selectedEmployeeRecord?.phone?.trim() || "N/A";
+  const receiptEmployee = {
+    firstName: selectedEmployeeRecord?.firstName ?? employeeDisplayName,
+    lastName: selectedEmployeeRecord?.lastName ?? "",
+    id: selectedEmployee ?? selectedEmployeeRecord?.id ?? "",
+    position: selectedEmployeeRecord?.position ?? null,
+    phone: selectedEmployeeRecord?.phone ?? null,
+  };
+  const employeeLine = `${employeeDisplayName} (Phone: ${employeePhoneLabel})`;
+
+  const buildReceiptDocument = (config: {
+    titleEn: string;
+    titleAr?: string;
+    subheadingEn?: string;
+    subheadingAr?: string;
+    bodyEn: string;
+    bodyAr?: string;
+    detailsEn: string[];
+    detailsAr?: string[];
+    docNumber?: string;
+    issuedDate?: string;
+  }) =>
+    buildBilingualActionReceipt({
+      titleEn: config.titleEn,
+      titleAr: config.titleAr ?? config.titleEn,
+      subheadingEn: config.subheadingEn,
+      subheadingAr: config.subheadingAr ?? config.subheadingEn,
+      bodyEn: config.bodyEn,
+      bodyAr: config.bodyAr ?? config.bodyEn,
+      detailsEn: config.detailsEn,
+      detailsAr: config.detailsAr ?? config.detailsEn,
+      docNumber: config.docNumber,
+      issuedDate: config.issuedDate,
+      employee: receiptEmployee,
+    });
+  const filteredDocs = useMemo(() => {
+    const docs = (companyDocuments || []) as any[];
+    const query = drawerQuery.trim().toLowerCase();
+    return docs
+      .filter((doc) => {
+        if (drawerEmployeeId && doc.employeeId !== drawerEmployeeId) {
+          return false;
+        }
+        if (docCategoryFilter && (doc.category || '') !== docCategoryFilter) {
+          return false;
+        }
+        const { status } = computeDocumentStatus(doc);
+        if (docStatusFilter === 'expired' && status !== 'expired') {
+          return false;
+        }
+        if (docStatusFilter === 'expiring' && status !== 'expiring') {
+          return false;
+        }
+        if (docStatusFilter === 'active' && ['active', 'no-expiry'].indexOf(status) === -1) {
+          return false;
+        }
+        if (!query) {
+          return true;
+        }
+        const employee = doc.employeeId ? employeeLookup.get(doc.employeeId) : undefined;
+        const fullName = [employee?.firstName, employee?.lastName].filter(Boolean).join(' ').trim();
+        const haystack = [
+          doc.title,
+          doc.description,
+          doc.category,
+          doc.tags,
+          doc.referenceNumber,
+          doc.controllerNumber,
+          doc.employeeId,
+          fullName,
+          employee?.firstName,
+          employee?.lastName,
+          employee?.employeeCode,
+          employee?.civilId,
+          employee?.phone,
+        ];
+        return haystack.some((value) => typeof value === 'string' && value.toLowerCase().includes(query));
+      })
+      .sort((a, b) => {
+        const aDate = new Date(a.createdAt ?? a.expiryDate ?? 0).getTime();
+        const bDate = new Date(b.createdAt ?? b.expiryDate ?? 0).getTime();
+        return bDate - aDate;
+      });
+  }, [companyDocuments, drawerQuery, drawerEmployeeId, docCategoryFilter, docStatusFilter, employeeLookup]);
+
+  const handleCreateDocument = async () => {
+    if (!docForm.title.trim()) {
+      toast({
+        title: 'Missing title',
+        description: 'Please provide a title for the document.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!docUpload) {
+      toast({
+        title: 'Upload required',
+        description: 'Upload a PDF or image before saving.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setDocSaving(true);
+    try {
+      const payload: Record<string, any> = {
+        title: docForm.title.trim(),
+        pdfDataUrl: docUpload,
+      };
+      if (docForm.description.trim()) payload.description = docForm.description.trim();
+      if (docForm.employeeId) payload.employeeId = docForm.employeeId;
+      if (docForm.category.trim()) payload.category = docForm.category.trim();
+      if (docForm.tags.trim()) payload.tags = docForm.tags.trim();
+      if (docForm.referenceNumber.trim()) payload.referenceNumber = docForm.referenceNumber.trim();
+      if (docForm.controllerNumber.trim()) payload.controllerNumber = docForm.controllerNumber.trim();
+      if (docForm.expiryDate) payload.expiryDate = docForm.expiryDate;
+      if (docForm.alertDays) {
+        const parsed = Number(docForm.alertDays);
+        if (!Number.isNaN(parsed)) {
+          payload.alertDays = parsed;
+        }
+      }
+
+      const res = await apiPost('/api/documents', payload);
+      if (!res.ok) {
+        throw new Error(res.error || 'Failed to save document');
+      }
+
+      toast({
+        title: 'Document saved',
+        description: 'Document has been uploaded to the drawer.',
+      });
+
+      setDocForm({
+        title: '',
+        description: '',
+        employeeId: '',
+        category: '',
+        tags: '',
+        referenceNumber: '',
+        controllerNumber: '',
+        expiryDate: '',
+        alertDays: '30',
+      });
+      setDocUpload(undefined);
+      await refetchCompanyDocuments();
+    } catch (error) {
+      console.error('Failed to create document', error);
+      toast({
+        title: 'Failed to save document',
+        description: error instanceof Error ? error.message : 'Please try again shortly.',
+        variant: 'destructive',
+      });
+    } finally {
+      setDocSaving(false);
+    }
+  };
 
   useEffect(() => { setDocs(null); }, [selectedEmployee]);
 
@@ -304,23 +558,28 @@ export function Chatbot() {
               const res = await apiPost("/api/employee-events", eventData);
               if (!res.ok) throw new Error(res.error);
               // Build and save document
-              const doc = buildBilingualActionReceipt({
-                titleEn: 'Bonus',
-                titleAr: 'مكافأة',
-                employee: { firstName: (employees.find(e => e.id === selectedEmployee)?.firstName || ''), lastName: (employees.find(e => e.id === selectedEmployee)?.lastName || ''), id: selectedEmployee },
-                detailsEn: [
-                  `Amount: ${pending.data.amount}`,
-                  `Date: ${pending.data.date}`,
-                  `Reason: ${pending.data.reason || ''}`
-                ],
-                detailsAr: [
-                  `المبلغ: ${pending.data.amount}`,
-                  `التاريخ: ${pending.data.date}`,
-                  `السبب: ${pending.data.reason || ''}`
-                ],
-              });
-              const pdfDataUrl = await buildAndEncodePdf(doc);
-              await apiPost(`/api/employees/${selectedEmployee}/documents`, { title: 'Bonus Receipt', description: 'Bonus action receipt', pdfDataUrl });
+
+
+
+            const isBonus = pending.type === "addBonus";
+            const amountText = (pending.data.amount ?? 0).toString();
+            const effectiveDate = pending.data.date ?? new Date().toISOString().split("T")[0];
+            const reasonText = pending.data.reason?.trim() || "No reason provided";
+            const doc = buildReceiptDocument({
+              titleEn: isBonus ? "Bonus Granted" : "Deduction Issued",
+              subheadingEn: `${isBonus ? 'Bonus' : 'Deduction'} ${amountText}`,
+              bodyEn: `This document confirms that ${employeeLine} ${isBonus ? "received" : "is subject to"} ${isBonus ? "a bonus" : "a deduction"} of ${amountText} on ${effectiveDate}. Reason: ${reasonText}.`,
+              detailsEn: [
+                `Amount: ${amountText}`,
+                `Effective date: ${effectiveDate}`,
+                `Reason: ${reasonText}`,
+              ],
+            });
+            const pdfDataUrl = await buildAndEncodePdf(doc);
+            await apiPost(`/api/employees/${selectedEmployee}/documents`, { title: isBonus ? "Bonus Receipt" : "Deduction Receipt", description: isBonus ? "Bonus action receipt" : "Deduction action receipt", pdfDataUrl });
+
+
+
               setMessages((m) => [
                 ...m,
                 {
@@ -360,25 +619,21 @@ export function Chatbot() {
               const res = await apiPost("/api/vacations", vacation);
               if (!res.ok) throw new Error(res.error);
               // Save bilingual document for vacation approval
-              const doc = buildBilingualActionReceipt({
-                titleEn: 'Vacation Approval',
-                titleAr: 'موافقة إجازة',
-                employee: { firstName: (employees.find(e => e.id === selectedEmployee)?.firstName || ''), lastName: (employees.find(e => e.id === selectedEmployee)?.lastName || ''), id: selectedEmployee },
-                detailsEn: [
-                  `Start: ${vacation.startDate}`,
-                  `End: ${vacation.endDate}`,
-                  `Days: ${vacation.days}`,
-                  `Reason: ${vacation.reason || ''}`
-                ],
-                detailsAr: [
-                  `البداية: ${vacation.startDate}`,
-                  `النهاية: ${vacation.endDate}`,
-                  `الأيام: ${vacation.days}`,
-                  `السبب: ${vacation.reason || ''}`
-                ],
-              });
-              const pdfDataUrl = await buildAndEncodePdf(doc);
-              await apiPost(`/api/employees/${selectedEmployee}/documents`, { title: 'Vacation Approval', description: 'Vacation approval receipt', pdfDataUrl });
+
+
+            const reasonText = vacation.reason?.trim() || "No reason provided";
+            const doc = buildReceiptDocument({
+              titleEn: "Vacation Approved",
+              subheadingEn: `${vacation.startDate} ? ${vacation.endDate}`,
+              bodyEn: `This document confirms that ${employeeLine} is approved for vacation from ${vacation.startDate} to ${vacation.endDate} covering ${vacation.days} day(s). Reason: ${reasonText}.`,
+              detailsEn: [
+                `Start date: ${vacation.startDate}`,
+                `End date: ${vacation.endDate}`,
+                `Total days: ${vacation.days}`,
+                `Reason: ${reasonText}`,
+              ],
+            });
+
               setMessages((m) => [
                 ...m,
                 {
@@ -407,20 +662,19 @@ export function Chatbot() {
             try {
               const res = await apiPost("/api/payroll/generate", payroll);
               if (!res.ok) throw new Error(res.error);
-              const doc = buildBilingualActionReceipt({
-                titleEn: 'Payroll Generated',
-                titleAr: 'تم إنشاء الرواتب',
-                employee: { firstName: (employees.find(e => e.id === selectedEmployee)?.firstName || ''), lastName: (employees.find(e => e.id === selectedEmployee)?.lastName || ''), id: selectedEmployee },
-                detailsEn: [
-                  `Period: ${payroll.period}`, `Start: ${payroll.startDate}`, `End: ${payroll.endDate}`
-                ],
-                detailsAr: [
-                  `الفترة: ${payroll.period}`, `البداية: ${payroll.startDate}`, `النهاية: ${payroll.endDate}`
-                ],
-              // logo will be injected from settings via pdf brand helper
-              });
-              const pdfDataUrl = await buildAndEncodePdf(doc);
-              await apiPost(`/api/employees/${selectedEmployee}/documents`, { title: 'Payroll Action', description: 'Payroll generation receipt', pdfDataUrl });
+
+
+            const doc = buildReceiptDocument({
+              titleEn: "Payroll Generated",
+              subheadingEn: payroll.period,
+              bodyEn: `This document confirms that payroll for ${employeeLine} was generated for the period ${payroll.period} covering ${payroll.startDate} to ${payroll.endDate}.`,
+              detailsEn: [
+                `Period: ${payroll.period}`,
+                `Start date: ${payroll.startDate}`,
+                `End date: ${payroll.endDate}`,
+              ],
+            });
+
               setMessages((m) => [
                 ...m,
                 {
@@ -500,16 +754,18 @@ export function Chatbot() {
             try {
               const res = await apiPost(`/api/vacations/${vac.id}`, { status: 'rejected' } as any);
               if (!res.ok) throw new Error(res.error);
-              const doc = buildBilingualActionReceipt({
-                titleEn: 'Vacation Cancelled', titleAr: 'تم إلغاء الإجازة',
-                employee: { firstName: employees.find(e=>e.id===selectedEmployee)?.firstName||'', lastName: employees.find(e=>e.id===selectedEmployee)?.lastName||'', id: selectedEmployee },
-                detailsEn: [`Start: ${vac.startDate}`, `End: ${vac.endDate}`],
-                detailsAr: [`البداية: ${vac.startDate}`, `النهاية: ${vac.endDate}`],
-                // logo will be injected from settings via pdf brand helper
-                logo: null,
-              });
-              const pdfDataUrl = await buildAndEncodePdf(doc);
-              await apiPost(`/api/employees/${selectedEmployee}/documents`, { title: 'Vacation Cancelled', description: 'Vacation cancelled', pdfDataUrl });
+
+
+            const doc = buildReceiptDocument({
+              titleEn: "Vacation Cancelled",
+              subheadingEn: `${vac.startDate} to ${vac.endDate}`,
+              bodyEn: `This document confirms that the vacation for ${employeeLine} scheduled from ${vac.startDate} to ${vac.endDate} has been cancelled.`,
+              detailsEn: [
+                `Original start date: ${vac.startDate}`,
+                `Original end date: ${vac.endDate}`,
+              ],
+            });
+
               setMessages((m)=>[...m,{from:'bot',text:'Vacation cancelled.'}]);
             } catch {
               setMessages((m)=>[...m,{from:'bot',text:'Failed to cancel vacation.'}]);
@@ -536,15 +792,19 @@ export function Chatbot() {
           try {
             const res = await apiPost(`/api/vacations/${vac.id}`, { startDate: pending.data.startDate, endDate, status: 'pending' } as any);
             if (!res.ok) throw new Error(res.error);
-            const doc = buildBilingualActionReceipt({
-              titleEn: 'Vacation Updated', titleAr: 'تم تعديل الإجازة',
-              employee: { firstName: employees.find(e=>e.id===selectedEmployee)?.firstName||'', lastName: employees.find(e=>e.id===selectedEmployee)?.lastName||'', id: selectedEmployee },
-              detailsEn: [`Start: ${pending.data.startDate}`, `End: ${endDate}`],
-              detailsAr: [`البداية: ${pending.data.startDate}`, `النهاية: ${endDate}`],
+
+
+            const doc = buildReceiptDocument({
+              titleEn: "Vacation Updated",
+              subheadingEn: `${pending.data.startDate} to ${endDate}`,
+              bodyEn: `This document confirms that the vacation for ${employeeLine} has been updated to run from ${pending.data.startDate} to ${endDate}.`,
+              detailsEn: [
+                `New start date: ${pending.data.startDate}`,
+                `New end date: ${endDate}`,
+              ],
             });
-            const pdfDataUrl = await buildAndEncodePdf(doc);
-            await apiPost(`/api/employees/${selectedEmployee}/documents`, { title: 'Vacation Updated', description: 'Vacation updated', pdfDataUrl });
-            setMessages((m)=>[...m,{from:'bot', text:`Vacation updated to ${pending.data.startDate} → ${endDate}.`}]);
+
+            setMessages((m)=>[...m,{from:'bot', text:`Vacation updated to ${pending.data.startDate} to ${endDate}.`}]);
           } catch {
             setMessages((m)=>[...m,{from:'bot',text:'Failed to update vacation.'}]);
           }
@@ -573,14 +833,21 @@ export function Chatbot() {
             const payload = { assetId: (pending.data as any).assetId, employeeId: selectedEmployee, assignedDate: (pending.data as any).date, status: 'active', notes };
             const res = await apiPost('/api/asset-assignments', payload);
             if (!res.ok) throw new Error(res.error);
-            const doc = buildBilingualActionReceipt({
-              titleEn: 'Asset Assigned', titleAr: 'تخصيص أصل',
-              employee: { firstName: employees.find(e=>e.id===selectedEmployee)?.firstName||'', lastName: employees.find(e=>e.id===selectedEmployee)?.lastName||'', id: selectedEmployee },
-              detailsEn: [`Asset: ${(assets as any[]).find(a=>a.id===(pending.data as any).assetId)?.name || (pending.data as any).assetId}`, `Date: ${(pending.data as any).date}`, `Notes: ${notes}`],
-              detailsAr: [`الأصل: ${(assets as any[]).find(a=>a.id===(pending.data as any).assetId)?.name || (pending.data as any).assetId}`, `التاريخ: ${(pending.data as any).date}`, `ملاحظات: ${notes}`],
+
+
+            const assetName = (assets as any[]).find(a => a.id === (pending.data as any).assetId)?.name || (pending.data as any).assetId;
+            const assignedDate = (pending.data as any).date;
+            const doc = buildReceiptDocument({
+              titleEn: "Asset Assigned",
+              subheadingEn: assetName,
+              bodyEn: `This document confirms that ${assetName} has been assigned to ${employeeLine} on ${assignedDate}. Notes: ${notes || 'None provided'}.`,
+              detailsEn: [
+                `Asset: ${assetName}`,
+                `Assignment date: ${assignedDate}`,
+                `Notes: ${notes || 'None provided'}`,
+              ],
             });
-            const pdfDataUrl = await buildAndEncodePdf(doc);
-            await apiPost(`/api/employees/${selectedEmployee}/documents`, { title: 'Asset Assignment', description: 'Asset assignment receipt', pdfDataUrl });
+
             setMessages((m)=>[...m,{from:'bot',text:'Asset assigned.'}]);
           } catch {
             setMessages((m)=>[...m,{from:'bot',text:'Failed to assign asset.'}]);
@@ -630,15 +897,19 @@ export function Chatbot() {
             const today = new Date().toISOString().split('T')[0];
             const res = await apiPost(`/api/asset-assignments/${asg.id}`, { status: 'completed', returnDate: today } as any);
             if (!res.ok) throw new Error(res.error);
-            const doc = buildBilingualActionReceipt({
-              titleEn: 'Asset Returned', titleAr: 'إرجاع أصل',
-              employee: { firstName: employees.find(e=>e.id===selectedEmployee)?.firstName||'', lastName: employees.find(e=>e.id===selectedEmployee)?.lastName||'', id: selectedEmployee },
-              detailsEn: [`Asset: ${(assets as any[]).find(a=>a.id===(pending.data as any).assetId)?.name || (pending.data as any).assetId}`, `Date: ${today}`],
-              detailsAr: [`الأصل: ${(assets as any[]).find(a=>a.id===(pending.data as any).assetId)?.name || (pending.data as any).assetId}`, `التاريخ: ${today}`],
-              logo: null,
+
+
+            const assetName = (assets as any[]).find(a => a.id === (pending.data as any).assetId)?.name || (pending.data as any).assetId;
+            const doc = buildReceiptDocument({
+              titleEn: "Asset Returned",
+              subheadingEn: assetName,
+              bodyEn: `This document confirms that ${assetName} has been returned by ${employeeLine} on ${today}.`,
+              detailsEn: [
+                `Asset: ${assetName}`,
+                `Return date: ${today}`,
+              ],
             });
-            const pdfDataUrl = await buildAndEncodePdf(doc);
-            await apiPost(`/api/employees/${selectedEmployee}/documents`, { title: 'Asset Returned', description: 'Asset return receipt', pdfDataUrl });
+
             setMessages((m)=>[...m,{from:'bot',text:'Asset returned.'}]);
           } catch (e:any) {
             setMessages((m)=>[...m,{from:'bot',text:e?.message || 'Failed to return asset.'}]);
@@ -661,15 +932,22 @@ export function Chatbot() {
           try {
             const res = await apiPost('/api/car-assignments', { carId: (pending.data as any).carId, employeeId: selectedEmployee, assignedDate: date, status: 'active' });
             if (!res.ok) throw new Error(res.error);
-            const doc = buildBilingualActionReceipt({
-              titleEn: 'Car Assigned', titleAr: 'تخصيص سيارة',
-              employee: { firstName: employees.find(e=>e.id===selectedEmployee)?.firstName||'', lastName: employees.find(e=>e.id===selectedEmployee)?.lastName||'', id: selectedEmployee },
-              detailsEn: [`Car: ${(cars as any[]).find(c=>c.id===(pending.data as any).carId)?.plateNumber || (pending.data as any).carId}`, `Date: ${date}`],
-              detailsAr: [`السيارة: ${(cars as any[]).find(c=>c.id===(pending.data as any).carId)?.plateNumber || (pending.data as any).carId}`, `التاريخ: ${date}`],
-              logo: null,
+
+
+            const carRecord = (cars as any[]).find(c => c.id === (pending.data as any).carId);
+            const carLabel = carRecord ? [carRecord.make, carRecord.model].filter(Boolean).join(" ") || carRecord.plateNumber || (pending.data as any).carId : (pending.data as any).carId;
+            const licensePlate = carRecord?.plateNumber || (pending.data as any).carId;
+            const doc = buildReceiptDocument({
+              titleEn: "Car Assigned",
+              subheadingEn: carLabel,
+              bodyEn: `This document confirms that vehicle ${carLabel} (Plate: ${licensePlate}) has been assigned to ${employeeLine} on ${date}.`,
+              detailsEn: [
+                `Vehicle: ${carLabel}`,
+                `Plate number: ${licensePlate}`,
+                `Assignment date: ${date}`,
+              ],
             });
-            const pdfDataUrl = await buildAndEncodePdf(doc);
-            await apiPost(`/api/employees/${selectedEmployee}/documents`, { title: 'Car Assignment', description: 'Car assignment receipt', pdfDataUrl });
+
             setMessages((m)=>[...m,{from:'bot',text:'Car assigned.'}]);
           } catch (e:any) {
             setMessages((m)=>[...m,{from:'bot',text: e?.message || 'Failed to assign car.'}]);
@@ -693,15 +971,22 @@ export function Chatbot() {
             const today = new Date().toISOString().split('T')[0];
             const res = await apiPost(`/api/car-assignments/${asg.id}`, { status: 'completed', returnDate: today } as any);
             if (!res.ok) throw new Error(res.error);
-            const doc = buildBilingualActionReceipt({
-              titleEn: 'Car Returned', titleAr: 'إرجاع سيارة',
-              employee: { firstName: employees.find(e=>e.id===selectedEmployee)?.firstName||'', lastName: employees.find(e=>e.id===selectedEmployee)?.lastName||'', id: selectedEmployee },
-              detailsEn: [`Car: ${(cars as any[]).find(c=>c.id===(pending.data as any).carId)?.plateNumber || (pending.data as any).carId}`, `Date: ${today}`],
-              detailsAr: [`السيارة: ${(cars as any[]).find(c=>c.id===(pending.data as any).carId)?.plateNumber || (pending.data as any).carId}`, `التاريخ: ${today}`],
-              logo: null,
+
+
+            const carRecord = (cars as any[]).find(c => c.id === (pending.data as any).carId);
+            const carLabel = carRecord ? [carRecord.make, carRecord.model].filter(Boolean).join(" ") || carRecord.plateNumber || (pending.data as any).carId : (pending.data as any).carId;
+            const licensePlate = carRecord?.plateNumber || (pending.data as any).carId;
+            const doc = buildReceiptDocument({
+              titleEn: "Car Returned",
+              subheadingEn: carLabel,
+              bodyEn: `This document confirms that vehicle ${carLabel} (Plate: ${licensePlate}) has been returned by ${employeeLine} on ${today}.`,
+              detailsEn: [
+                `Vehicle: ${carLabel}`,
+                `Plate number: ${licensePlate}`,
+                `Return date: ${today}`,
+              ],
             });
-            const pdfDataUrl = await buildAndEncodePdf(doc);
-            await apiPost(`/api/employees/${selectedEmployee}/documents`, { title: 'Car Returned', description: 'Car return receipt', pdfDataUrl });
+
             setMessages((m)=>[...m,{from:'bot',text:'Car returned.'}]);
           } catch (e:any) {
             setMessages((m)=>[...m,{from:'bot',text:e?.message || 'Failed to return car.'}]);
@@ -798,15 +1083,21 @@ export function Chatbot() {
           try {
             const res = await apiPost('/api/loans', payload);
             if (!res.ok) throw new Error(res.error);
-            const doc = buildBilingualActionReceipt({
-              titleEn: 'Loan Created', titleAr: 'إنشاء قرض',
-              employee: { firstName: employees.find(e=>e.id===selectedEmployee)?.firstName||'', lastName: employees.find(e=>e.id===selectedEmployee)?.lastName||'', id: selectedEmployee },
-              detailsEn: [`Amount: ${payload.amount}`, `Monthly: ${payload.monthlyDeduction}`, `Start: ${payload.startDate}`],
-              detailsAr: [`المبلغ: ${payload.amount}`, `الشهري: ${payload.monthlyDeduction}`, `البداية: ${payload.startDate}`],
-              logo: null,
+
+
+            const amountText = payload.amount.toString();
+            const monthlyText = payload.monthlyDeduction.toString();
+            const doc = buildReceiptDocument({
+              titleEn: "Loan Created",
+              subheadingEn: `Amount ${amountText}`,
+              bodyEn: `This document confirms that ${employeeLine} received a loan of ${amountText} starting ${payload.startDate} with a monthly deduction of ${monthlyText}.`,
+              detailsEn: [
+                `Principal: ${amountText}`,
+                `Monthly deduction: ${monthlyText}`,
+                `Start date: ${payload.startDate}`,
+              ],
             });
-            const pdfDataUrl = await buildAndEncodePdf(doc);
-            await apiPost(`/api/employees/${selectedEmployee}/documents`, { title: 'Loan Created', description: 'Loan creation receipt', pdfDataUrl });
+
             setMessages((m)=>[...m,{from:'bot', text:'Loan created.'}]);
           } catch {
             setMessages((m)=>[...m,{from:'bot', text:'Failed to create loan.'}]);
@@ -829,15 +1120,17 @@ export function Chatbot() {
             if (!target) { setMessages((m)=>[...m,{from:'bot', text:'No loan found to update.'}]); setPending(null); return; }
             const up = await apiPost(`/api/loans/${target.id}`, { monthlyDeduction: newMd } as any);
             if (!up.ok) throw new Error(up.error);
-            const doc = buildBilingualActionReceipt({
-              titleEn: 'Loan Updated', titleAr: 'تحديث القرض',
-              employee: { firstName: employees.find(e=>e.id===selectedEmployee)?.firstName||'', lastName: employees.find(e=>e.id===selectedEmployee)?.lastName||'', id: selectedEmployee },
-              detailsEn: [`Monthly: ${newMd}`],
-              detailsAr: [`الشهري: ${newMd}`],
-              logo: null,
+
+
+            const doc = buildReceiptDocument({
+              titleEn: "Loan Updated",
+              subheadingEn: `Monthly deduction ${newMd}`,
+              bodyEn: `This document confirms that the loan for ${employeeLine} now has a monthly deduction of ${newMd}.`,
+              detailsEn: [
+                `Updated monthly deduction: ${newMd}`,
+              ],
             });
-            const pdfDataUrl = await buildAndEncodePdf(doc);
-            await apiPost(`/api/employees/${selectedEmployee}/documents`, { title: 'Loan Updated', description: 'Loan update receipt', pdfDataUrl });
+
             setMessages((m)=>[...m,{from:'bot', text:'Loan updated.'}]);
           } catch {
             setMessages((m)=>[...m,{from:'bot', text:'Failed to update loan.'}]);
@@ -861,15 +1154,18 @@ export function Chatbot() {
             const payload: any = {}; payload[(pending.data as any).field] = value;
             const res = await apiPost(`/api/employees/${selectedEmployee}`, payload as any);
             if (!res.ok) throw new Error(res.error);
-            const doc = buildBilingualActionReceipt({
-              titleEn: 'Employee Updated', titleAr: 'تم تحديث الموظف',
-              employee: { firstName: employees.find(e=>e.id===selectedEmployee)?.firstName||'', lastName: employees.find(e=>e.id===selectedEmployee)?.lastName||'', id: selectedEmployee },
-              detailsEn: [`${(pending.data as any).field}: ${value}`],
-              detailsAr: [`${(pending.data as any).field}: ${value}`],
-              logo: (import.meta as any).env?.VITE_COMPANY_LOGO || null,
+
+
+            const fieldLabel = (pending.data as any).field;
+            const doc = buildReceiptDocument({
+              titleEn: "Employee Record Updated",
+              subheadingEn: fieldLabel,
+              bodyEn: `This document confirms that ${employeeLine} has an updated ${fieldLabel} value of ${value}.`,
+              detailsEn: [
+                `${fieldLabel}: ${value}`,
+              ],
             });
-            const pdfDataUrl = await buildAndEncodePdf(doc);
-            await apiPost(`/api/employees/${selectedEmployee}/documents`, { title: 'Employee Updated', description: 'Update receipt', pdfDataUrl });
+
             setMessages((m)=>[...m,{from:'bot', text:'Employee updated.'}]);
           } catch {
             setMessages((m)=>[...m,{from:'bot', text:'Failed to update employee.'}]);
@@ -882,7 +1178,17 @@ export function Chatbot() {
   };
 
   return (
-      <div className="flex flex-col h-full border rounded p-2 space-y-2">
+    <Tabs
+      value={tab}
+      onValueChange={(value) => setTab(value as "chat" | "drawer")}
+      className="flex h-full flex-col"
+    >
+      <TabsList className="mb-4 grid w-full max-w-xs grid-cols-2">
+        <TabsTrigger value="chat">Chat</TabsTrigger>
+        <TabsTrigger value="drawer">Document Drawer</TabsTrigger>
+      </TabsList>
+      <TabsContent value="chat" className="flex flex-1 flex-col">
+        <div className="flex h-full flex-col space-y-2 rounded border p-2">
         <div>
           <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
             <SelectTrigger>
@@ -898,7 +1204,8 @@ export function Chatbot() {
           </Select>
         </div>
         <div>
-          <Select value={selectedIntent} onValueChange={(v) => setSelectedIntent(v as ChatIntent | "")}> 
+          <Select value={selectedIntent} onValueChange={(v) => setSelectedIntent(v as ChatIntent | "")}>
+
           <SelectTrigger>
             <SelectValue placeholder={t("chatbot.selectAction")} />
           </SelectTrigger>
@@ -1011,15 +1318,643 @@ export function Chatbot() {
         </div>
       )}
       <form onSubmit={handleSubmit} className="flex space-x-2">
+
         <Input
+
           value={input}
+
           onChange={(e) => setInput(e.target.value)}
+
           placeholder="Type a message"
+
         />
+
         <Button type="submit">Send</Button>
+
       </form>
-    </div>
+
+        </div>
+
+      </TabsContent>
+
+      <TabsContent value="drawer" className="flex flex-1 flex-col space-y-4 overflow-hidden">
+
+        <div className="flex flex-1 flex-col gap-4 lg:grid lg:grid-cols-[2fr,minmax(0,1fr)] lg:items-start">
+
+          <div className="flex flex-col gap-4 overflow-hidden">
+
+            <Card className="shadow-sm">
+
+              <CardHeader>
+
+                <CardTitle>Document Drawer</CardTitle>
+
+                <CardDescription>Search, track, and create company-wide documents.</CardDescription>
+
+              </CardHeader>
+
+              <CardContent className="space-y-4">
+
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+
+                  <div className="space-y-1">
+
+                    <Label htmlFor="document-search">Search</Label>
+
+                    <Input
+
+                      id="document-search"
+
+                      value={drawerQuery}
+
+                      onChange={(e) => setDrawerQuery(e.target.value)}
+
+                      placeholder="Search by title, employee, civil ID"
+
+                    />
+
+                  </div>
+
+                  <div className="space-y-1">
+
+                    <Label htmlFor="document-employee">Employee</Label>
+
+                    <Select
+
+                      value={drawerEmployeeId || 'all'}
+
+                      onValueChange={(value) => setDrawerEmployeeId(value === 'all' ? '' : value)}
+
+                    >
+
+                      <SelectTrigger id="document-employee">
+
+                        <SelectValue placeholder="All employees" />
+
+                      </SelectTrigger>
+
+                      <SelectContent>
+
+                        <SelectItem value="all">All employees</SelectItem>
+
+                        {employees.map((emp) => (
+
+                          <SelectItem key={emp.id} value={emp.id}>
+
+                            {[emp.firstName, emp.lastName].filter(Boolean).join(' ') || emp.employeeCode || emp.id}
+
+                          </SelectItem>
+
+                        ))}
+
+                      </SelectContent>
+
+                    </Select>
+
+                  </div>
+
+                  <div className="space-y-1">
+
+                    <Label htmlFor="document-status">Status</Label>
+
+                    <Select
+
+                      value={docStatusFilter}
+
+                      onValueChange={(value) => setDocStatusFilter(value as 'all' | 'active' | 'expiring' | 'expired')}
+
+                    >
+
+                      <SelectTrigger id="document-status">
+
+                        <SelectValue placeholder="All statuses" />
+
+                      </SelectTrigger>
+
+                      <SelectContent>
+
+                        <SelectItem value="all">All statuses</SelectItem>
+
+                        <SelectItem value="active">Active</SelectItem>
+
+                        <SelectItem value="expiring">Expiring soon</SelectItem>
+
+                        <SelectItem value="expired">Expired</SelectItem>
+
+                      </SelectContent>
+
+                    </Select>
+
+                  </div>
+
+                  <div className="space-y-1">
+
+                    <Label htmlFor="document-category">Category</Label>
+
+                    <Select
+
+                      value={docCategoryFilter || 'all'}
+
+                      onValueChange={(value) => setDocCategoryFilter(value === 'all' ? '' : value)}
+
+                    >
+
+                      <SelectTrigger id="document-category">
+
+                        <SelectValue placeholder="All categories" />
+
+                      </SelectTrigger>
+
+                      <SelectContent>
+
+                        <SelectItem value="all">All categories</SelectItem>
+
+                        {uniqueCategories.map((category) => (
+
+                          <SelectItem key={category} value={category}>
+
+                            {category}
+
+                          </SelectItem>
+
+                        ))}
+
+                      </SelectContent>
+
+                    </Select>
+
+                  </div>
+
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+
+                  <span>Total: {expiryStats.total}</span>
+
+                  <Badge variant="destructive">Expired {expiryStats.expired}</Badge>
+
+                  <Badge className="bg-amber-500/10 text-amber-700 hover:bg-amber-500/20">Expiring {expiryStats.expiring}</Badge>
+
+                </div>
+
+              </CardContent>
+
+            </Card>
+
+            <Card className="flex h-full flex-col overflow-hidden shadow-sm">
+
+              <CardHeader>
+
+                <CardTitle>Documents</CardTitle>
+
+                <CardDescription>Showing {filteredDocs.length} of {companyDocuments.length} records.</CardDescription>
+
+              </CardHeader>
+
+              <CardContent className="space-y-3 overflow-y-auto" style={{ maxHeight: '60vh' }}>
+
+                {documentsLoading ? (
+
+                  <div className="flex items-center justify-center py-10 text-muted-foreground">
+
+                    <Loader2 className="h-5 w-5 animate-spin" />
+
+                  </div>
+
+                ) : filteredDocs.length === 0 ? (
+
+                  <div className="rounded border border-dashed p-6 text-center text-sm text-muted-foreground">
+
+                    No documents match your filters yet.
+
+                  </div>
+
+                ) : (
+
+                  filteredDocs.map((doc) => {
+
+                    const employee = doc.employeeId ? employeeLookup.get(doc.employeeId) : undefined;
+
+                    const { status, daysRemaining } = computeDocumentStatus(doc);
+
+                    const tags = typeof doc.tags === 'string' ? doc.tags.split(',').map((tag: string) => tag.trim()).filter(Boolean) : [];
+
+                    const openRel = getNewTabRel(doc.documentUrl);
+
+                    return (
+
+                      <div key={doc.id} className="rounded border bg-white p-3 shadow-sm">
+
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+
+                          <div className="space-y-1">
+
+                            <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
+
+                              <span>{doc.title}</span>
+
+                              {doc.category ? (
+
+                                <Badge variant="outline">{doc.category}</Badge>
+
+                              ) : null}
+
+                              {status === 'expired' ? (
+
+                                <Badge variant="destructive">Expired</Badge>
+
+                              ) : status === 'expiring' ? (
+
+                                <Badge className="bg-amber-500/10 text-amber-700 hover:bg-amber-500/20">Expiring in {daysRemaining}d</Badge>
+
+                              ) : status === 'active' ? (
+
+                                <Badge variant="secondary">Active</Badge>
+
+                              ) : (
+
+                                <Badge variant="outline">No expiry</Badge>
+
+                              )}
+
+                            </div>
+
+                            <div className="text-xs text-muted-foreground">
+
+                              Added on {new Date(doc.createdAt || doc.expiryDate || Date.now()).toLocaleDateString()}
+
+                            </div>
+
+                            {employee && (
+
+                              <div className="text-xs text-muted-foreground">
+
+                                {([employee?.firstName, employee?.lastName].filter(Boolean).join(' ') || employee?.employeeCode || employee?.id || doc.employeeId)}
+
+                              </div>
+
+                            )}
+
+                            {doc.referenceNumber && (
+
+                              <div className="text-xs text-muted-foreground">Reference #: {doc.referenceNumber}</div>
+
+                            )}
+
+                            {doc.controllerNumber && (
+
+                              <div className="text-xs text-muted-foreground">Controller #: {doc.controllerNumber}</div>
+
+                            )}
+
+                            {doc.expiryDate && (
+
+                              <div className="text-xs text-muted-foreground">Expires on {new Date(doc.expiryDate).toLocaleDateString()}</div>
+
+                            )}
+
+                          </div>
+
+                          <div className="flex flex-col items-end gap-2">
+
+                            <div className="flex gap-2">
+
+                              {doc.documentUrl ? (
+
+                                <Button asChild size="sm" variant="outline">
+
+                                  <a href={doc.documentUrl} target="_blank" rel={openRel}>Open</a>
+
+                                </Button>
+
+                              ) : null}
+
+                              {doc.employeeId && (
+
+                                <Button asChild size="sm" variant="ghost">
+
+                                  <a href={`/employee-file?id=${encodeURIComponent(doc.employeeId)}`} target="_blank" rel="noopener noreferrer">Employee file</a>
+
+                                </Button>
+
+                              )}
+
+                            </div>
+
+                            {tags.length > 0 && (
+
+                              <div className="flex flex-wrap justify-end gap-1">
+
+                                {tags.map((tag: string) => (
+
+                                  <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>
+
+                                ))}
+
+                              </div>
+
+                            )}
+
+                          </div>
+
+                        </div>
+
+                        {doc.description && (
+
+                          <p className="mt-2 text-sm text-muted-foreground">{doc.description}</p>
+
+                        )}
+
+                      </div>
+
+                    );
+
+                  })
+
+                )}
+
+              </CardContent>
+
+            </Card>
+
+          </div>
+
+          <Card className="shadow-sm">
+
+            <CardHeader>
+
+              <CardTitle>Create Document</CardTitle>
+
+              <CardDescription>Upload documents such as licenses, certificates, and contracts.</CardDescription>
+
+            </CardHeader>
+
+            <CardContent className="space-y-4">
+
+              <div className="space-y-1">
+
+                <Label htmlFor="new-doc-title">Title</Label>
+
+                <Input
+
+                  id="new-doc-title"
+
+                  value={docForm.title}
+
+                  onChange={(e) => setDocForm((prev) => ({ ...prev, title: e.target.value }))}
+
+                  placeholder="Company License Renewal"
+
+                />
+
+              </div>
+
+              <div className="space-y-1">
+
+                <Label htmlFor="new-doc-description">Description</Label>
+
+                <Textarea
+
+                  id="new-doc-description"
+
+                  value={docForm.description}
+
+                  onChange={(e) => setDocForm((prev) => ({ ...prev, description: e.target.value }))}
+
+                  placeholder="Optional details about this document"
+
+                  rows={3}
+
+                />
+
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+
+                <div className="space-y-1">
+
+                  <Label>Assign to employee</Label>
+
+                  <Select
+
+                    value={docForm.employeeId || 'none'}
+
+                    onValueChange={(value) => setDocForm((prev) => ({ ...prev, employeeId: value === 'none' ? '' : value }))}
+
+                  >
+
+                    <SelectTrigger>
+
+                      <SelectValue placeholder="Unassigned" />
+
+                    </SelectTrigger>
+
+                    <SelectContent>
+
+                      <SelectItem value="none">Unassigned</SelectItem>
+
+                      {employees.map((emp) => (
+
+                        <SelectItem key={emp.id} value={emp.id}>
+
+                          {[emp.firstName, emp.lastName].filter(Boolean).join(' ') || emp.employeeCode || emp.id}
+
+                        </SelectItem>
+
+                      ))}
+
+                    </SelectContent>
+
+                  </Select>
+
+                </div>
+
+                <div className="space-y-1">
+
+                  <Label htmlFor="new-doc-category">Category</Label>
+
+                  <Input
+
+                    id="new-doc-category"
+
+                    value={docForm.category}
+
+                    onChange={(e) => setDocForm((prev) => ({ ...prev, category: e.target.value }))}
+
+                    placeholder="Licenses"
+
+                  />
+
+                </div>
+
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+
+                <div className="space-y-1">
+
+                  <Label htmlFor="new-doc-reference">Reference #</Label>
+
+                  <Input
+
+                    id="new-doc-reference"
+
+                    value={docForm.referenceNumber}
+
+                    onChange={(e) => setDocForm((prev) => ({ ...prev, referenceNumber: e.target.value }))}
+
+                    placeholder="Optional reference"
+
+                  />
+
+                </div>
+
+                <div className="space-y-1">
+
+                  <Label htmlFor="new-doc-controller">Controller #</Label>
+
+                  <Input
+
+                    id="new-doc-controller"
+
+                    value={docForm.controllerNumber}
+
+                    onChange={(e) => setDocForm((prev) => ({ ...prev, controllerNumber: e.target.value }))}
+
+                    placeholder="Optional control number"
+
+                  />
+
+                </div>
+
+              </div>
+
+              <div className="space-y-1">
+
+                <Label htmlFor="new-doc-tags">Tags</Label>
+
+                <Input
+
+                  id="new-doc-tags"
+
+                  value={docForm.tags}
+
+                  onChange={(e) => setDocForm((prev) => ({ ...prev, tags: e.target.value }))}
+
+                  placeholder="Comma separated"
+
+                />
+
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+
+                <div className="space-y-1">
+
+                  <Label htmlFor="new-doc-expiry">Expiry date</Label>
+
+                  <Input
+
+                    id="new-doc-expiry"
+
+                    type="date"
+
+                    value={docForm.expiryDate}
+
+                    onChange={(e) => setDocForm((prev) => ({ ...prev, expiryDate: e.target.value }))}
+
+                  />
+
+                </div>
+
+                <div className="space-y-1">
+
+                  <Label htmlFor="new-doc-alert">Alert days</Label>
+
+                  <Input
+
+                    id="new-doc-alert"
+
+                    type="number"
+
+                    min="0"
+
+                    value={docForm.alertDays}
+
+                    onChange={(e) => setDocForm((prev) => ({ ...prev, alertDays: e.target.value }))}
+
+                  />
+
+                </div>
+
+              </div>
+
+              <ImageUpload
+
+                label="Upload document (PDF or image)"
+
+                value={docUpload}
+
+                onChange={setDocUpload}
+
+                accept="image/*,application/pdf"
+
+                maxSizeMB={5}
+
+              />
+
+              <Button onClick={handleCreateDocument} disabled={docSaving} className="w-full justify-center">
+
+                {docSaving ? (
+
+                  <>
+
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving
+
+                  </>
+
+                ) : (
+
+                  <>
+
+                    <Plus className="mr-2 h-4 w-4" /> Save document
+
+                  </>
+
+                )}
+
+              </Button>
+
+            </CardContent>
+
+          </Card>
+
+        </div>
+
+      </TabsContent>
+
+    </Tabs>
+
   );
+
 }
 
+
+
 export default Chatbot;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -11,6 +11,9 @@ import { metricsRouter } from "./metrics";
 import { templatesRouter } from "./routes/templates";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  app.get("/healthz", (_req, res) => {
+    res.json({ ok: true });
+  });
   app.use(authRouter);
   app.use(metricsRouter);
   app.use("/api", ensureAuth);
