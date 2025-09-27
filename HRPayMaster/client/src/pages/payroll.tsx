@@ -17,6 +17,7 @@ import type { PayrollRun, User } from "@shared/schema";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
 import { useSearch, useLocation } from "wouter";
 import { toastApiError } from "@/lib/toastError";
+import { useTranslation } from "react-i18next";
 
 interface PayrollGenerateRequest {
   period: string;
@@ -35,6 +36,7 @@ function useSearchParams() {
 }
 
 export default function Payroll() {
+  const { t } = useTranslation();
   const [isGenerateDialogOpen, setIsGenerateDialogOpen] = useState(false);
   const [selectedPayrollId, setSelectedPayrollId] = useState<string | null>(null);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
@@ -80,15 +82,15 @@ export default function Payroll() {
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       setIsGenerateDialogOpen(false);
       toast({
-        title: "Success",
-        description: "Payroll generated successfully",
+        title: t('common.success','Success'),
+        description: t('payroll.generated','Payroll generated successfully'),
       });
     },
     onError: (res: any) => {
       const status = res?.status;
       if (status === 409) {
         const description = res?.error?.message ?? res?.error;
-        toast({ title: "Duplicate period", description, variant: "destructive" });
+        toast({ title: t('payroll.duplicatePeriod','Duplicate period'), description, variant: "destructive" });
         return;
       }
       if (status === 401) {
@@ -101,9 +103,9 @@ export default function Payroll() {
           ? (res.error as any).message
           : (typeof res?.error === "string" ? res.error : undefined);
       if (serverMessage) {
-        toast({ title: "Error", description: serverMessage, variant: "destructive" });
+        toast({ title: t('errors.errorTitle','Error'), description: serverMessage, variant: "destructive" });
       } else {
-        toast({ title: "Error", description: "Failed to generate payroll", variant: "destructive" });
+        toast({ title: t('errors.errorTitle','Error'), description: t('payroll.generateFailed','Failed to generate payroll'), variant: "destructive" });
       }
     },
   });
@@ -119,12 +121,12 @@ export default function Payroll() {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       toast({
-        title: "Success",
-        description: "Payroll run deleted successfully",
+        title: t('common.success','Success'),
+        description: t('payroll.deleted','Payroll run deleted successfully'),
       });
     },
     onError: (err) => {
-      toastApiError(err as any, "Failed to delete payroll run");
+      toastApiError(err as any, t('payroll.deleteFailed','Failed to delete payroll run'));
     },
   });
 
@@ -137,18 +139,18 @@ export default function Payroll() {
     onSuccess: (_, payrollId) => {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
       queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
-      toast({ title: "Success", description: "Totals recalculated" });
+      toast({ title: t('common.success','Success'), description: t('payroll.recalcOk','Totals recalculated') });
     },
     onError: (err) => {
-      toastApiError(err as any, "Failed to recalculate totals");
+      toastApiError(err as any, t('payroll.recalcFailed','Failed to recalculate totals'));
     },
   });
 
   if (error) {
     return (
       <div>
-        <p>Error loading payroll data</p>
-        <Button onClick={() => refetch()}>Retry</Button>
+        <p>{t('payroll.errorLoading','Error loading payroll data')}</p>
+        <Button onClick={() => refetch()}>{t('common.retry','Retry')}</Button>
       </div>
     );
   }
@@ -157,8 +159,8 @@ export default function Payroll() {
     const exists = payrollRuns?.some((run) => run.period === data.period);
     if (exists) {
       toast({
-        title: "Error",
-        description: "Payroll run already exists for this period",
+        title: t('errors.errorTitle','Error'),
+        description: t('payroll.exists','Payroll run already exists for this period'),
         variant: "destructive",
       });
       return;
@@ -213,13 +215,13 @@ export default function Payroll() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Payroll</h1>
-          <p className="text-muted-foreground">Manage employee payroll and compensation</p>
+          <h1 className="text-3xl font-bold tracking-tight">{t('nav.payroll','Payroll')}</h1>
+          <p className="text-muted-foreground">{t('payroll.subtitle','Manage employee payroll and compensation')}</p>
         </div>
         <div className="animate-pulse">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             {[...Array(3)].map((_, i) => (
-              <div key={i} className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+              <div key={i} className="bg-white dark:bg-gray-900 rounded-lg shadow-sm p-6 border border-gray-200 dark:border-gray-800">
                 <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
                 <div className="h-8 bg-gray-200 rounded w-1/2"></div>
               </div>
@@ -256,7 +258,7 @@ export default function Payroll() {
                       </div>
                     </div>
                     <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-500">Total Payroll</p>
+                      <p className="text-sm font-medium text-gray-500">{t('payroll.total','Total Payroll')}</p>
                       <p className="text-2xl font-semibold text-gray-900">
                         {formatCurrency(totalPayroll)}
                       </p>
@@ -274,7 +276,7 @@ export default function Payroll() {
                       </div>
                     </div>
                     <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-500">Completed Runs</p>
+                      <p className="text-sm font-medium text-gray-500">{t('payroll.completedRuns','Completed Runs')}</p>
                       <p className="text-2xl font-semibold text-gray-900">{completedRuns}</p>
                     </div>
                   </div>
@@ -290,7 +292,7 @@ export default function Payroll() {
                       </div>
                     </div>
                     <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-500">Pending Runs</p>
+                      <p className="text-sm font-medium text-gray-500">{t('payroll.pendingRuns','Pending Runs')}</p>
                       <p className="text-2xl font-semibold text-gray-900">{pendingRuns}</p>
                     </div>
                   </div>
@@ -302,7 +304,7 @@ export default function Payroll() {
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg font-medium text-gray-900">Payroll History</CardTitle>
+                  <CardTitle className="text-lg font-medium text-gray-900">{t('payroll.history','Payroll History')}</CardTitle>
                   
                   <Dialog open={isGenerateDialogOpen} onOpenChange={setIsGenerateDialogOpen}>
                     <DialogTrigger asChild>
@@ -311,12 +313,12 @@ export default function Payroll() {
                         disabled={!canGenerate}
                       >
                         <Calculator className="mr-2" size={16} />
-                        Generate Payroll
+                        {t('payroll.generate','Generate Payroll')}
                       </Button>
                     </DialogTrigger>
                     <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
-                        <DialogTitle>Generate New Payroll</DialogTitle>
+                        <DialogTitle>{t('payroll.generateNew','Generate New Payroll')}</DialogTitle>
                       </DialogHeader>
                       <PayrollForm
                         onSubmit={handleGeneratePayroll}
@@ -359,42 +361,42 @@ export default function Payroll() {
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
+                      <thead className="bg-gray-50 dark:bg-gray-900">
                         <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                             Period
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                             Date Range
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                             Gross Amount
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                             Net Amount
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                             Status
                           </th>
-                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                             Actions
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
+                      <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
                         {payrollRuns.map((payroll) => (
-                          <tr key={payroll.id} className="hover:bg-gray-50">
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          <tr key={payroll.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
                               {payroll.period}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                               {formatDate(payroll.startDate)} - {formatDate(payroll.endDate)}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                               {formatCurrency(payroll.grossAmount)}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                               {formatCurrency(payroll.netAmount)}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
@@ -455,7 +457,7 @@ export default function Payroll() {
             <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
               <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle>Payroll Details</DialogTitle>
+                  <DialogTitle>{t('payroll.details','Payroll Details')}</DialogTitle>
                 </DialogHeader>
                 {selectedPayrollId && (
                   <PayrollDetailsView payrollId={selectedPayrollId} />
@@ -467,7 +469,7 @@ export default function Payroll() {
             <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
               <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle>Edit Payroll (Excel-like)</DialogTitle>
+                  <DialogTitle>{t('payroll.edit','Edit Payroll (Excel-like)')}</DialogTitle>
                 </DialogHeader>
                 {selectedPayrollId && (
                   <PayrollEditView payrollId={selectedPayrollId} />
@@ -477,9 +479,9 @@ export default function Payroll() {
             <ConfirmDialog
               open={isConfirmOpen}
               onOpenChange={handleConfirmOpenChange}
-              title="Delete Payroll Run"
-              description="Are you sure you want to delete this payroll run?"
-              confirmText="Delete"
+              title={t('payroll.deleteTitle','Delete Payroll Run')}
+              description={t('payroll.deleteDesc','Are you sure you want to delete this payroll run?')}
+              confirmText={t('actions.delete','Delete')}
               onConfirm={confirmDeletePayroll}
             />
     </div>

@@ -140,9 +140,9 @@ export default function NotificationsPage() {
   };
 
   const getUrgencyColor = (daysUntilExpiry: number) => {
-    if (daysUntilExpiry <= 7) return 'text-red-600 bg-red-50 border-red-200';
-    if (daysUntilExpiry <= 30) return 'text-orange-600 bg-orange-50 border-orange-200';
-    return 'text-gray-600 bg-gray-50 border-gray-200';
+    if (daysUntilExpiry <= 7) return 'text-red-600 bg-red-50 dark:text-red-300 dark:bg-red-950 border-red-200 dark:border-red-900';
+    if (daysUntilExpiry <= 30) return 'text-orange-600 bg-orange-50 dark:text-orange-300 dark:bg-orange-950 border-orange-200 dark:border-orange-900';
+    return 'text-gray-600 bg-gray-50 dark:text-gray-300 dark:bg-gray-900 border-gray-200 dark:border-gray-800';
   };
 
   if (isLoading) {
@@ -173,7 +173,7 @@ export default function NotificationsPage() {
         <h1 className="text-3xl font-bold">Notifications</h1>
         <div className="flex items-center space-x-2">
           <Badge variant="outline" className="text-sm">
-            {unreadNotifications.length} unread
+            {unreadNotifications.length} {t('notifications.unread','unread')}
           </Badge>
         </div>
       </div>
@@ -182,14 +182,14 @@ export default function NotificationsPage() {
         <Card>
           <CardContent className="p-6 text-center">
             <Bell className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No notifications</h3>
-            <p className="text-gray-500">You're all caught up! No document expiry alerts at this time.</p>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">{t('notifications.none','No notifications')}</h3>
+            <p className="text-gray-500 dark:text-gray-400">{t('notifications.caughtUp',"You're all caught up! No document expiry alerts at this time.")}</p>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-4">
           {notifications.map((notification: NotificationWithEmployee) => (
-            <Card key={notification.id} className={`${notification.status === 'unread' ? 'ring-2 ring-blue-200 bg-blue-50/30' : ''} ${getUrgencyColor(notification.daysUntilExpiry)} transition-all`}>
+            <Card key={notification.id} className={`${notification.status === 'unread' ? 'ring-2 ring-blue-200 dark:ring-blue-900 bg-blue-50/30 dark:bg-blue-950/30' : ''} ${getUrgencyColor(notification.daysUntilExpiry)} transition-all`}>
               <CardHeader className="pb-4">
                 <div className="flex items-start justify-between">
                   <div className="flex items-start space-x-3">

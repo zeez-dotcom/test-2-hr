@@ -8,8 +8,10 @@ import EmployeeEvents from "@/pages/employee-events";
 import Attendance from "@/pages/attendance";
 import DocumentGenerator from "@/pages/document-generator";
 import Logs from "@/pages/logs";
+import { useTranslation } from "react-i18next";
 
 export default function People() {
+  const { t } = useTranslation();
   const allowed = ["employees", "departments", "vacations", "events", "attendance", "logs", "docgen"] as const;
   const defaultTab = "employees" as const;
   const [location, navigate] = useLocation();
@@ -32,16 +34,16 @@ export default function People() {
   };
   return (
     <div className="space-y-4">
-      <h1 className="text-3xl font-bold tracking-tight">People</h1>
+      <h1 className="text-3xl font-bold tracking-tight">{t('nav.people','People')}</h1>
       <Tabs value={tab} onValueChange={onTabChange} className="space-y-4">
         <TabsList>
-          <TabsTrigger value="employees">Employees</TabsTrigger>
-          <TabsTrigger value="departments">Departments</TabsTrigger>
-          <TabsTrigger value="vacations">Vacations</TabsTrigger>
-          <TabsTrigger value="events">Events</TabsTrigger>
-          <TabsTrigger value="attendance">Attendance</TabsTrigger>
-          <TabsTrigger value="logs">Logs</TabsTrigger>
-          <TabsTrigger value="docgen">Document Generator</TabsTrigger>
+          <TabsTrigger value="employees">{t('nav.employees','Employees')}</TabsTrigger>
+          <TabsTrigger value="departments">{t('nav.departments','Departments')}</TabsTrigger>
+          <TabsTrigger value="vacations">{t('nav.vacations','Vacations')}</TabsTrigger>
+          <TabsTrigger value="events">{t('nav.employeeEvents','Events')}</TabsTrigger>
+          <TabsTrigger value="attendance">{t('nav.attendance','Attendance')}</TabsTrigger>
+          <TabsTrigger value="logs">{t('nav.logs','Logs')}</TabsTrigger>
+          <TabsTrigger value="docgen">{t('docgen.title','Document Generator')}</TabsTrigger>
         </TabsList>
         <TabsContent value="employees">
           <Employees />

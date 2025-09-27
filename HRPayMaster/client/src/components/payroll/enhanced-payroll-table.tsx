@@ -232,7 +232,7 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
   return (
     <div className="space-y-4">
       {/* Enhanced Toolbar */}
-      <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+      <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
         <div className="flex items-center space-x-2">
           <Button size="sm" variant="outline" onClick={handleCopy} disabled={!editingCell}>
             <Copy className="h-4 w-4 mr-1" />
@@ -264,7 +264,7 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
       {/* Enhanced Table */}
       <div className="overflow-x-auto border rounded-lg">
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+          <thead className="bg-gray-50 dark:bg-gray-900">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <div className="flex items-center space-x-1">
@@ -301,7 +301,7 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
               </th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
             {entries.map((entry) => {
               const healthIndicator = getHealthIndicator(entry);
               const HealthIcon = healthIndicator.icon;
@@ -314,7 +314,7 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
                     : "text-gray-900";
 
               return (
-                <tr key={entry.id} className="hover:bg-gray-50 transition-colors">
+                <tr key={entry.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div>

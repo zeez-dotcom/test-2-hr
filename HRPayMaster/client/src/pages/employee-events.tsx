@@ -313,7 +313,7 @@ export default function EmployeeEvents() {
         </div>
         <div className="animate-pulse space-y-4">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+            <div key={i} className="bg-white dark:bg-gray-900 rounded-lg shadow-sm p-6 border border-gray-200 dark:border-gray-800">
               <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
               <div className="h-8 bg-gray-200 rounded w-1/2"></div>
             </div>
@@ -604,7 +604,7 @@ export default function EmployeeEvents() {
           ) : (
             <div className="space-y-4">
               {viewEvents.map((event) => (
-                <div key={event.id} className="border rounded-lg p-4 hover:bg-gray-50">
+                <div key={event.id} className="border rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-800">
                   <div className="flex items-start justify-between">
                     <div className="flex items-start space-x-4">
                       <div className="mt-1">

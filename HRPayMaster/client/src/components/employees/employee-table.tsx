@@ -227,7 +227,7 @@ export default function EmployeeTable({
     return (
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+          <thead className="bg-gray-50 dark:bg-gray-900">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Position</th>
@@ -237,7 +237,7 @@ export default function EmployeeTable({
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
             {[...Array(5)].map((_, i) => (
               <tr key={i}>
                 <td className="px-6 py-4 whitespace-nowrap">
@@ -330,7 +330,7 @@ export default function EmployeeTable({
         </Select>
       </div>
       <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
+        <thead className="bg-gray-50 dark:bg-gray-900">
           <tr>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               <button
@@ -427,9 +427,9 @@ export default function EmployeeTable({
             </th>
           </tr>
         </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
+        <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
           {employees.map((employee) => (
-            <tr key={employee.id} className="hover:bg-gray-50">
+            <tr key={employee.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
               <td className="px-6 py-4 whitespace-nowrap">
                 <div className="flex items-center">
                   <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center overflow-hidden">

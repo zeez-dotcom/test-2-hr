@@ -123,7 +123,7 @@ export default function ImageUpload({
                 }`}
               >
                 {isPDF ? (
-                  <div className="w-full h-full flex items-center justify-center border border-gray-200 rounded-lg bg-gray-50">
+                  <div className="w-full h-full flex items-center justify-center border border-gray-200 dark:border-gray-800 rounded-lg bg-gray-50 dark:bg-gray-900">
                     <FileText className="w-8 h-8 text-gray-400" />
                   </div>
                 ) : (

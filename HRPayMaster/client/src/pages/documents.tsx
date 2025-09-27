@@ -43,7 +43,7 @@ export default function DocumentsPage() {
   });
 
   if (error) {
-    return <div>Error loading documents</div>;
+    return <div>{t('documents.errorLoading','Error loading documents')}</div>;
   }
 
   const getDocumentIcon = (type: string) => {
@@ -63,13 +63,13 @@ export default function DocumentsPage() {
 
   const getUrgencyBadge = (daysUntilExpiry: number) => {
     if (daysUntilExpiry <= 7) {
-      return <Badge className="bg-red-100 text-red-800 border-red-200">Critical - {daysUntilExpiry} days</Badge>;
+      return <Badge className="bg-red-100 text-red-800 border-red-200">{t('documents.criticalBadge','Critical - {{days}} days', { days: daysUntilExpiry })}</Badge>;
     } else if (daysUntilExpiry <= 30) {
-      return <Badge className="bg-orange-100 text-orange-800 border-orange-200">High - {daysUntilExpiry} days</Badge>;
+      return <Badge className="bg-orange-100 text-orange-800 border-orange-200">{t('documents.highBadge','High - {{days}} days', { days: daysUntilExpiry })}</Badge>;
     } else if (daysUntilExpiry <= 90) {
-      return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">Medium - {daysUntilExpiry} days</Badge>;
+      return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">{t('documents.mediumBadge','Medium - {{days}} days', { days: daysUntilExpiry })}</Badge>;
     }
-    return <Badge className="bg-gray-100 text-gray-800 border-gray-200">Low - {daysUntilExpiry} days</Badge>;
+    return <Badge className="bg-gray-100 text-gray-800 border-gray-200">{t('documents.lowBadge','Low - {{days}} days', { days: daysUntilExpiry })}</Badge>;
   };
 
   const getDocumentCards = (check: DocumentExpiryCheck) => {
@@ -179,33 +179,33 @@ export default function DocumentsPage() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="border-red-200 bg-red-50">
+        <Card className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950">
           <CardHeader className="pb-3">
-            <CardTitle className="text-lg text-red-800">{t('documents.critical','Critical Expiries')}</CardTitle>
-            <CardDescription className="text-red-600">{t('documents.within7','Documents expiring within 7 days')}</CardDescription>
+            <CardTitle className="text-lg text-red-800 dark:text-red-200">{t('documents.critical','Critical Expiries')}</CardTitle>
+            <CardDescription className="text-red-600 dark:text-red-300">{t('documents.within7','Documents expiring within 7 days')}</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-red-800">{criticalExpiries.length}</div>
+            <div className="text-3xl font-bold text-red-800 dark:text-red-200">{criticalExpiries.length}</div>
           </CardContent>
         </Card>
 
-        <Card className="border-orange-200 bg-orange-50">
+        <Card className="border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950">
           <CardHeader className="pb-3">
-            <CardTitle className="text-lg text-orange-800">{t('documents.upcoming','Upcoming Expiries')}</CardTitle>
-            <CardDescription className="text-orange-600">{t('documents.requireAttention','Documents requiring attention')}</CardDescription>
+            <CardTitle className="text-lg text-orange-800 dark:text-orange-200">{t('documents.upcoming','Upcoming Expiries')}</CardTitle>
+            <CardDescription className="text-orange-600 dark:text-orange-300">{t('documents.requireAttention','Documents requiring attention')}</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-orange-800">{upcomingExpiries.length}</div>
+            <div className="text-3xl font-bold text-orange-800 dark:text-orange-200">{upcomingExpiries.length}</div>
           </CardContent>
         </Card>
 
-        <Card className="border-blue-200 bg-blue-50">
+        <Card className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950">
           <CardHeader className="pb-3">
-            <CardTitle className="text-lg text-blue-800">Total Employees</CardTitle>
-            <CardDescription className="text-blue-600">With document tracking</CardDescription>
+            <CardTitle className="text-lg text-blue-800 dark:text-blue-200">{t('documents.totalEmployees','Total Employees')}</CardTitle>
+            <CardDescription className="text-blue-600 dark:text-blue-300">{t('documents.withTracking','With document tracking')}</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-blue-800">{expiryChecks.length}</div>
+            <div className="text-3xl font-bold text-blue-800 dark:text-blue-200">{expiryChecks.length}</div>
           </CardContent>
         </Card>
       </div>
@@ -215,22 +215,22 @@ export default function DocumentsPage() {
         <Card>
           <CardContent className="p-6 text-center">
             <FileText className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No documents to track</h3>
-            <p className="text-gray-500">Add document information to employees to start tracking expiry dates.</p>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">{t('documents.noneToTrack','No documents to track')}</h3>
+            <p className="text-gray-500">{t('documents.addInfoHint','Add document information to employees to start tracking expiry dates.')}</p>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-6">
           {expiryChecks.map((check: DocumentExpiryCheck) => (
             <Card key={check.employeeId} className="overflow-hidden">
-              <CardHeader className="bg-gray-50 border-b">
+              <CardHeader className="bg-gray-50 dark:bg-gray-900 border-b dark:border-gray-800">
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle className="text-xl">{check.employeeName}</CardTitle>
                     <CardDescription>{check.email}</CardDescription>
                   </div>
                   <Badge variant="outline" className="text-sm">
-                    {getDocumentCards(check).length} document{getDocumentCards(check).length !== 1 ? 's' : ''}
+                    {t('documents.documentsCount','{{count}} documents', { count: getDocumentCards(check).length })}
                   </Badge>
                 </div>
               </CardHeader>
@@ -242,23 +242,23 @@ export default function DocumentsPage() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
                           {getDocumentIcon(doc.type)}
-                          <h4 className="font-medium">{doc.title}</h4>
+                          <h4 className="font-medium">{t(`documents.type.${doc.type}`, doc.title)}</h4>
                         </div>
                         {getUrgencyBadge(doc.daysUntilExpiry)}
                       </div>
                       
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
-                          <span className="text-gray-500">Number:</span>
+                          <span className="text-gray-500">{t('documents.numberLabel','Number:')}</span>
                           <span className="font-mono">{doc.number}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-500">Expires:</span>
+                          <span className="text-gray-500">{t('documents.expiresLabel','Expires:')}</span>
                           <span>{format(new Date(doc.expiryDate), "MMM d, yyyy")}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-500">Alert set for:</span>
-                          <span>{doc.alertDays} days before</span>
+                          <span className="text-gray-500">{t('documents.alertSetFor','Alert set for:')}</span>
+                          <span>{t('documents.daysBefore','{{days}} days before',{ days: doc.alertDays })}</span>
                         </div>
                       </div>
 
@@ -271,7 +271,7 @@ export default function DocumentsPage() {
                               : 'bg-yellow-100 text-yellow-800'
                         }`}>
                           <AlertTriangle className="w-3 h-3" />
-                          <span>Action required soon</span>
+                          <span>{t('documents.actionSoon','Action required soon')}</span>
                         </div>
                       )}
                     </div>

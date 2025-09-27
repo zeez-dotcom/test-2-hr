@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { useTranslation } from "react-i18next";
 
 import CarImport from "@/components/cars/car-import";
 
@@ -27,6 +28,7 @@ import { apiGet, apiPost, apiPut, apiDelete, apiUpload } from "@/lib/http";
 import { toastApiError } from "@/lib/toastError";
 
 export default function Cars() {
+  const { t } = useTranslation();
   const [isCreateCarDialogOpen, setIsCreateCarDialogOpen] = useState(false);
   const [isAssignCarDialogOpen, setIsAssignCarDialogOpen] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
@@ -99,13 +101,13 @@ export default function Cars() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
       setIsCreateCarDialogOpen(false);
-      toast({ title: "Car added successfully" });
+      toast({ title: t('cars.addSuccess','Car added successfully') });
     },
     onError: (err: any) => {
       if (err?.status === 413) {
-        toastApiError(err, "File too large");
+        toastApiError(err, t('cars.fileTooLarge','File too large'));
       } else {
-        toastApiError(err, "Failed to add car");
+        toastApiError(err, t('cars.addFailed','Failed to add car'));
       }
     }
   });
@@ -120,18 +122,18 @@ export default function Cars() {
         try {
           await postCarStatus(variables.carId, "assigned");
         } catch (err) {
-          toastApiError(err as any, "Failed to update car status");
+          toastApiError(err as any, t('cars.statusUpdateFailed','Failed to update car status'));
         }
       }
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
       queryClient.invalidateQueries({ queryKey: ["/api/car-assignments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/car-assignments/search"] });
       setIsAssignCarDialogOpen(false);
-      toast({ title: "Car assigned successfully" });
+      toast({ title: t('cars.assignSuccess','Car assigned successfully') });
     },
     onError: (err: any) => {
       const msg = err?.message || 'Failed to assign car';
-      toast({ title: "Failed to assign car", description: msg, variant: "destructive" });
+      toast({ title: t('cars.assignFailed','Failed to assign car'), description: msg, variant: "destructive" });
     }
   });
 
@@ -146,16 +148,16 @@ export default function Cars() {
         try {
           await postCarStatus(variables.carId, "available");
         } catch (err) {
-          toastApiError(err as any, "Failed to update car status");
+          toastApiError(err as any, t('cars.statusUpdateFailed','Failed to update car status'));
         }
       }
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
       queryClient.invalidateQueries({ queryKey: ["/api/car-assignments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/car-assignments/search"] });
-      toast({ title: "Assignment updated successfully" });
+      toast({ title: t('cars.assignmentUpdateSuccess','Assignment updated successfully') });
     },
     onError: () => {
-      toast({ title: "Failed to update assignment", variant: "destructive" });
+      toast({ title: t('cars.assignmentUpdateFailed','Failed to update assignment'), variant: "destructive" });
     }
   });
 
@@ -166,10 +168,10 @@ export default function Cars() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
-      toast({ title: "Car deleted successfully" });
+      toast({ title: t('cars.deleteSuccess','Car deleted successfully') });
     },
     onError: () => {
-      toast({ title: "Failed to delete car", variant: "destructive" });
+      toast({ title: t('cars.deleteFailed','Failed to delete car'), variant: "destructive" });
     }
   });
 
@@ -182,13 +184,13 @@ export default function Cars() {
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
       setEditingCar(null);
       setRegistrationPreview(null);
-      toast({ title: "Car updated successfully" });
+      toast({ title: t('cars.updateSuccess','Car updated successfully') });
     },
     onError: (err: any) => {
       if (err?.status === 413) {
-        toastApiError(err, "File too large");
+        toastApiError(err, t('cars.fileTooLarge','File too large'));
       } else {
-        toastApiError(err, "Failed to update car");
+        toastApiError(err, t('cars.updateFailed','Failed to update car'));
       }
     }
   });
@@ -230,7 +232,7 @@ export default function Cars() {
       if (!res.ok) throw res;
     },
     onError: (err) => {
-      toastApiError(err as any, 'Failed to log repair');
+      toastApiError(err as any, t('cars.repairLogFailed','Failed to log repair'));
     }
   });
 
@@ -246,12 +248,12 @@ export default function Cars() {
       toast({
         title:
           variables.status === "maintenance"
-            ? "Car marked for maintenance"
-            : "Car returned to service",
+            ? t('cars.markedMaintenance','Car marked for maintenance')
+            : t('cars.returnedToService','Car returned to service'),
       });
     },
     onError: (err) => {
-      toastApiError(err as any, 'Failed to update car status');
+      toastApiError(err as any, t('cars.statusUpdateFailed','Failed to update car status'));
     },
   });
 
@@ -336,7 +338,7 @@ export default function Cars() {
           status: "available",
         });
       } else {
-        toast({ title: "Repair logged successfully" });
+        toast({ title: t('cars.repairLogged','Repair logged successfully') });
       }
       resetRepairFormValues();
       setRepairDialogContext(null);
@@ -551,22 +553,22 @@ export default function Cars() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Fleet Management</h1>
-          <p className="text-muted-foreground">Manage company vehicles and track assignments</p>
+          <h1 className="text-3xl font-bold tracking-tight">{t('cars.title','Fleet Management')}</h1>
+          <p className="text-muted-foreground">{t('cars.subtitle','Manage company vehicles and track assignments')}</p>
         </div>
         <div className="flex space-x-2">
           <Dialog open={isAssignCarDialogOpen} onOpenChange={setIsAssignCarDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="outline">
                 <Users className="w-4 h-4 mr-2" />
-                Assign Car
+                {t('cars.assignCar','Assign Car')}
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[425px]">
               <DialogHeader>
-                <DialogTitle>Assign Car to Employee</DialogTitle>
+                <DialogTitle>{t('cars.assignTitle','Assign Car to Employee')}</DialogTitle>
                 <DialogDescription>
-                  Assign an available vehicle to an employee.
+                  {t('cars.assignDesc','Assign an available vehicle to an employee.')}
                 </DialogDescription>
               </DialogHeader>
               <Form {...assignmentForm}>
@@ -576,11 +578,11 @@ export default function Cars() {
                     name="carId"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Available Car</FormLabel>
+                        <FormLabel>{t('cars.availableCar','Available Car')}</FormLabel>
                         <Select onValueChange={field.onChange} value={field.value || undefined}>
                           <FormControl>
                             <SelectTrigger>
-                              <SelectValue placeholder="Select Car" />
+                              <SelectValue placeholder={t('cars.selectCar','Select Car')} />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
@@ -655,7 +657,7 @@ export default function Cars() {
 
                   <DialogFooter>
                     <Button type="submit" disabled={assignCarMutation.isPending}>
-                      {assignCarMutation.isPending ? "Assigning..." : "Assign Car"}
+                      {assignCarMutation.isPending ? t('cars.assigning','Assigning...') : t('cars.assignCar','Assign Car')}
                     </Button>
                   </DialogFooter>
                 </form>
@@ -667,14 +669,14 @@ export default function Cars() {
             <DialogTrigger asChild>
               <Button>
                 <Plus className="w-4 h-4 mr-2" />
-                Add Car
+                {t('cars.addCar','Add Car')}
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[425px]">
               <DialogHeader>
-                <DialogTitle>Add New Vehicle</DialogTitle>
+                <DialogTitle>{t('cars.addVehicleTitle','Add New Vehicle')}</DialogTitle>
                 <DialogDescription>
-                  Add a new vehicle to the company fleet.
+                  {t('cars.addVehicleDesc','Add a new vehicle to the company fleet.')}
                 </DialogDescription>
               </DialogHeader>
               <Form {...carForm}>
@@ -685,7 +687,7 @@ export default function Cars() {
                       name="make"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Make</FormLabel>
+                          <FormLabel>{t('cars.make','Make')}</FormLabel>
                           <FormControl>
                             <Input placeholder="Toyota" {...field} />
                           </FormControl>
@@ -699,7 +701,7 @@ export default function Cars() {
                       name="model"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Model</FormLabel>
+                          <FormLabel>{t('cars.model','Model')}</FormLabel>
                           <FormControl>
                             <Input placeholder="Camry" {...field} />
                           </FormControl>
@@ -715,7 +717,7 @@ export default function Cars() {
                       name="year"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Year</FormLabel>
+                          <FormLabel>{t('cars.year','Year')}</FormLabel>
                           <FormControl>
                             <Input type="number" placeholder="2024" {...field} />
                           </FormControl>
@@ -729,7 +731,7 @@ export default function Cars() {
                       name="plateNumber"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Plate Number</FormLabel>
+                          <FormLabel>{t('cars.plateNumber','Plate Number')}</FormLabel>
                           <FormControl>
                             <Input placeholder="ABC-123" {...field} />
                           </FormControl>
@@ -744,7 +746,7 @@ export default function Cars() {
                     name="mileage"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Current Mileage</FormLabel>
+                        <FormLabel>{t('cars.currentMileage','Current Mileage')}</FormLabel>
                         <FormControl>
                           <Input type="number" placeholder="25000" {...field} />
                         </FormControl>
@@ -758,7 +760,7 @@ export default function Cars() {
                     name="registrationOwner"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Registration Owner</FormLabel>
+                        <FormLabel>{t('cars.registrationOwner','Registration Owner')}</FormLabel>
                         <FormControl>
                           <Input placeholder="Owner name" {...field} />
                         </FormControl>
@@ -772,7 +774,7 @@ export default function Cars() {
                     name="registrationExpiry"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Registration Expiry</FormLabel>
+                        <FormLabel>{t('cars.registrationExpiry','Registration Expiry')}</FormLabel>
                         <FormControl>
                           <Input type="date" {...field} />
                         </FormControl>
@@ -786,7 +788,7 @@ export default function Cars() {
                     name="spareTireCount"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Spare Tires (count)</FormLabel>
+                        <FormLabel>{t('cars.spareTires','Spare Tires (count)')}</FormLabel>
                         <FormControl>
                           <Input type="number" min={0} {...field} onChange={e => field.onChange(Number(e.target.value))} />
                         </FormControl>
@@ -800,7 +802,7 @@ export default function Cars() {
                     name="carImage"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Car Image</FormLabel>
+                        <FormLabel>{t('cars.carImage','Car Image')}</FormLabel>
                         <FormControl>
                           <Input
                             type="file"
@@ -815,7 +817,7 @@ export default function Cars() {
                         {carImagePreview && (
                           <img
                             src={sanitizeImageSrc(carImagePreview)}
-                            alt="Car preview"
+                            alt={t('cars.carPreviewAlt','Car preview')}
                             className="h-32 mt-2 rounded-md object-cover"
                           />
                         )}
@@ -829,7 +831,7 @@ export default function Cars() {
                     name="registrationDocumentImage"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Registration Document</FormLabel>
+                        <FormLabel>{t('cars.registrationDocument','Registration Document')}</FormLabel>
                         <FormControl>
                           <Input
                             type="file"
@@ -844,7 +846,7 @@ export default function Cars() {
                         {(registrationPreview || typeof field.value === "string") && (
                           <img
                             src={sanitizeImageSrc(registrationPreview || (field.value as string))}
-                            alt="Registration document preview"
+                            alt={t('cars.registrationPreviewAlt','Registration document preview')}
                             className="h-32 mt-2 rounded-md object-cover"
                           />
                         )}
@@ -858,7 +860,7 @@ export default function Cars() {
                     name="registrationVideo"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Registration Video (optional)</FormLabel>
+                        <FormLabel>{t('cars.registrationVideo','Registration Video (optional)')}</FormLabel>
                         <FormControl>
                           <Input
                             type="file"
@@ -876,7 +878,7 @@ export default function Cars() {
 
                   <DialogFooter>
                     <Button type="submit" disabled={createCarMutation.isPending}>
-                      {createCarMutation.isPending ? "Adding..." : "Add Car"}
+                      {createCarMutation.isPending ? t('cars.adding','Adding...') : t('cars.addCar','Add Car')}
                     </Button>
                   </DialogFooter>
                 </form>
@@ -888,14 +890,14 @@ export default function Cars() {
             <DialogTrigger asChild>
               <Button variant="outline">
                 <Upload className="w-4 h-4 mr-2" />
-                Import
+                {t('cars.import','Import')}
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[425px]">
               <DialogHeader>
-                <DialogTitle>Import Vehicles</DialogTitle>
+                <DialogTitle>{t('cars.importTitle','Import Vehicles')}</DialogTitle>
                 <DialogDescription>
-                  Upload a spreadsheet to add or update vehicles.
+                  {t('cars.importDesc','Upload a spreadsheet to add or update vehicles.')}
                 </DialogDescription>
               </DialogHeader>
               <CarImport />
@@ -1229,10 +1231,10 @@ export default function Cars() {
                             <Trash2 className="w-3 h-3" />
                           </Button>
                           <Button size="sm" variant="outline" onClick={() => openRepairDialog(car, "log")}>
-                            Repair
+                            {t('cars.repair','Repair')}
                           </Button>
                           <Button size="sm" variant="outline" onClick={() => setRepairsDialogCar(car)}>
-                            Repairs
+                            {t('cars.repairs','Repairs')}
                           </Button>
                           <Button
                             size="sm"
@@ -1250,7 +1252,7 @@ export default function Cars() {
                               )
                             }
                           >
-                            {car.status === "maintenance" ? "Back to Service" : "Mark as Maintenance"}
+                            {car.status === "maintenance" ? t('cars.backToService','Back to Service') : t('cars.markMaintenance','Mark as Maintenance')}
                           </Button>
                         </div>
                       </div>
@@ -1259,19 +1261,19 @@ export default function Cars() {
                     <CardContent>
                       <div className="space-y-2">
                         <div className="flex justify-between items-center">
-                          <span className="text-sm text-muted-foreground">Status</span>
+                          <span className="text-sm text-muted-foreground">{t('cars.status','Status')}</span>
                           <div className="flex items-center gap-2">
                             {getStatusBadge(car.status)}
-                            <Badge variant="outline">Spare Tires: {(car as any).spareTireCount ?? 0}</Badge>
+                            <Badge variant="outline">{t('cars.spareTiresLabel','Spare Tires')}: {(car as any).spareTireCount ?? 0}</Badge>
                           </div>
                         </div>
                         <div className="flex justify-between items-center">
-                          <span className="text-sm text-muted-foreground">Mileage</span>
-                          <span className="text-sm font-medium">{car.mileage?.toLocaleString()} miles</span>
+                          <span className="text-sm text-muted-foreground">{t('cars.mileage','Mileage')}</span>
+                          <span className="text-sm font-medium">{car.mileage?.toLocaleString()} {t('cars.miles','miles')}</span>
                         </div>
                         {car.registrationOwner && (
                           <div className="flex justify-between items-center">
-                            <span className="text-sm text-muted-foreground">Owner</span>
+                            <span className="text-sm text-muted-foreground">{t('cars.owner','Owner')}</span>
                             <span className="text-sm font-medium">{car.registrationOwner}</span>
                           </div>
                         )}
@@ -1296,13 +1298,13 @@ export default function Cars() {
                         {car.currentAssignment && (
                           <div className="pt-2 border-t">
                             <div className="flex justify-between items-center">
-                              <span className="text-sm text-muted-foreground">Assigned to</span>
+                              <span className="text-sm text-muted-foreground">{t('cars.assignedTo','Assigned to')}</span>
                               <span className="text-sm font-medium">
                                 {car.currentAssignment.employee?.firstName} {car.currentAssignment.employee?.lastName}
                               </span>
                             </div>
                             <div className="flex justify-between items-center mt-1">
-                              <span className="text-sm text-muted-foreground">Since</span>
+                              <span className="text-sm text-muted-foreground">{t('cars.since','Since')}</span>
                               <span className="text-sm">{format(new Date(car.currentAssignment.assignedDate), "MMM d, yyyy")}</span>
                             </div>
                           </div>
@@ -1336,8 +1338,8 @@ export default function Cars() {
                 <Card>
                   <CardContent className="p-6 text-center">
                     <Users className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No active assignments</h3>
-                    <p className="text-gray-500">No cars are currently assigned to employees.</p>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">{t('cars.noActive','No active assignments')}</h3>
+                    <p className="text-gray-500">{t('cars.noActiveDesc','No cars are currently assigned to employees.')}</p>
                   </CardContent>
                 </Card>
               ) : (
@@ -1365,7 +1367,7 @@ export default function Cars() {
                               onClick={() => viewAssignmentDocument(assignment)}
                             >
                               <FileText className="w-3 h-3 mr-1" />
-                              View Document
+                              {t('cars.viewDocument','View Document')}
                             </Button>
                             <Button
                               size="sm"
@@ -1374,7 +1376,7 @@ export default function Cars() {
                               disabled={updateAssignmentMutation.isPending}
                             >
                               <XCircle className="w-3 h-3 mr-1" />
-                              Return Car
+                              {t('cars.returnCar','Return Car')}
                             </Button>
                           </div>
                         </div>
@@ -1382,18 +1384,18 @@ export default function Cars() {
                       <CardContent>
                         <div className="grid grid-cols-2 gap-4 text-sm">
                           <div>
-                            <span className="text-muted-foreground">Employee</span>
+                            <span className="text-muted-foreground">{t('cars.employee','Employee')}</span>
                             <p className="font-medium">{assignment.employee?.firstName} {assignment.employee?.lastName}</p>
                             <p>{assignment.employee?.phone}</p>
-                            <p>License: {assignment.employee?.drivingLicenseNumber}</p>
+                            <p>{t('cars.license','License')}: {assignment.employee?.drivingLicenseNumber}</p>
                           </div>
                           <div>
-                            <span className="text-muted-foreground">Car Registration</span>
+                            <span className="text-muted-foreground">{t('cars.carRegistration','Car Registration')}</span>
                             <p className="font-medium">{assignment.car?.plateNumber}</p>
-                            <p>Expiry: {assignment.car?.registrationExpiry ? format(new Date(assignment.car.registrationExpiry), "MMM d, yyyy") : "N/A"}</p>
+                            <p>{t('cars.expiry','Expiry')}: {assignment.car?.registrationExpiry ? format(new Date(assignment.car.registrationExpiry), "MMM d, yyyy") : "N/A"}</p>
                           </div>
                           <div>
-                            <span className="text-muted-foreground">Assigned Date</span>
+                            <span className="text-muted-foreground">{t('cars.assignedDate','Assigned Date')}</span>
                             <p className="font-medium">{format(new Date(assignment.assignedDate), "MMM d, yyyy")}</p>
                           </div>
                           <div>
@@ -1629,13 +1631,11 @@ export default function Cars() {
       >
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>{isReturnDialog ? "Return Car to Service" : "Log Car Repair"}</DialogTitle>
+            <DialogTitle>{isReturnDialog ? t('cars.returnCarToService','Return Car to Service') : t('cars.logRepair','Log Car Repair')}</DialogTitle>
             <DialogDescription>
               {isReturnDialog
-                ? `Record the maintenance details before returning ${
-                    repairDialogVehicleName || "this vehicle"
-                  } to service.`
-                : "Track maintenance and repair activity."}
+                ? t('cars.returnServiceDesc', 'Record the maintenance details before returning {{vehicle}} to service.', { vehicle: repairDialogVehicleName || t('cars.thisVehicle','this vehicle') })
+                : t('cars.trackMaintenanceDesc','Track maintenance and repair activity.')}
             </DialogDescription>
           </DialogHeader>
           <Form {...repairForm}>
@@ -1645,7 +1645,7 @@ export default function Cars() {
                 name="repairDate"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Repair Date</FormLabel>
+                    <FormLabel>{t('cars.repairDate','Repair Date')}</FormLabel>
                     <FormControl>
                       <Input type="date" {...field} />
                     </FormControl>
@@ -1658,7 +1658,7 @@ export default function Cars() {
                 name="description"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Description</FormLabel>
+                    <FormLabel>{t('cars.description','Description')}</FormLabel>
                     <FormControl>
                       <Textarea placeholder="What was repaired?" {...field} />
                     </FormControl>
@@ -1672,7 +1672,7 @@ export default function Cars() {
                   name="cost"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Cost (optional)</FormLabel>
+                      <FormLabel>{t('cars.costOptional','Cost (optional)')}</FormLabel>
                       <FormControl>
                         <Input type="number" step="0.01" {...field} onChange={e => field.onChange(e.target.value)} />
                       </FormControl>
@@ -1685,7 +1685,7 @@ export default function Cars() {
                   name="vendor"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Vendor (optional)</FormLabel>
+                      <FormLabel>{t('cars.vendorOptional','Vendor (optional)')}</FormLabel>
                       <FormControl>
                         <Input placeholder="Workshop name" {...field} />
                       </FormControl>
@@ -1699,7 +1699,7 @@ export default function Cars() {
                 name="document"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Receipt/Document (optional)</FormLabel>
+                    <FormLabel>{t('cars.receiptOptional','Receipt/Document (optional)')}</FormLabel>
                     <FormControl>
                       <Input type="file" accept="image/*,application/pdf" onChange={e => field.onChange(e.target.files?.[0])} />
                     </FormControl>
@@ -1711,11 +1711,11 @@ export default function Cars() {
                 <Button type="submit" disabled={isRepairDialogSubmitting}>
                   {isReturnDialog
                     ? isRepairDialogSubmitting
-                      ? "Returning..."
-                      : "Return to Service"
+                      ? t('cars.returning','Returning...')
+                      : t('cars.returnToService','Return to Service')
                     : isRepairDialogSubmitting
-                    ? "Saving..."
-                    : "Save Repair"}
+                    ? t('cars.saving','Saving...')
+                    : t('cars.saveRepair','Save Repair')}
                 </Button>
               </DialogFooter>
             </form>

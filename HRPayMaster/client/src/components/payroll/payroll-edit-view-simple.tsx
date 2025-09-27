@@ -186,7 +186,7 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
 
     return (
       <div
-        className={`cursor-pointer hover:bg-gray-50 p-1 rounded ${className}`}
+        className={`cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 p-1 rounded ${className}`}
         onClick={handleCellClick}
       >
         {field === "workingDays" || field === "actualWorkingDays" || field === "vacationDays" ? 

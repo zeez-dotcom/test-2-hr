@@ -172,7 +172,7 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
 
     return (
       <div
-        className={`cursor-pointer hover:bg-gray-50 p-1 rounded ${className}`}
+        className={`cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 p-1 rounded ${className}`}
         onClick={handleCellClick}
       >
         {field === "workingDays" || field === "actualWorkingDays" || field === "vacationDays" ? 
@@ -274,7 +274,7 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+                <thead className="bg-gray-50 dark:bg-gray-900">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Employee
@@ -302,9 +302,9 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
                   {payrollRun.entries.map((entry) => (
-                    <tr key={entry.id} className="hover:bg-gray-50">
+                    <tr key={entry.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">
                           Employee {entry.employeeId}

@@ -768,7 +768,7 @@ export default function Reports() {
                           ? sanitizeImageSrc(employee.profileImage)
                           : '';
                       return (
-                        <div key={employee.id} className="p-4 bg-gray-50 rounded-lg border">
+                        <div key={employee.id} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border dark:border-gray-800">
                           <div className="flex items-center space-x-3 mb-3">
                             <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center overflow-hidden">
                               {profileSrc ? (
@@ -826,7 +826,7 @@ export default function Reports() {
                   {filteredEvents.slice(0, 10).map(event => {
                     const employee = employees?.find(emp => emp.id === event.employeeId);
                     return (
-                      <div key={event.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div key={event.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
                         <div className="flex items-center space-x-3">
                           <Badge variant={
                             event.eventType === "bonus" ? "default" :

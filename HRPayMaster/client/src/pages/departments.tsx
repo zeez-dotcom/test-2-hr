@@ -146,7 +146,7 @@ export default function Departments() {
   });
 
   if (departmentsError || employeesError) {
-    return <div>Error loading departments</div>;
+    return <div>{t('departmentsPage.errorLoading','Error loading departments')}</div>;
   }
 
   const handleAddDepartment = (data: DepartmentFormData) => {
@@ -215,7 +215,7 @@ export default function Departments() {
         <div className="animate-pulse">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+              <div key={i} className="bg-white dark:bg-gray-900 rounded-lg shadow-sm p-6 border border-gray-200 dark:border-gray-800">
                 <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
                 <div className="h-3 bg-gray-200 rounded w-full mb-4"></div>
                 <div className="h-8 bg-gray-200 rounded w-1/3"></div>
@@ -232,8 +232,8 @@ export default function Departments() {
       {/* Content header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Departments</h1>
-          <p className="text-muted-foreground">Manage your organization's departments</p>
+          <h1 className="text-3xl font-bold tracking-tight">{t('nav.departments','Departments')}</h1>
+          <p className="text-muted-foreground">{t('departmentsPage.subtitle','Manage your organization\'s departments')}</p>
         </div>
         
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>

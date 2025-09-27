@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { EmployeeEvent } from "@shared/schema";
 import { Printer } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export default function Logs() {
+  const { t } = useTranslation();
   const [range, setRange] = useState(() => {
     const d = new Date();
     const start = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
@@ -73,16 +75,16 @@ export default function Logs() {
       </div>
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <CardTitle>Company Activity Log</CardTitle>
+          <CardTitle>{t('logs.title','Company Activity Log')}</CardTitle>
           <Button variant="outline" size="sm" onClick={() => window.print()}>
             <Printer className="mr-2 h-4 w-4" />
-            Print
+            {t('actions.print','Print')}
           </Button>
         </CardHeader>
         <CardContent>
           <ul className="space-y-2 list-disc pl-5 text-sm">
             {filtered.length === 0 ? (
-              <div className="text-muted-foreground">No events in this period</div>
+              <div className="text-muted-foreground">{t('logs.none','No events in this period')}</div>
             ) : (
               filtered.map((ev) => (
                 <li key={ev.id}>

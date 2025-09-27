@@ -131,7 +131,7 @@ export default function PayrollSummary({
                 <h4 className="text-sm font-medium text-gray-900">Employee Adjustments</h4>
                 <div className="space-y-2 max-h-40 overflow-y-auto">
                   {employeesWithAdjustments.map((entry) => (
-                    <div key={entry.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                    <div key={entry.id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-900 rounded">
                       <div className="flex items-center space-x-2">
                         <span className="text-sm font-medium">
                           {entry.employee?.firstName} {entry.employee?.lastName}
@@ -167,7 +167,7 @@ export default function PayrollSummary({
         <CardContent>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50 dark:bg-gray-900">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Employee
@@ -192,7 +192,7 @@ export default function PayrollSummary({
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
                 {entries.map((entry) => {
                   const totalEmployeeDeductions =
                     parseFloat(entry.taxDeduction) +

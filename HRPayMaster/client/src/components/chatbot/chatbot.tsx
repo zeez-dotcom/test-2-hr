@@ -1543,7 +1543,7 @@ export function Chatbot() {
 
                     return (
 
-                      <div key={doc.id} className="rounded border bg-white p-3 shadow-sm">
+                      <div key={doc.id} className="rounded border bg-white dark:bg-gray-900 p-3 shadow-sm">
 
                         <div className="flex flex-wrap items-start justify-between gap-3">
 
@@ -1942,7 +1942,6 @@ export function Chatbot() {
 
 
 export default Chatbot;
-
 
 
 
