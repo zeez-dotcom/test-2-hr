@@ -24,20 +24,16 @@ async function request(
   }
 
   try {
-    // Prefer same-origin during development so switching ports (e.g. 5001, 5020)
-    // does not require updating VITE_API_BASE_URL. Still honor absolute URLs
-    // and allow explicit base URL in production.
+    // Prefer explicitly configured base URL when available. During development,
+    // fall back to the current origin only when no base is provided. Still honor
+    // absolute URLs and allow explicit base URL in production.
     const env = (import.meta as any)?.env || {};
     const isTestEnv = env?.MODE === "test";
     const isProd = env?.MODE === "production";
     let base: string | undefined = env?.VITE_API_BASE_URL as string | undefined;
 
-    if (typeof window !== "undefined" && !isProd) {
-      const current = window.location.origin;
-      // If base is unset, or points to localhost on a different port, prefer current origin in dev
-      if (!base || (/^https?:\/\/localhost(?::\d+)?/i.test(base) && !base.startsWith(current))) {
-        base = current;
-      }
+    if (typeof window !== "undefined" && !isProd && !base) {
+      base = window.location.origin;
     }
 
     const shouldPrefix = !!base && !isTestEnv && !/^https?:\/\//i.test(url);

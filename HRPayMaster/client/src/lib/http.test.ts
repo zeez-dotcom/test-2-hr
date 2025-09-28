@@ -36,5 +36,41 @@ describe("request", () => {
     expect(response.blob).toHaveBeenCalledTimes(1);
     expect(result.data).toBe(blob);
   });
+
+  it("prefers configured base URL over window origin in development", async () => {
+    const originalWindow = globalThis.window;
+
+    vi.stubEnv("MODE", "development");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:5000");
+
+    globalThis.window = {
+      location: {
+        origin: "http://localhost:5173",
+      },
+    } as any;
+
+    const response = {
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: vi.fn().mockResolvedValue({ success: true }),
+    } satisfies Partial<Response> & { ok: true; status: number };
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(response as Response);
+
+    try {
+      const result = await apiGet("/api/test");
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        "http://localhost:5000/api/test",
+        expect.objectContaining({ credentials: "include" }),
+      );
+
+      expect(result.ok).toBe(true);
+    } finally {
+      vi.unstubAllEnvs();
+      globalThis.window = originalWindow;
+    }
+  });
 });
 
