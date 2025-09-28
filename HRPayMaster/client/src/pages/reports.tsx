@@ -94,7 +94,7 @@ type FleetUsage = {
   notes: string | null;
 };
 type SalaryTrend = { period: string; netPay: number; change: number };
-import { openPdf, buildEmployeeProfileReport, buildEmployeeHistoryReport } from "@/lib/pdf";
+import { openPdf, buildEmployeeReport, buildEmployeeHistoryReport } from "@/lib/pdf";
 type PayrollByDepartment = { period: string; departmentId: string | null; departmentName?: string | null; totals: { grossPay: number; netPay: number } };
 import { sanitizeImageSrc } from "@/lib/sanitizeImageSrc";
 
