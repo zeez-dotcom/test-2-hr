@@ -43,14 +43,41 @@ async function request(
     const contentType = responseHeaders?.get?.("content-type") || "";
     const contentDisposition = responseHeaders?.get?.("content-disposition") || "";
     const normalizedContentType = contentType.toLowerCase();
+    const shouldTreatAsAttachment = /attachment/i.test(contentDisposition);
+    const isHtmlContentType =
+      normalizedContentType.includes("text/html") ||
+      normalizedContentType.includes("application/xhtml+xml");
     const shouldTreatAsBinary =
-      /attachment/i.test(contentDisposition) ||
-      (!!contentType && !normalizedContentType.includes("json"));
+      shouldTreatAsAttachment ||
+      (!!contentType &&
+        !normalizedContentType.includes("json") &&
+        !isHtmlContentType);
 
     let body: any = undefined;
+    let htmlErrorPayload: string | undefined;
     const resAny = res as any;
 
-    if (shouldTreatAsBinary && typeof resAny.blob === "function") {
+    const isLikelyHtml = (value: string) => {
+      const trimmed = value.trim().toLowerCase();
+      return (
+        trimmed.startsWith("<!doctype html") ||
+        trimmed.startsWith("<html") ||
+        trimmed.startsWith("<head") ||
+        trimmed.startsWith("<body")
+      );
+    };
+
+    if (isHtmlContentType && !shouldTreatAsAttachment) {
+      if (typeof resAny.text === "function") {
+        try {
+          htmlErrorPayload = await resAny.text();
+        } catch {
+          htmlErrorPayload = "";
+        }
+      } else {
+        htmlErrorPayload = "";
+      }
+    } else if (shouldTreatAsBinary && typeof resAny.blob === "function") {
       try {
         body = await resAny.blob();
       } catch {
@@ -69,20 +96,33 @@ async function request(
       }
     }
 
-    if (body === undefined) {
-      if (typeof resAny.json === "function") {
+    if (htmlErrorPayload === undefined && body === undefined) {
+      if (!shouldTreatAsBinary && typeof resAny.text === "function") {
+        try {
+          const text = await resAny.text();
+          const trimmed = text.trim();
+
+          if (!trimmed) {
+            body = undefined;
+          } else {
+            try {
+              body = JSON.parse(text);
+            } catch {
+              if (isLikelyHtml(text)) {
+                htmlErrorPayload = text;
+              } else {
+                body = text;
+              }
+            }
+          }
+        } catch {
+          body = undefined;
+        }
+      } else if (typeof resAny.json === "function") {
         try {
           body = await resAny.json();
         } catch {
-          if (!shouldTreatAsBinary && typeof resAny.blob === "function") {
-            try {
-              body = await resAny.blob();
-            } catch {
-              body = undefined;
-            }
-          } else {
-            body = undefined;
-          }
+          body = undefined;
         }
       } else if (typeof resAny.blob === "function") {
         try {
@@ -91,6 +131,18 @@ async function request(
           body = undefined;
         }
       }
+    }
+
+    if (htmlErrorPayload !== undefined) {
+      const errorMessage = htmlErrorPayload?.trim()
+        ? htmlErrorPayload
+        : "Received HTML response";
+      return {
+        ok: false as const,
+        status: (res as any).status ?? 500,
+        error: errorMessage,
+        headers: (res as any).headers,
+      };
     }
     if ((res as any).ok) {
       return { ok: true as const, status: (res as any).status ?? 200, data: body, headers: (res as any).headers };

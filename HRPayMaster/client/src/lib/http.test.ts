@@ -37,6 +37,28 @@ describe("request", () => {
     expect(result.data).toBe(blob);
   });
 
+  it("treats HTML content responses as errors", async () => {
+    const headers = new Headers({ "content-type": "text/html" });
+    const response = {
+      ok: true,
+      status: 200,
+      headers,
+      text: vi.fn().mockResolvedValue("<html><body>Error</body></html>"),
+    } satisfies Partial<Response> & { ok: true; status: number };
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(response as Response);
+
+    const result = await apiGet("/api/reports/export");
+
+    expect(fetchSpy).toHaveBeenCalledWith("/api/reports/export", expect.any(Object));
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected HTML response to surface as an error");
+    }
+
+    expect(result.error).toContain("<html>");
+  });
+
   it("prefers configured base URL over window origin in development", async () => {
     const originalWindow = globalThis.window;
 
