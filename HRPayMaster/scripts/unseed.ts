@@ -9,6 +9,7 @@ import {
   payrollRuns,
   payrollEntries,
   loans,
+  loanPayments,
   assets,
   assetAssignments,
   assetDocuments,
@@ -22,8 +23,10 @@ import {
   vacationRequests,
   attendance,
   sickLeaveTracking,
+  genericDocuments,
+  templates,
 } from '@shared/schema';
-import { and, eq, inArray, like } from 'drizzle-orm';
+import { inArray, like } from 'drizzle-orm';
 
 const SEED_TAG = 'SEED';
 
@@ -40,10 +43,19 @@ async function main() {
 
   // Delete dependent records referencing seeded employees
   if (hasAny) {
+    await db.delete(genericDocuments).where(inArray(genericDocuments.employeeId, empIds));
     await db.delete(emailAlerts).where(inArray(emailAlerts.employeeId, empIds));
     await db.delete(notifications).where(inArray(notifications.employeeId, empIds));
     await db.delete(employeeEvents).where(inArray(employeeEvents.employeeId, empIds));
     await db.delete(vacationRequests).where(inArray(vacationRequests.employeeId, empIds));
+    const seededLoans = await db
+      .select({ id: loans.id })
+      .from(loans)
+      .where(inArray(loans.employeeId, empIds));
+    const loanIds = seededLoans.map(l => l.id);
+    if (loanIds.length) {
+      await db.delete(loanPayments).where(inArray(loanPayments.loanId, loanIds));
+    }
     await db.delete(loans).where(inArray(loans.employeeId, empIds));
     await db.delete(carAssignments).where(inArray(carAssignments.employeeId, empIds));
     await db.delete(assetAssignments).where(inArray(assetAssignments.employeeId, empIds));
@@ -83,6 +95,7 @@ async function main() {
 
   // Custom fields
   await db.delete(employeeCustomFields).where(like(employeeCustomFields.name, `${SEED_TAG}-%`));
+  await db.delete(templates).where(like(templates.key, `${SEED_TAG}-%`));
 
   // Employees
   if (hasAny) {

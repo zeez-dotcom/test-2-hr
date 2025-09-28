@@ -1,3 +1,4 @@
+import "@/lib/pdf";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
@@ -93,9 +94,18 @@ type FleetUsage = {
   notes: string | null;
 };
 type SalaryTrend = { period: string; netPay: number; change: number };
-import { openPdf, buildEmployeeReport, buildEmployeeHistoryReport } from "@/lib/pdf";
+import { openPdf, buildEmployeeProfileReport, buildEmployeeHistoryReport } from "@/lib/pdf";
 type PayrollByDepartment = { period: string; departmentId: string | null; departmentName?: string | null; totals: { grossPay: number; netPay: number } };
 import { sanitizeImageSrc } from "@/lib/sanitizeImageSrc";
+
+type EmployeeReportPeriod = {
+  period: string;
+  totals?: { bonuses?: number; deductions?: number; netPay?: number };
+  payrollEntries?: Array<Record<string, any>>;
+  employeeEvents?: EmployeeEvent[];
+  loans?: Array<Record<string, any>>;
+  vacationRequests?: Array<Record<string, any>>;
+};
 
 // Accept any base64 encoded image MIME type
 const dataUrlPattern = /^data:image\/[^;]+;base64,/;

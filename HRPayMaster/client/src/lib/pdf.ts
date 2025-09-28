@@ -1,50 +1,110 @@
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
 import type { TDocumentDefinitions, Content, TableLayout } from 'pdfmake/interfaces';
-import { amiriRegularVfs } from './font-vfs';
+import { amiriRegularVfs, interRegularVfs, interSemiBoldVfs, interItalicVfs } from './font-vfs';
 import { getBrand } from './brand';
 import { sanitizeImageSrc } from './sanitizeImageSrc';
 
+type PdfMakeWithRegistry = typeof pdfMake & {
+  vfs?: Record<string, string>;
+  fonts?: Record<string, { normal: string; bold?: string; italics?: string; bolditalics?: string }>;
+  addFileToVFS?: (file: string, data: string) => void;
+  addFonts?: (fonts: Record<string, { normal: string; bold?: string; italics?: string; bolditalics?: string }>) => void;
+};
+
 const fontsModule = pdfFonts as any;
+const pdfMakeAny = pdfMake as PdfMakeWithRegistry;
 
 if (typeof fontsModule === 'function') {
   fontsModule(pdfMake);
 }
 
-const pdfMakeAny = pdfMake as unknown as {
-  vfs: Record<string, string>;
-  fonts?: Record<string, { normal: string; bold?: string; italics?: string; bolditalics?: string }>;
-  addFileToVFS?: (file: string, data: string) => void;
-};
-
-let mergedVfs: Record<string, string> =
+const moduleVfs: Record<string, string> =
   (fontsModule?.pdfMake?.vfs as Record<string, string>) ??
-  (pdfMakeAny?.vfs as Record<string, string>) ??
   (typeof fontsModule === 'object' ? (fontsModule as Record<string, string>) : {}) ??
   {};
 
-if (typeof pdfMakeAny.addFileToVFS === 'function') {
-  pdfMakeAny.addFileToVFS('Amiri-Regular.ttf', amiriRegularVfs);
-  mergedVfs = pdfMakeAny.vfs;
-} else {
-  mergedVfs = { ...mergedVfs, 'Amiri-Regular.ttf': amiriRegularVfs };
-  pdfMakeAny.vfs = mergedVfs;
-}
+function ensurePdfMakeFonts() {
+  const vfs = (pdfMakeAny.vfs ??= {});
 
-pdfMakeAny.vfs = pdfMakeAny.vfs || mergedVfs;
+  for (const [file, data] of Object.entries(moduleVfs)) {
+    if (!(file in vfs)) {
+      vfs[file] = data;
+    }
+  }
 
-pdfMakeAny.fonts = {
-  ...(pdfMakeAny.fonts ?? {}),
-  Amiri: {
+  const registerFile = (file: string, data: string) => {
+    if (vfs[file] !== data) {
+      if (typeof pdfMakeAny.addFileToVFS === 'function') {
+        pdfMakeAny.addFileToVFS(file, data);
+      }
+      vfs[file] = data;
+    }
+  };
+
+  registerFile('Amiri-Regular.ttf', amiriRegularVfs);
+  registerFile('Inter-Regular.ttf', interRegularVfs);
+  registerFile('Inter-SemiBold.ttf', interSemiBoldVfs);
+  registerFile('Inter-Italic.ttf', interItalicVfs);
+
+  const fonts = (pdfMakeAny.fonts ??= {});
+  const interDefinition = {
+    normal: 'Inter-Regular.ttf',
+    bold: 'Inter-SemiBold.ttf',
+    italics: 'Inter-Italic.ttf',
+    bolditalics: 'Inter-Italic.ttf',
+  } as const;
+  const amiriDefinition = {
     normal: 'Amiri-Regular.ttf',
     bold: 'Amiri-Regular.ttf',
     italics: 'Amiri-Regular.ttf',
     bolditalics: 'Amiri-Regular.ttf',
-  },
-};
+  } as const;
 
-export const sanitizeString = (str: string): string =>
-  str.replace(/[&<>"']/g, c => {
+  const needsInter =
+    !fonts.Inter ||
+    fonts.Inter.normal !== interDefinition.normal ||
+    fonts.Inter.bold !== interDefinition.bold ||
+    fonts.Inter.italics !== interDefinition.italics ||
+    fonts.Inter.bolditalics !== interDefinition.bolditalics;
+
+  const needsAmiri =
+    !fonts.Amiri ||
+    fonts.Amiri.normal !== amiriDefinition.normal ||
+    fonts.Amiri.bold !== amiriDefinition.bold ||
+    fonts.Amiri.italics !== amiriDefinition.italics ||
+    fonts.Amiri.bolditalics !== amiriDefinition.bolditalics;
+
+  if (needsInter || needsAmiri) {
+    pdfMakeAny.fonts = {
+      ...fonts,
+      Inter: { ...interDefinition },
+      Amiri: { ...amiriDefinition },
+    };
+
+    if (typeof pdfMakeAny.addFonts === 'function') {
+      pdfMakeAny.addFonts({
+        Inter: interDefinition,
+        Amiri: amiriDefinition,
+      });
+    }
+  }
+}
+
+ensurePdfMakeFonts();
+
+const originalCreatePdf = pdfMakeAny.createPdf.bind(pdfMakeAny) as typeof pdfMakeAny.createPdf;
+
+pdfMakeAny.createPdf = ((docDefinition: TDocumentDefinitions, tableLayouts?: any, fonts?: any, vfs?: any) => {
+  ensurePdfMakeFonts();
+  return originalCreatePdf(docDefinition, tableLayouts, fonts, vfs);
+}) as typeof pdfMakeAny.createPdf;
+export const sanitizeString = (value: string | null | undefined): string => {
+  if (value == null) {
+    return '';
+  }
+  const str = typeof value === 'string' ? value : String(value);
+  return str.replace(/[&<>"']/g, c => {
     switch (c) {
       case '&':
         return '&amp;';
@@ -60,6 +120,7 @@ export const sanitizeString = (str: string): string =>
         return c;
     }
   });
+};
 
 function sanitize(obj: any): any {
   if (typeof obj === 'string') return sanitizeString(obj);
@@ -75,6 +136,28 @@ function sanitize(obj: any): any {
   return obj;
 }
 
+function formatYMD(value: string | Date | null | undefined, fallback = 'N/A'): string {
+  if (!value) return fallback;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return fallback;
+  return date.toISOString().split('T')[0];
+}
+
+const formatDisplayDate = (value: string | Date | null | undefined): string => {
+  if (!value) return '-';
+  return formatYMD(value, '-');
+};
+
+const formatCurrencyValue = (value: number | null | undefined): string => {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return '-';
+  }
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+};
+
 export interface EmployeeLite {
   firstName: string;
   lastName: string;
@@ -87,6 +170,82 @@ export interface EmployeeEventLite {
   title: string;
   eventDate: string | Date;
   amount?: string | null;
+}
+
+export interface EmployeeProfileReportParams {
+  employee: {
+    firstName: string;
+    lastName: string;
+    position?: string | null;
+    employeeCode?: string | null;
+    departmentName?: string | null;
+    companyName?: string | null;
+    status?: string | null;
+    startDate?: string | Date | null;
+    workLocation?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    nationality?: string | null;
+    salary?: number | null;
+    additions?: number | null;
+    profileImage?: string | null;
+  };
+  documents: Array<{
+    label: string;
+    number?: string | null;
+    issueDate?: string | Date | null;
+    expiryDate?: string | Date | null;
+    alertDays?: number | null;
+  }>;
+  payrollHistory: Array<{
+    period: string;
+    grossPay?: number | null;
+    deductions?: number | null;
+    netPay?: number | null;
+    components?: Array<{ label: string; value?: number | null }>;
+  }>;
+  events: Array<{
+    title: string;
+    type?: string | null;
+    amount?: number | null;
+    eventDate?: string | Date | null;
+    description?: string | null;
+  }>;
+  loans: Array<{
+    loanId: string;
+    originalAmount?: number | null;
+    remainingAmount?: number | null;
+    monthlyDeduction?: number | null;
+    deductionInRange?: number | null;
+    status?: string | null;
+    startDate?: string | Date | null;
+    endDate?: string | Date | null;
+    note?: string | null;
+  }>;
+  assets: Array<{
+    name: string;
+    type?: string | null;
+    status?: string | null;
+    assignedDate?: string | Date | null;
+    returnDate?: string | Date | null;
+    notes?: string | null;
+  }>;
+  cars: Array<{
+    vehicle: string;
+    plateNumber?: string | null;
+    status?: string | null;
+    assignedDate?: string | Date | null;
+    returnDate?: string | Date | null;
+    notes?: string | null;
+  }>;
+  vacations: Array<{
+    type?: string | null;
+    startDate?: string | Date | null;
+    endDate?: string | Date | null;
+    days?: number | null;
+    status?: string | null;
+    reason?: string | null;
+  }>;
 }
 
 export function buildEmployeeReport(
@@ -134,7 +293,7 @@ export function buildEmployeeReport(
           ['Title', 'Date'],
           ...events.map(e => [
             sanitizeString(e.title),
-            new Date(e.eventDate).toISOString().split('T')[0]
+            formatYMD(e.eventDate)
           ]),
         ],
       },
@@ -153,7 +312,7 @@ export function buildEmployeeReport(
       section: { fontSize: 12, bold: true, color: titleColor, margin: [0, 14, 0, 6] },
       muted: { fontSize: 10, color: '#64748B' },
     },
-    defaultStyle: { fontSize: 10, color: '#111827', font: 'Amiri' },
+    defaultStyle: { fontSize: 10, color: '#111827', font: 'Inter' },
     footer: (currentPage: number, pageCount: number) => ({
       columns: ((): any[] => {
         const left = brand.name || 'HRPayMaster';
@@ -182,7 +341,7 @@ export function buildEmployeeFileReport(params: {
   ];
   const docsBody = [
     ['Title', 'Created'],
-    ...documents.map(d => [d.title, d.createdAt ? new Date(d.createdAt).toISOString().split('T')[0] : ''])
+    ...documents.map(d => [d.title, formatYMD(d.createdAt, '')])
   ];
   const tableLayout: TableLayout = {
     fillColor: (rowIndex: number) => (rowIndex === 0 ? '#F8FAFC' : rowIndex % 2 === 0 ? '#F1F5F9' : null),
@@ -198,6 +357,233 @@ export function buildEmployeeFileReport(params: {
   (base.content as any[]).push({ text: 'Documents', style: 'section', margin: [0,10,0,0] });
   (base.content as any[]).push({ table: { headerRows: 1, widths: ['*','auto'], body: docsBody }, layout: tableLayout });
   return base;
+}
+
+export function buildEmployeeProfileReport(data: EmployeeProfileReportParams): TDocumentDefinitions {
+  const employee = data.employee;
+  const fullName = `${employee.firstName} ${employee.lastName}`.trim();
+  const brand = getBrand();
+  const titleColor = brand.primaryColor || '#0F172A';
+  const profileImage = employee.profileImage ? sanitizeImageSrc(employee.profileImage) : undefined;
+
+  const tableLayout: TableLayout = {
+    fillColor: (rowIndex: number) => (rowIndex === 0 ? '#F8FAFC' : rowIndex % 2 === 0 ? '#F1F5F9' : null),
+    hLineColor: () => '#E5E7EB',
+    vLineColor: () => '#E5E7EB',
+    paddingLeft: () => 6,
+    paddingRight: () => 6,
+    paddingTop: () => 6,
+    paddingBottom: () => 6,
+  };
+
+  const buildKeyValueStack = (pairs: Array<{ label: string; value?: string | number | null }>) =>
+    pairs
+      .filter(pair => pair.value !== null && pair.value !== undefined && pair.value !== '')
+      .map(pair => ({
+        text:
+          typeof pair.value === 'number'
+            ? `${pair.label}: ${formatCurrencyValue(pair.value)}`
+            : `${pair.label}: ${pair.value}`,
+        style: 'detailText',
+        margin: [0, 0, 0, 2],
+      }));
+
+  const employmentDetails = buildKeyValueStack([
+    { label: 'Employee Code', value: employee.employeeCode },
+    { label: 'Position', value: employee.position },
+    { label: 'Department', value: employee.departmentName },
+    { label: 'Company', value: employee.companyName },
+    { label: 'Status', value: employee.status },
+    { label: 'Start Date', value: employee.startDate ? formatDisplayDate(employee.startDate) : null },
+    { label: 'Work Location', value: employee.workLocation },
+  ]);
+
+  const contactDetails = buildKeyValueStack([
+    { label: 'Email', value: employee.email },
+    { label: 'Phone', value: employee.phone },
+    { label: 'Nationality', value: employee.nationality },
+    { label: 'Salary', value: employee.salary ?? null },
+    { label: 'Additions', value: employee.additions ?? null },
+  ]);
+
+  const content: any[] = [];
+
+  content.push({
+    columns: [
+      profileImage
+        ? { image: profileImage, width: 70, height: 70, margin: [0, 0, 16, 0] }
+        : {
+            width: 70,
+            height: 70,
+            canvas: [
+              { type: 'rect', x: 0, y: 0, w: 70, h: 70, r: 8, color: '#E2E8F0' },
+              {
+                type: 'text',
+                text: fullName ? fullName[0]?.toUpperCase() ?? '' : '',
+                color: '#475569',
+                fontSize: 22,
+                x: 35,
+                y: 35,
+                alignment: 'center',
+              },
+            ],
+            margin: [0, 0, 16, 0],
+          },
+      {
+        width: '*',
+        stack: [
+          { text: fullName || 'Employee Profile', style: 'title' },
+          employee.position ? { text: employee.position, style: 'muted', margin: [0, 2, 0, 0] } : null,
+          employee.departmentName ? { text: employee.departmentName, style: 'muted' } : null,
+        ].filter(Boolean),
+      },
+    ],
+    columnGap: 12,
+    margin: [0, 0, 0, 16],
+  });
+
+  content.push({
+    layout: 'noBorders',
+    table: {
+      widths: ['*', '*'],
+      body: [
+        [
+          {
+            stack: [{ text: 'Employment Overview', style: 'sectionHeading' }, ...employmentDetails],
+          },
+          {
+            stack: [{ text: 'Contact & Compensation', style: 'sectionHeading' }, ...contactDetails],
+          },
+        ],
+      ],
+    },
+  });
+
+  const addTableSection = (
+    heading: string,
+    headers: string[],
+    rows: any[][],
+    emptyMessage: string,
+  ) => {
+    content.push({ text: heading, style: 'sectionHeading', margin: [0, 16, 0, 6] });
+    if (!rows.length) {
+      content.push({ text: emptyMessage, style: 'muted' });
+      return;
+    }
+    content.push({
+      table: {
+        headerRows: 1,
+        widths: Array(headers.length).fill('*'),
+        body: [headers, ...rows],
+      },
+      layout: tableLayout,
+    });
+  };
+
+  const documentRows = data.documents.map(doc => [
+    doc.label,
+    doc.number || '-',
+    formatDisplayDate(doc.issueDate),
+    formatDisplayDate(doc.expiryDate),
+    doc.alertDays !== null && doc.alertDays !== undefined ? `${doc.alertDays} days` : '-',
+  ]);
+  addTableSection('Document Summary', ['Document', 'Number', 'Issued', 'Expires', 'Alert'], documentRows, 'No document data available.');
+
+  const payrollRows = data.payrollHistory.map(item => {
+    const breakdown = (item.components || [])
+      .filter(component => component.value !== null && component.value !== undefined && !Number.isNaN(component.value))
+      .map(component => `${component.label}: ${formatCurrencyValue(component.value || 0)}`)
+      .join('\n');
+    return [
+      item.period,
+      formatCurrencyValue(item.grossPay ?? null),
+      formatCurrencyValue(item.deductions ?? null),
+      formatCurrencyValue(item.netPay ?? null),
+      breakdown || '-',
+    ];
+  });
+  addTableSection('Payroll History', ['Period', 'Gross Pay', 'Deductions', 'Net Pay', 'Breakdown'], payrollRows, 'No payroll history found for the selected period.');
+
+  const loanRows = data.loans.map(loan => [
+    loan.loanId,
+    formatCurrencyValue(loan.originalAmount ?? null),
+    formatCurrencyValue(loan.remainingAmount ?? null),
+    formatCurrencyValue(loan.monthlyDeduction ?? null),
+    formatCurrencyValue(loan.deductionInRange ?? null),
+    loan.status || '-',
+    formatDisplayDate(loan.startDate),
+    formatDisplayDate(loan.endDate),
+    loan.note || '-',
+  ]);
+  addTableSection(
+    'Loans',
+    ['Loan', 'Original', 'Remaining', 'Monthly', 'Deduction (Period)', 'Status', 'Start', 'End', 'Notes'],
+    loanRows,
+    'No loan records for this employee during the selected period.',
+  );
+
+  const eventRows = data.events.map(event => [
+    formatDisplayDate(event.eventDate),
+    event.type || '-',
+    event.title || '-',
+    formatCurrencyValue(event.amount ?? null),
+    event.description || '-',
+  ]);
+  addTableSection('Payroll-affecting Events', ['Date', 'Type', 'Title', 'Amount', 'Description'], eventRows, 'No payroll events recorded for this employee.');
+
+  const assetRows = data.assets.map(asset => [
+    asset.name,
+    asset.type || '-',
+    formatDisplayDate(asset.assignedDate),
+    formatDisplayDate(asset.returnDate),
+    asset.status || '-',
+    asset.notes || '-',
+  ]);
+  addTableSection('Asset Assignments', ['Asset', 'Type', 'Assigned', 'Returned', 'Status', 'Notes'], assetRows, 'No asset assignments found.');
+
+  const carRows = data.cars.map(car => [
+    car.vehicle,
+    car.plateNumber || '-',
+    formatDisplayDate(car.assignedDate),
+    formatDisplayDate(car.returnDate),
+    car.status || '-',
+    car.notes || '-',
+  ]);
+  addTableSection('Fleet Assignments', ['Vehicle', 'Plate', 'Assigned', 'Returned', 'Status', 'Notes'], carRows, 'No fleet assignments found.');
+
+  const vacationRows = data.vacations.map(vacation => [
+    vacation.type || '-',
+    formatDisplayDate(vacation.startDate),
+    formatDisplayDate(vacation.endDate),
+    vacation.days !== null && vacation.days !== undefined ? `${vacation.days}` : '-',
+    vacation.status || '-',
+    vacation.reason || '-',
+  ]);
+  addTableSection('Vacation Requests', ['Type', 'Start', 'End', 'Days', 'Status', 'Reason'], vacationRows, 'No vacation requests recorded.');
+
+  return {
+    info: { title: `${fullName || 'Employee'} Profile Report` },
+    pageMargins: [40, 56, 40, 56],
+    content,
+    styles: {
+      title: { fontSize: 22, bold: true, color: titleColor, font: 'Inter' },
+      sectionHeading: { fontSize: 12, bold: true, color: titleColor, margin: [0, 0, 0, 6], font: 'Inter' },
+      detailText: { fontSize: 10, color: '#0F172A', font: 'Inter' },
+      muted: { fontSize: 9, color: '#64748B', font: 'Inter' },
+    },
+    defaultStyle: { fontSize: 10, color: '#111827', font: 'Inter' },
+    footer: (currentPage: number, pageCount: number) => ({
+      columns: ((): any[] => {
+        const left = brand.name || 'HRPayMaster';
+        const contact = [brand.website, brand.phone, brand.email].filter(Boolean).join(' | ');
+        return [
+          { text: contact ? `${left} | ${contact}` : left, style: 'muted' },
+          { text: `Page ${currentPage} of ${pageCount}`, alignment: 'right', style: 'muted' },
+        ];
+      })(),
+      margin: [40, 0, 40, 20],
+    }),
+  };
 }
 
 export function buildEmployeeHistoryReport(
@@ -237,7 +623,7 @@ export function buildEmployeeHistoryReport(
     styles: {
       title: { fontSize: 20, bold: true, color: titleColor },
     },
-    defaultStyle: { fontSize: 10, color: '#111827', font: 'Amiri' },
+    defaultStyle: { fontSize: 10, color: '#111827', font: 'Inter' },
     footer: (currentPage: number, pageCount: number) => ({
       columns: ((): any[] => {
         const left = brand.name || 'HRPayMaster';
@@ -253,11 +639,13 @@ export function buildEmployeeHistoryReport(
 }
 
 export function openPdf(docDefinition: TDocumentDefinitions) {
+  ensurePdfMakeFonts();
   const sanitized = sanitize(docDefinition) as TDocumentDefinitions;
   pdfMake.createPdf(sanitized).open();
 }
 
 export function pdfBuffer(docDefinition: TDocumentDefinitions): Promise<Uint8Array> {
+  ensurePdfMakeFonts();
   const sanitized = sanitize(docDefinition) as TDocumentDefinitions;
   return new Promise(resolve => {
     pdfMake.createPdf(sanitized).getBuffer((buffer: Uint8Array) => {
@@ -433,19 +821,19 @@ export function buildBilingualActionReceipt(params: {
     pageMargins: [40, 56, 40, 56],
     content,
     styles: {
-      brand: { fontSize: 12, bold: true, color: secondaryColor, font: 'Amiri' },
-      titleEn: { fontSize: 18, bold: true, color: titleColor, font: 'Amiri' },
+      brand: { fontSize: 12, bold: true, color: secondaryColor, font: 'Inter' },
+      titleEn: { fontSize: 18, bold: true, color: titleColor, font: 'Inter' },
       titleAr: { fontSize: 16, bold: true, color: titleColor, font: 'Amiri' },
-      subheadingEn: { fontSize: 12, color: secondaryColor, font: 'Amiri' },
+      subheadingEn: { fontSize: 12, color: secondaryColor, font: 'Inter' },
       subheadingAr: { fontSize: 12, color: secondaryColor, font: 'Amiri' },
-      meta: { fontSize: 10, color: '#475569', font: 'Amiri' },
-      bodyEn: { fontSize: 11, color: '#111827', font: 'Amiri' },
+      meta: { fontSize: 10, color: '#475569', font: 'Inter' },
+      bodyEn: { fontSize: 11, color: '#111827', font: 'Inter' },
       bodyAr: { fontSize: 11, color: '#111827', alignment: 'right', font: 'Amiri' },
-      sectionHeading: { fontSize: 11, bold: true, color: titleColor, font: 'Amiri' },
-      detailText: { fontSize: 10, color: '#0F172A', font: 'Amiri' },
-      muted: { fontSize: 9, color: '#64748B', font: 'Amiri' },
+      sectionHeading: { fontSize: 11, bold: true, color: titleColor, font: 'Inter' },
+      detailText: { fontSize: 10, color: '#0F172A', font: 'Inter' },
+      muted: { fontSize: 9, color: '#64748B', font: 'Inter' },
     },
-    defaultStyle: { fontSize: 10, color: '#111827', font: 'Amiri' },
+    defaultStyle: { fontSize: 10, color: '#111827', font: 'Inter' },
     footer: (currentPage: number, pageCount: number) => ({
       columns: ((): any[] => {
         const left = brand.name || 'HRPayMaster';
@@ -465,12 +853,3 @@ export async function buildAndEncodePdf(doc: TDocumentDefinitions): Promise<stri
   const b64 = btoa(String.fromCharCode(...Array.from(buffer)));
   return `data:application/pdf;base64,${b64}`;
 }
-
-
-
-
-
-
-
-
-

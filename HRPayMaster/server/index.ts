@@ -1,3 +1,5 @@
+import path from "path";
+import fs from "fs";
 import express from "express";
 import session from "express-session";
 import passport from "passport";
@@ -127,9 +129,59 @@ passport.deserializeUser(async (id: string, done) => {
 const MemoryStore = createMemoryStore(session);
 
 const app = express();
+const fontStaticPath = path.resolve(import.meta.dirname, "..", "node_modules", "@fontsource", "inter", "files");
+if (fs.existsSync(fontStaticPath)) {
+  app.use("/files", express.static(fontStaticPath));
+}
 app.set("etag", false);
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+const defaultBodyLimit = process.env.BODY_LIMIT?.trim() || "1mb";
+const employeeBodyLimit = process.env.EMPLOYEE_BODY_LIMIT?.trim() || "5mb";
+
+const normalizeContentType = (req: any): string => {
+  const header = req?.headers?.["content-type"];
+  if (typeof header === "string") {
+    return header.toLowerCase();
+  }
+  if (Array.isArray(header)) {
+    return header.join(",").toLowerCase();
+  }
+  return "";
+};
+
+const isEmployeesRequest = (req: any): boolean => {
+  const url = typeof req?.url === "string" ? req.url : "";
+  return url.startsWith("/api/employees");
+};
+
+const matchesMime = (req: any, mime: string): boolean => normalizeContentType(req).includes(mime);
+
+app.use(
+  express.json({
+    limit: employeeBodyLimit,
+    type: (req) => isEmployeesRequest(req) && matchesMime(req, "application/json"),
+  }),
+);
+app.use(
+  express.json({
+    limit: defaultBodyLimit,
+    type: (req) => !isEmployeesRequest(req) && matchesMime(req, "application/json"),
+  }),
+);
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: employeeBodyLimit,
+    type: (req) => isEmployeesRequest(req) && matchesMime(req, "application/x-www-form-urlencoded"),
+  }),
+);
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: defaultBodyLimit,
+    type: (req) => !isEmployeesRequest(req) && matchesMime(req, "application/x-www-form-urlencoded"),
+  }),
+);
 app.use("/api", (_req, res, next) => {
   res.set("Cache-Control", "no-store");
   next();
@@ -296,10 +348,3 @@ app.use((req, res, next) => {
   processDocumentExpiryAlerts();
   setInterval(processDocumentExpiryAlerts, 12 * 60 * 60 * 1000);
 })();
-
-
-
-
-
-
-

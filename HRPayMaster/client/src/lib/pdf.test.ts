@@ -4,6 +4,8 @@ import { pdfBuffer, sanitizeString, buildEmployeeReport, buildEmployeeHistoryRep
 describe('pdf utility', () => {
   it('sanitizes strings', () => {
     expect(sanitizeString('<script>alert(1)</script>')).toBe('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(sanitizeString(undefined)).toBe('');
+    expect(sanitizeString(null)).toBe('');
   });
 
   it('generates pdf buffer', async () => {
