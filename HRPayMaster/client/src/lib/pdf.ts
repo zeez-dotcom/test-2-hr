@@ -10,6 +10,7 @@ type PdfMakeWithRegistry = typeof pdfMake & {
   fonts?: Record<string, { normal: string; bold?: string; italics?: string; bolditalics?: string }>;
   addFileToVFS?: (file: string, data: string) => void;
   addFonts?: (fonts: Record<string, { normal: string; bold?: string; italics?: string; bolditalics?: string }>) => void;
+  addVirtualFileSystem?: (vfs: Record<string, string>) => void;
 };
 
 const fontsModule = pdfFonts as any;
@@ -25,27 +26,52 @@ const moduleVfs: Record<string, string> =
   {};
 
 function ensurePdfMakeFonts() {
-  const vfs = (pdfMakeAny.vfs ??= {});
+  const root = pdfMakeAny as PdfMakeWithRegistry & { pdfMake?: PdfMakeWithRegistry };
+  const vfs = (root.vfs ??= {});
+  const nestedPdfMake = root.pdfMake;
+  const nestedVfs = nestedPdfMake ? (nestedPdfMake.vfs ??= {}) : undefined;
+  const vfsTargets = [vfs, nestedVfs].filter(Boolean) as Record<string, string>[];
 
-  for (const [file, data] of Object.entries(moduleVfs)) {
-    if (!(file in vfs)) {
-      vfs[file] = data;
-    }
-  }
-
-  const registerFile = (file: string, data: string) => {
-    if (vfs[file] !== data) {
-      if (typeof pdfMakeAny.addFileToVFS === 'function') {
-        pdfMakeAny.addFileToVFS(file, data);
+  const syncTargets = (file: string, data: string) => {
+    for (const target of vfsTargets) {
+      if (target[file] !== data) {
+        target[file] = data;
       }
-      vfs[file] = data;
     }
   };
+
+  const registerFile = (file: string, data: string) => {
+    const shouldRegister = vfs[file] !== data;
+    if (shouldRegister && typeof pdfMakeAny.addFileToVFS === 'function') {
+      pdfMakeAny.addFileToVFS(file, data);
+    }
+    syncTargets(file, data);
+  };
+
+  for (const [file, data] of Object.entries(moduleVfs)) {
+    registerFile(file, data);
+  }
 
   registerFile('Amiri-Regular.ttf', amiriRegularVfs);
   registerFile('Inter-Regular.ttf', interRegularVfs);
   registerFile('Inter-SemiBold.ttf', interSemiBoldVfs);
   registerFile('Inter-Italic.ttf', interItalicVfs);
+
+  if (nestedVfs && nestedVfs !== vfs) {
+    for (const [file, data] of Object.entries(vfs)) {
+      if (nestedVfs[file] !== data) {
+        nestedVfs[file] = data;
+      }
+    }
+  }
+
+  if (nestedPdfMake && nestedPdfMake.fonts !== pdfMakeAny.fonts) {
+    nestedPdfMake.fonts = pdfMakeAny.fonts;
+  }
+
+  if (typeof pdfMakeAny.addVirtualFileSystem === 'function') {
+    pdfMakeAny.addVirtualFileSystem(vfs);
+  }
 
   const fonts = (pdfMakeAny.fonts ??= {});
   const robotoDefinition = {
@@ -102,8 +128,9 @@ function ensurePdfMakeFonts() {
 
     if (typeof pdfMakeAny.addFonts === 'function') {
       pdfMakeAny.addFonts({
-        Inter: interDefinition,
-        Amiri: amiriDefinition,
+        Roboto: { ...robotoDefinition },
+        Inter: { ...interDefinition },
+        Amiri: { ...amiriDefinition },
       });
     }
   }

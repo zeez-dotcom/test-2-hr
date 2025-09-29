@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import pdfMake from 'pdfmake/build/pdfmake';
 import { pdfBuffer, sanitizeString, buildEmployeeReport, buildEmployeeHistoryReport } from './pdf';
 
 describe('pdf utility', () => {
@@ -74,5 +75,49 @@ describe('pdf utility', () => {
     const b64 = Buffer.from(buffer).toString('base64');
     expect(b64.startsWith('JVBERi0xL')).toBe(true);
     expect(buffer.length).toBeGreaterThan(100);
+  });
+
+  it('rehydrates nested pdfMake VFS maps for Inter bold text', async () => {
+    const pdfMakeAny = pdfMake as typeof pdfMake & { pdfMake?: { vfs?: Record<string, string> } };
+    const originalVfs = pdfMakeAny.vfs;
+    const originalNested = pdfMakeAny.pdfMake;
+    const originalNestedVfs = originalNested?.vfs;
+
+    try {
+      pdfMakeAny.vfs = {};
+      if (!pdfMakeAny.pdfMake) {
+        pdfMakeAny.pdfMake = {};
+      }
+      if (pdfMakeAny.pdfMake) {
+        pdfMakeAny.pdfMake.vfs = {};
+      }
+
+      const buffer = await pdfBuffer({
+        content: [{ text: 'Bold Inter Text', font: 'Inter', bold: true }],
+        defaultStyle: { font: 'Inter' },
+        info: { title: 'Bold Test', creationDate: new Date(0) },
+      });
+
+      expect(buffer.length).toBeGreaterThan(100);
+      expect(pdfMakeAny.vfs?.['Inter-SemiBold.ttf']).toBeTruthy();
+      expect(pdfMakeAny.pdfMake?.vfs?.['Inter-SemiBold.ttf']).toBe(pdfMakeAny.vfs?.['Inter-SemiBold.ttf']);
+    } finally {
+      if (originalVfs) {
+        pdfMakeAny.vfs = originalVfs;
+      } else {
+        delete pdfMakeAny.vfs;
+      }
+
+      if (originalNested) {
+        pdfMakeAny.pdfMake = originalNested;
+        if (originalNestedVfs) {
+          originalNested.vfs = originalNestedVfs;
+        } else {
+          delete originalNested.vfs;
+        }
+      } else {
+        delete pdfMakeAny.pdfMake;
+      }
+    }
   });
 });
