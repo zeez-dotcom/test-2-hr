@@ -111,8 +111,51 @@
     color: #000 !important;
   }
 
+  .dark {
+    --background: 0 0% 100% !important;
+    --foreground: 0 0% 0% !important;
+    --card: 0 0% 100% !important;
+    --card-foreground: 0 0% 0% !important;
+    --muted: 0 0% 96% !important;
+    --muted-foreground: 0 0% 0% !important;
+    --popover: 0 0% 100% !important;
+    --popover-foreground: 0 0% 0% !important;
+    --secondary: 0 0% 100% !important;
+    --secondary-foreground: 0 0% 0% !important;
+    --accent: 0 0% 100% !important;
+    --accent-foreground: 0 0% 0% !important;
+    --destructive-foreground: 0 0% 0% !important;
+    --success-foreground: 0 0% 0% !important;
+    --warning-foreground: 0 0% 0% !important;
+    --primary-foreground: 0 0% 0% !important;
+    color: #000 !important;
+  }
+
+  .dark .text-foreground,
+  .dark .text-card-foreground,
+  .dark .text-muted-foreground,
+  .dark .text-popover-foreground,
+  .dark .text-secondary-foreground,
+  .dark .text-accent-foreground,
+  .dark .text-destructive-foreground,
+  .dark .text-success-foreground,
+  .dark .text-warning-foreground,
+  .dark .text-primary-foreground,
+  .dark .text-white {
+    color: #000 !important;
+  }
+
   .text-white {
     color: #000 !important;
+  }
+
+  .dark .bg-card,
+  .dark .bg-popover,
+  .dark .bg-background,
+  .dark .bg-muted,
+  .dark .bg-secondary,
+  .dark .bg-accent {
+    background: #fff !important;
   }
 
   .bg-success,
