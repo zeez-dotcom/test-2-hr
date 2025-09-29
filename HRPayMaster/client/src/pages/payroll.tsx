@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 
 import PayrollForm from "@/components/payroll/payroll-form";
@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Calculator, DollarSign, FileText, Trash2, Eye, Edit, RefreshCcw } from "lucide-react";
+import { Calculator, DollarSign, FileText, Trash2, Eye, Edit, RefreshCcw, Printer } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import { apiPost, apiDelete } from "@/lib/http";
 import { useToast } from "@/hooks/use-toast";
@@ -43,6 +43,8 @@ export default function Payroll() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [payrollToDelete, setPayrollToDelete] = useState<string | null>(null);
+  const [printHandler, setPrintHandler] = useState<(() => void) | null>(null);
+  const [pendingPrint, setPendingPrint] = useState(false);
   const { toast } = useToast();
   const searchParams = useSearchParams();
 
@@ -197,6 +199,30 @@ export default function Payroll() {
     setSelectedPayrollId(payrollId);
     setIsEditDialogOpen(true);
   };
+
+  const handleRegisterPrint = useCallback((handler: (() => void) | null) => {
+    setPrintHandler(() => handler ?? null);
+  }, []);
+
+  const handleQuickPrint = (payrollId: string) => {
+    setSelectedPayrollId(payrollId);
+    setIsViewDialogOpen(true);
+    setPendingPrint(true);
+  };
+
+  useEffect(() => {
+    if (pendingPrint && printHandler) {
+      printHandler();
+      setPendingPrint(false);
+    }
+  }, [pendingPrint, printHandler]);
+
+  useEffect(() => {
+    if (!isViewDialogOpen) {
+      setPendingPrint(false);
+      setPrintHandler(null);
+    }
+  }, [isViewDialogOpen]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -417,6 +443,14 @@ export default function Payroll() {
                                 <Button
                                   variant="outline"
                                   size="sm"
+                                  onClick={() => handleQuickPrint(payroll.id)}
+                                >
+                                  <Printer className="mr-1" size={14} />
+                                  Print
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
                                   onClick={() => handleEditPayroll(payroll.id)}
                                   className="text-blue-600 hover:text-blue-700"
                                 >
@@ -455,12 +489,15 @@ export default function Payroll() {
 
             {/* View Payroll Dialog */}
             <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-              <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+              <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto print:static print:max-h-full print:overflow-visible print:border-0 print:p-0 print:shadow-none print:w-full">
                 <DialogHeader>
                   <DialogTitle>{t('payroll.details','Payroll Details')}</DialogTitle>
                 </DialogHeader>
                 {selectedPayrollId && (
-                  <PayrollDetailsView payrollId={selectedPayrollId} />
+                  <PayrollDetailsView
+                    payrollId={selectedPayrollId}
+                    onRegisterPrint={handleRegisterPrint}
+                  />
                 )}
               </DialogContent>
             </Dialog>
