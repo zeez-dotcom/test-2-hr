@@ -160,5 +160,32 @@ describe('Payroll page', () => {
     await mutationMocks[1].mutate('1');
     expect(toast).toHaveBeenCalledWith({ title: 'Error', description: 'Failed to delete payroll run', variant: 'destructive' });
   });
+
+  it('shows duplicate period message from nested API error without throwing', async () => {
+    queryClient.setQueryData(['/api/payroll'], []);
+    queryClient.setQueryData(['/api/me'], { role: 'admin' });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Payroll />
+      </QueryClientProvider>
+    );
+
+    const mutation = mutationMocks[0];
+    mutation.shouldError = true;
+    mutation.error = {
+      ok: false,
+      status: 409,
+      error: { error: { message: 'Payroll run already exists for this period' } },
+    } as any;
+
+    await expect(mutation.mutate({})).resolves.toBeUndefined();
+
+    expect(toast).toHaveBeenCalledWith({
+      title: 'Duplicate period',
+      description: 'Payroll run already exists for this period',
+      variant: 'destructive',
+    });
+  });
 });
 

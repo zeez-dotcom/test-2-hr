@@ -30,6 +30,23 @@ interface PayrollGenerateRequest {
   };
 }
 
+const getErrorMessage = (error: unknown): string | undefined => {
+  if (typeof error === "string") {
+    return error;
+  }
+  if (error && typeof error === "object") {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string") {
+      return message;
+    }
+    const nestedError = (error as { error?: unknown }).error;
+    if (nestedError) {
+      return getErrorMessage(nestedError);
+    }
+  }
+  return undefined;
+};
+
 function useSearchParams() {
   const search = useSearch();
   return useMemo(() => new URLSearchParams(search), [search]);
@@ -91,7 +108,13 @@ export default function Payroll() {
     onError: (res: any) => {
       const status = res?.status;
       if (status === 409) {
-        const description = res?.error?.message ?? res?.error;
+        const description =
+          getErrorMessage(res?.error) ??
+          getErrorMessage(res) ??
+          t(
+            'payroll.exists',
+            'Payroll run already exists for this period',
+          );
         toast({ title: t('payroll.duplicatePeriod','Duplicate period'), description, variant: "destructive" });
         return;
       }
