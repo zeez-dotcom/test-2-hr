@@ -1,5 +1,3 @@
-import path from "path";
-import fs from "fs";
 import express from "express";
 import session from "express-session";
 import passport from "passport";
@@ -8,6 +6,7 @@ import bcrypt from "bcryptjs";
 import createMemoryStore from "memorystore";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { resolveInterFontFilesPath } from "./fontStatic";
 import { errorHandler } from "./errorHandler";
 import { storage } from "./storage";
 import { generateExpiryWarningEmail, shouldSendAlert, sendEmail } from "./emailService";
@@ -129,9 +128,11 @@ passport.deserializeUser(async (id: string, done) => {
 const MemoryStore = createMemoryStore(session);
 
 const app = express();
-const fontStaticPath = path.resolve(import.meta.dirname, "..", "node_modules", "@fontsource", "inter", "files");
-if (fs.existsSync(fontStaticPath)) {
+const fontStaticPath = resolveInterFontFilesPath();
+if (fontStaticPath) {
   app.use("/files", express.static(fontStaticPath));
+} else {
+  log("warning: unable to resolve Inter font files directory");
 }
 app.set("etag", false);
 
