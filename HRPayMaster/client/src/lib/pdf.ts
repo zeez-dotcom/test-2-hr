@@ -48,6 +48,23 @@ function ensurePdfMakeFonts() {
   registerFile('Inter-Italic.ttf', interItalicVfs);
 
   const fonts = (pdfMakeAny.fonts ??= {});
+  const robotoDefinition = {
+    normal: 'Roboto-Regular.ttf',
+    bold: 'Roboto-Medium.ttf',
+    italics: 'Roboto-Italic.ttf',
+    bolditalics: 'Roboto-MediumItalic.ttf',
+  } as const;
+
+  const needsRoboto =
+    !fonts.Roboto ||
+    fonts.Roboto.normal !== robotoDefinition.normal ||
+    fonts.Roboto.bold !== robotoDefinition.bold ||
+    fonts.Roboto.italics !== robotoDefinition.italics ||
+    fonts.Roboto.bolditalics !== robotoDefinition.bolditalics;
+
+  if (Object.keys(fonts).length === 0 || needsRoboto) {
+    fonts.Roboto = { ...robotoDefinition };
+  }
   const interDefinition = {
     normal: 'Inter-Regular.ttf',
     bold: 'Inter-SemiBold.ttf',
@@ -75,9 +92,10 @@ function ensurePdfMakeFonts() {
     fonts.Amiri.italics !== amiriDefinition.italics ||
     fonts.Amiri.bolditalics !== amiriDefinition.bolditalics;
 
-  if (needsInter || needsAmiri) {
+  if (needsInter || needsAmiri || needsRoboto) {
     pdfMakeAny.fonts = {
       ...fonts,
+      Roboto: fonts.Roboto ?? { ...robotoDefinition },
       Inter: { ...interDefinition },
       Amiri: { ...amiriDefinition },
     };
