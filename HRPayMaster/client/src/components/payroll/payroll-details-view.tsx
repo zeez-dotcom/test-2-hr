@@ -126,7 +126,10 @@ export default function PayrollDetailsView({ payrollId, onRegisterPrint }: Payro
   }
 
   return (
-    <div ref={printContentRef} className="space-y-6 print:bg-white print:text-black">
+    <div
+      ref={printContentRef}
+      className="payroll-print-area space-y-6 print:bg-white print:text-black"
+    >
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-center gap-4">

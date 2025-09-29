@@ -109,6 +109,91 @@
   body {
     background: #fff !important;
     color: #000 !important;
+    margin: 0 !important;
+  }
+
+  @page {
+    margin: 0.75in;
+  }
+
+  body * {
+    display: none !important;
+  }
+
+  .payroll-print-area,
+  .payroll-print-area * {
+    display: revert !important;
+    visibility: visible !important;
+  }
+
+  .payroll-print-area {
+    position: static !important;
+    inset: auto !important;
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
+  .payroll-print-area .block {
+    display: block !important;
+  }
+
+  .payroll-print-area .inline-block {
+    display: inline-block !important;
+  }
+
+  .payroll-print-area .inline {
+    display: inline !important;
+  }
+
+  .payroll-print-area .flex {
+    display: flex !important;
+  }
+
+  .payroll-print-area .inline-flex {
+    display: inline-flex !important;
+  }
+
+  .payroll-print-area .grid {
+    display: grid !important;
+  }
+
+  .payroll-print-area .inline-grid {
+    display: inline-grid !important;
+  }
+
+  .payroll-print-area .table {
+    display: table !important;
+  }
+
+  .payroll-print-area .table-row {
+    display: table-row !important;
+  }
+
+  .payroll-print-area .table-cell {
+    display: table-cell !important;
+  }
+
+  .payroll-print-area .table-header-group {
+    display: table-header-group !important;
+  }
+
+  .payroll-print-area .table-row-group {
+    display: table-row-group !important;
+  }
+
+  .payroll-print-area .table-footer-group {
+    display: table-footer-group !important;
+  }
+
+  .payroll-print-area .contents {
+    display: contents !important;
+  }
+
+  .payroll-print-area .hidden {
+    display: none !important;
   }
 
   .dark {
