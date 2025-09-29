@@ -110,6 +110,7 @@
     display: none !important;
   }
 
+  [role="dialog"][data-state],
   [data-radix-dialog-content] {
     position: static !important;
     inset: auto !important;
