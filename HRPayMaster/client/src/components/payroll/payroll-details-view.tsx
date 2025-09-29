@@ -10,26 +10,33 @@ import { formatCurrency, formatDate, calculateWorkingDaysAdjustment } from "@/li
 import { getBrand } from "@/lib/brand";
 
 type PayrollEntryWithEmployee = NonNullable<PayrollRunWithEntries["entries"]>[number];
+export type { PayrollEntryWithEmployee };
 
-const getEmployeeDisplayName = (entry: PayrollEntryWithEmployee) => {
+export const getEmployeeNames = (entry: PayrollEntryWithEmployee) => {
   const employee = entry.employee;
-  if (employee) {
-    const fullName = [employee.firstName, employee.lastName]
-      .filter(Boolean)
-      .join(" ")
-      .trim();
 
-    if (fullName) {
-      return fullName;
-    }
-
-    const alternateName = employee.arabicName || employee.nickname;
-    if (alternateName) {
-      return alternateName;
-    }
+  if (!employee) {
+    return {
+      englishName: `Employee ${entry.employeeId}`,
+      arabicName: "",
+    };
   }
 
-  return `Employee ${entry.employeeId}`;
+  const englishNameParts = [employee.firstName, employee.lastName]
+    .map((part) => part?.trim())
+    .filter(Boolean) as string[];
+
+  const englishName =
+    englishNameParts.join(" ") ||
+    employee.nickname?.trim() ||
+    `Employee ${entry.employeeId}`;
+
+  const arabicName = employee.arabicName?.trim() || "";
+
+  return {
+    englishName,
+    arabicName,
+  };
 };
 
 const getEmployeeIdentifier = (entry: PayrollEntryWithEmployee) => {
@@ -302,12 +309,14 @@ export default function PayrollDetailsView({ payrollId, onRegisterPrint }: Payro
                         : workingDaysAdjustment > 0
                           ? "text-green-600"
                           : "text-gray-900";
+                    const { englishName, arabicName } = getEmployeeNames(entry);
 
                     return (
                       <tr key={entry.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">
-                            {getEmployeeDisplayName(entry)}
+                          <div className="text-sm font-medium text-gray-900">{englishName}</div>
+                          <div className="text-sm text-gray-900" dir="rtl">
+                            {arabicName || "—"}
                           </div>
                           <div className="text-sm text-gray-500">
                             {getEmployeeIdentifier(entry)}
