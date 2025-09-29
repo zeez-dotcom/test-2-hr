@@ -3,9 +3,11 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DollarSign, User, FileText, Printer } from "lucide-react";
 import type { PayrollRunWithEntries } from "@shared/schema";
 import { formatCurrency, formatDate, calculateWorkingDaysAdjustment } from "@/lib/utils";
+import { getBrand } from "@/lib/brand";
 
 type PayrollEntryWithEmployee = NonNullable<PayrollRunWithEntries["entries"]>[number];
 
@@ -50,6 +52,30 @@ export default function PayrollDetailsView({ payrollId, onRegisterPrint }: Payro
   });
 
   const printContentRef = useRef<HTMLDivElement>(null);
+  const brand = getBrand();
+
+  const brandInitials = brand.name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "HR";
+
+  const formatDateTime = (value?: string | Date | null) => {
+    if (!value) {
+      return "-";
+    }
+
+    const date = typeof value === "string" ? new Date(value) : value;
+    if (Number.isNaN(date.getTime())) {
+      return "-";
+    }
+
+    return new Intl.DateTimeFormat("en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(date);
+  };
 
   const handlePrint = useCallback(() => {
     if (!printContentRef.current) return;
@@ -71,14 +97,14 @@ export default function PayrollDetailsView({ payrollId, onRegisterPrint }: Payro
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'completed':
-        return 'bg-success text-white';
-      case 'pending':
-        return 'bg-warning text-white';
-      case 'cancelled':
-        return 'bg-destructive text-white';
+      case "completed":
+        return "bg-success text-white";
+      case "pending":
+        return "bg-warning text-white";
+      case "cancelled":
+        return "bg-destructive text-white";
       default:
-        return 'bg-secondary text-secondary-foreground';
+        return "bg-secondary text-secondary-foreground";
     }
   };
 
@@ -93,29 +119,78 @@ export default function PayrollDetailsView({ payrollId, onRegisterPrint }: Payro
   return (
     <div ref={printContentRef} className="space-y-6 print:bg-white print:text-black">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">{payrollRun.period}</h2>
-          <p className="text-gray-600">
-            {formatDate(payrollRun.startDate)} - {formatDate(payrollRun.endDate)}
-          </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-center gap-4">
+          <Avatar className="h-14 w-14 border border-muted-foreground/10 bg-white shadow-sm">
+            {brand.logo ? (
+              <AvatarImage src={brand.logo} alt={`${brand.name} logo`} className="object-contain" />
+            ) : (
+              <AvatarFallback className="text-lg font-semibold uppercase">
+                {brandInitials}
+              </AvatarFallback>
+            )}
+          </Avatar>
+          <div>
+            <p className="text-sm text-muted-foreground">Payroll Run</p>
+            <h1 className="text-2xl font-bold text-gray-900">{brand.name}</h1>
+            <p className="text-sm text-gray-600">
+              {payrollRun.period} · {formatDate(payrollRun.startDate)} - {formatDate(payrollRun.endDate)}
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handlePrint}
-            className="print:hidden"
-          >
-            <Printer className="mr-2" size={16} />
-            Print
-          </Button>
-          <Badge className={getStatusColor(payrollRun.status)}>
-            {payrollRun.status}
-          </Badge>
+        <div className="flex flex-col gap-2 sm:items-end">
+          <Badge className={getStatusColor(payrollRun.status)}>{payrollRun.status}</Badge>
+          <div className="flex items-center gap-2 print:hidden">
+            <Button type="button" variant="outline" size="sm" onClick={handlePrint}>
+              <Printer className="mr-2" size={16} />
+              Print
+            </Button>
+          </div>
         </div>
       </div>
+
+      {/* Payroll session overview */}
+      <Card className="border-primary/20 bg-muted/30">
+        <CardContent className="p-6">
+          <h2 className="mb-4 text-lg font-semibold text-gray-900">Payroll Session Overview</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <div>
+              <p className="text-xs uppercase text-muted-foreground">Period</p>
+              <p className="text-base font-medium text-gray-900">{payrollRun.period}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase text-muted-foreground">Date Range</p>
+              <p className="text-base font-medium text-gray-900">
+                {formatDate(payrollRun.startDate)} - {formatDate(payrollRun.endDate)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase text-muted-foreground">Created</p>
+              <p className="text-base font-medium text-gray-900">
+                {formatDateTime(payrollRun.createdAt)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase text-muted-foreground">Gross Total</p>
+              <p className="text-base font-semibold text-gray-900">
+                {formatCurrency(payrollRun.grossAmount)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase text-muted-foreground">Total Deductions</p>
+              <p className="text-base font-semibold text-gray-900">
+                {formatCurrency(payrollRun.totalDeductions)}
+              </p>
+            </div>
+            <div className="sm:col-span-2 lg:col-span-5">
+              <p className="text-xs uppercase text-muted-foreground">Net Total</p>
+              <p className="text-base font-semibold text-gray-900">
+                {formatCurrency(payrollRun.netAmount)}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
