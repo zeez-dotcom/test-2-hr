@@ -1,8 +1,9 @@
+import { useCallback, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { DollarSign, User, Calendar, FileText } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { DollarSign, User, FileText, Printer } from "lucide-react";
 import type { PayrollRunWithEntries } from "@shared/schema";
 import { formatCurrency, formatDate, calculateWorkingDaysAdjustment } from "@/lib/utils";
 
@@ -40,12 +41,32 @@ const getEmployeeIdentifier = (entry: PayrollEntryWithEmployee) => {
 
 interface PayrollDetailsViewProps {
   payrollId: string;
+  onRegisterPrint?: (handler: (() => void) | null) => void;
 }
 
-export default function PayrollDetailsView({ payrollId }: PayrollDetailsViewProps) {
+export default function PayrollDetailsView({ payrollId, onRegisterPrint }: PayrollDetailsViewProps) {
   const { data: payrollRun, isLoading } = useQuery<PayrollRunWithEntries>({
     queryKey: ["/api/payroll", payrollId],
   });
+
+  const printContentRef = useRef<HTMLDivElement>(null);
+
+  const handlePrint = useCallback(() => {
+    if (!printContentRef.current) return;
+    window.print();
+  }, []);
+
+  useEffect(() => {
+    if (!onRegisterPrint || !payrollRun) {
+      return;
+    }
+
+    onRegisterPrint(handlePrint);
+
+    return () => {
+      onRegisterPrint(null);
+    };
+  }, [handlePrint, onRegisterPrint, payrollRun]);
 
 
   const getStatusColor = (status: string) => {
@@ -70,7 +91,7 @@ export default function PayrollDetailsView({ payrollId }: PayrollDetailsViewProp
   }
 
   return (
-    <div className="space-y-6">
+    <div ref={printContentRef} className="space-y-6 print:bg-white print:text-black">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -79,9 +100,21 @@ export default function PayrollDetailsView({ payrollId }: PayrollDetailsViewProp
             {formatDate(payrollRun.startDate)} - {formatDate(payrollRun.endDate)}
           </p>
         </div>
-        <Badge className={getStatusColor(payrollRun.status)}>
-          {payrollRun.status}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handlePrint}
+            className="print:hidden"
+          >
+            <Printer className="mr-2" size={16} />
+            Print
+          </Button>
+          <Badge className={getStatusColor(payrollRun.status)}>
+            {payrollRun.status}
+          </Badge>
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -155,7 +188,7 @@ export default function PayrollDetailsView({ payrollId }: PayrollDetailsViewProp
               No payroll entries found
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto print:overflow-visible">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50 dark:bg-gray-900">
                   <tr>

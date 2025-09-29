@@ -46,7 +46,10 @@ vi.mock('@/components/payroll/payroll-form', () => ({
 }));
 
 vi.mock('@/components/payroll/payroll-details-view', () => ({
-  default: () => <div>PayrollDetailsView</div>,
+  default: ({ onRegisterPrint }: any) => {
+    onRegisterPrint?.(() => {});
+    return <div>PayrollDetailsView</div>;
+  },
 }));
 
 vi.mock('@/components/payroll/payroll-edit-view-simple', () => ({
@@ -108,6 +111,11 @@ describe('Payroll page', () => {
     );
 
     expect(screen.getByText('Jan 2024')).toBeInTheDocument();
+
+    expect(screen.queryByText('PayrollDetailsView')).not.toBeInTheDocument();
+
+    const printButton = screen.getByRole('button', { name: /print/i });
+    expect(printButton).toBeInTheDocument();
 
     // generate payroll success
     await mutationMocks[0].mutate({});
