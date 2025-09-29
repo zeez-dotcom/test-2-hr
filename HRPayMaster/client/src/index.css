@@ -71,15 +71,27 @@
   .text-success {
     color: hsl(var(--success));
   }
-  
+
   .text-warning {
     color: hsl(var(--warning));
   }
-  
+
+  .border-success {
+    border-color: hsl(var(--success));
+  }
+
+  .border-warning {
+    border-color: hsl(var(--warning));
+  }
+
+  .border-destructive {
+    border-color: hsl(var(--destructive));
+  }
+
   .bg-success {
     background-color: hsl(var(--success));
   }
-  
+
   .bg-warning {
     background-color: hsl(var(--warning));
   }
@@ -97,6 +109,18 @@
   body {
     background: #fff !important;
     color: #000 !important;
+  }
+
+  .text-white {
+    color: #000 !important;
+  }
+
+  .bg-success,
+  .bg-warning,
+  .bg-destructive {
+    background: transparent !important;
+    color: #000 !important;
+    border-color: #000 !important;
   }
 
   button,

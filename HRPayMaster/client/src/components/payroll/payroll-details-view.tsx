@@ -103,15 +103,17 @@ export default function PayrollDetailsView({ payrollId, onRegisterPrint }: Payro
 
 
   const getStatusColor = (status: string) => {
+    const printSafe = "print:bg-transparent print:text-black print:border-black";
+
     switch (status) {
       case "completed":
-        return "bg-success text-white";
+        return `bg-transparent text-success border-success ${printSafe}`;
       case "pending":
-        return "bg-warning text-white";
+        return `bg-transparent text-warning border-warning ${printSafe}`;
       case "cancelled":
-        return "bg-destructive text-white";
+        return `bg-transparent text-destructive border-destructive ${printSafe}`;
       default:
-        return "bg-secondary text-secondary-foreground";
+        return `bg-transparent text-secondary-foreground border-muted ${printSafe}`;
     }
   };
 
@@ -146,7 +148,9 @@ export default function PayrollDetailsView({ payrollId, onRegisterPrint }: Payro
           </div>
         </div>
         <div className="flex flex-col gap-2 sm:items-end">
-          <Badge className={getStatusColor(payrollRun.status)}>{payrollRun.status}</Badge>
+          <Badge variant="outline" className={getStatusColor(payrollRun.status)}>
+            {payrollRun.status}
+          </Badge>
           <div className="flex items-center gap-2 print:hidden">
             <Button type="button" variant="outline" size="sm" onClick={handlePrint}>
               <Printer className="mr-2" size={16} />
