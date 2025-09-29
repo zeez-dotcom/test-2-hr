@@ -106,15 +106,17 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
   };
 
   const getStatusColor = (status: string) => {
+    const printSafe = "print:bg-transparent print:text-black print:border-black";
+
     switch (status) {
       case 'completed':
-        return 'bg-green-100 text-green-800';
+        return `bg-transparent text-success border-success ${printSafe}`;
       case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
+        return `bg-transparent text-warning border-warning ${printSafe}`;
       case 'cancelled':
-        return 'bg-red-100 text-red-800';
+        return `bg-transparent text-destructive border-destructive ${printSafe}`;
       default:
-        return 'bg-gray-100 text-gray-800';
+        return `bg-transparent text-secondary-foreground border-muted ${printSafe}`;
     }
   };
 
@@ -225,7 +227,7 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
             <Save className="h-4 w-4" />
             {recalcTotalsMutation.isPending ? "Recalculating..." : "Recalculate Totals"}
           </Button>
-          <Badge className={getStatusColor(payrollRun.status)}>
+          <Badge variant="outline" className={getStatusColor(payrollRun.status)}>
             {payrollRun.status}
           </Badge>
         </div>

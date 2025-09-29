@@ -92,15 +92,17 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
   };
 
   const getStatusColor = (status: string) => {
+    const printSafe = "print:bg-transparent print:text-black print:border-black";
+
     switch (status) {
       case 'completed':
-        return 'bg-success text-white';
+        return `bg-transparent text-success border-success ${printSafe}`;
       case 'pending':
-        return 'bg-warning text-white';
+        return `bg-transparent text-warning border-warning ${printSafe}`;
       case 'cancelled':
-        return 'bg-destructive text-white';
+        return `bg-transparent text-destructive border-destructive ${printSafe}`;
       default:
-        return 'bg-secondary text-secondary-foreground';
+        return `bg-transparent text-secondary-foreground border-muted ${printSafe}`;
     }
   };
 
@@ -193,7 +195,7 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
             {formatDate(payrollRun.startDate)} - {formatDate(payrollRun.endDate)}
           </p>
         </div>
-        <Badge className={getStatusColor(payrollRun.status)}>
+        <Badge variant="outline" className={getStatusColor(payrollRun.status)}>
           {payrollRun.status}
         </Badge>
       </div>
