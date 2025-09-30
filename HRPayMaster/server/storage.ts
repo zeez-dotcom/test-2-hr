@@ -4135,24 +4135,6 @@ export class DatabaseStorage implements IStorage {
 
 export const storage = new DatabaseStorage();
 
-          alertDays: employee.civilIdAlertDays || 60,
-          daysUntilExpiry,
-        };
-      }
-
-      // Check passport expiry
-      if (employee.passportExpiryDate && employee.passportNumber) {
-        const daysUntilExpiry = this.calculateDaysUntilExpiry(employee.passportExpiryDate);
-        check.passport = {
-          number: employee.passportNumber,
-          expiryDate: employee.passportExpiryDate,
-          alertDays: employee.passportAlertDays || 90,
-          daysUntilExpiry,
-        };
-      }
-
-      // Only add if employee has at least one document to track
-      if (check.visa || check.civilId || check.passport || (check as any).drivingLicense) {
         checks.push(check);
       }
     });
