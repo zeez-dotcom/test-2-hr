@@ -58,6 +58,11 @@ export default function EmployeeTable({
   const [reportEmployee, setReportEmployee] = useState<EmployeeWithDepartment | null>(null);
   const [reportOptions, setReportOptions] = useState({ documents: true, loans: true, breakdown: true, start: '', end: '' });
 
+  useEffect(() => {
+    const next = (initialStatusFilter || "all").toLowerCase();
+    setStatusFilter((prev) => (prev === next ? prev : next));
+  }, [initialStatusFilter]);
+
   const today = new Date();
   const defaultStart = new Date(today.getFullYear(), 0, 1).toISOString().split('T')[0];
   const defaultEnd = today.toISOString().split('T')[0];
@@ -641,7 +646,3 @@ export default function EmployeeTable({
     </div>
   );
 }
-  useEffect(() => {
-    const next = (initialStatusFilter || "all").toLowerCase();
-    setStatusFilter(prev => (prev === next ? prev : next));
-  }, [initialStatusFilter]);
