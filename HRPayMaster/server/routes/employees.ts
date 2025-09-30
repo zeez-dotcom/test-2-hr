@@ -1022,7 +1022,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
       }
       res.json(terminated);
     } catch (error) {
-      next(new HttpError(500, "Failed to terminate employee"));
+      next(new HttpError(500, "Failed to delete employee"));
     }
   });
 
@@ -1032,9 +1032,9 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
       if (!deleted) {
         return next(new HttpError(404, "Employee not found"));
       }
-      res.status(204).send();
+      res.json(deleted);
     } catch (error) {
-      next(new HttpError(500, "Failed to terminate employee"));
+      next(new HttpError(500, "Failed to delete employee"));
     }
   });
 

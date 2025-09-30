@@ -126,7 +126,8 @@ export class DuplicateEmployeeCodeError extends Error {
   vacationRequests: VacationRequest[];
 }
 
-export interface PayrollSummaryPeriod {
+  deleteEmployee(id: string): Promise<Employee | undefined>;
+
   period: string;
   payrollEntries: PayrollEntry[];
 }
@@ -228,8 +229,9 @@ export interface IStorage {
   getTemplates(): Promise<import("@shared/schema").Template[]>;
   getTemplateByKey(key: string): Promise<import("@shared/schema").Template | undefined>;
   upsertTemplate(key: string, data: { en: string; ar: string }): Promise<import("@shared/schema").Template>;
-
-  // Employee methods
+  async deleteEmployee(id: string): Promise<Employee | undefined> {
+    return await this.terminateEmployee(id);
+
   getEmployees(): Promise<EmployeeWithDepartment[]>;
   getEmployee(id: string): Promise<EmployeeWithDepartment | undefined>;
   createEmployee(employee: InsertEmployee): Promise<Employee>;
@@ -464,9 +466,10 @@ export interface IStorage {
 
   // Reports
   getMonthlyEmployeeSummary(
-    employeeId: string,
-    month: Date
-  ): Promise<{ payroll: PayrollEntry[]; loans: Loan[]; events: EmployeeEvent[] }>;
+    employeeId: string,  async deleteEmployee(id: string): Promise<Employee | undefined> {
+    return await this.terminateEmployee(id);
+  }
+
   getEmployeeReport(
     employeeId: string,
     range: { startDate: string; endDate: string; groupBy: "month" | "year" }
