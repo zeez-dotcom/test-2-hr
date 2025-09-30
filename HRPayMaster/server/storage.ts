@@ -173,7 +173,7 @@ export interface IStorage {
     employee: Partial<Omit<InsertEmployee, "employeeCode">>
   ): Promise<Employee | undefined>;
   terminateEmployee(id: string): Promise<Employee | undefined>;
-  deleteEmployee(id: string): Promise<boolean>;
+  deleteEmployee(id: string): Promise<Employee | undefined>;
 
   // Employee custom field methods
   getEmployeeCustomFields(): Promise<EmployeeCustomField[]>;
@@ -890,9 +890,8 @@ export class DatabaseStorage implements IStorage {
     return updated || undefined;
   }
 
-  async deleteEmployee(id: string): Promise<boolean> {
-    const terminated = await this.terminateEmployee(id);
-    return Boolean(terminated);
+  async deleteEmployee(id: string): Promise<Employee | undefined> {
+    return await this.terminateEmployee(id);
   }
 
 
