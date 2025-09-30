@@ -85,11 +85,45 @@ export class DuplicateEmployeeCodeError extends Error {
   }
 }
 
+export interface LoanReportDetail {
+  loanId: string;
+  employeeId: string;
+  employee?: Employee;
+  originalAmount: number;
+  remainingAmount: number;
+  status: Loan["status"];
+  totalRepaid: number;
   deductionInRange: number;
   pausedByVacation: boolean;
   pauseNote: string | null;
   startDate: string;
   endDate: string | null;
+}
+
+export interface LoanBalance {
+  employeeId: string;
+  balance: number;
+}
+
+export interface EmployeeReportPeriod {
+  period: string;
+  payrollEntries: PayrollEntry[];
+  employeeEvents: EmployeeEvent[];
+  loans: Loan[];
+  vacationRequests: VacationRequest[];
+}
+
+export interface PayrollSummaryPeriod {
+  period: string;
+  payrollEntries: PayrollEntry[];
+}
+
+export interface PayrollDepartmentSummaryRow {
+  period: string;
+  departmentId: string | null;
+  departmentName: string | null;
+  grossPay: number;
+  netPay: number;
 }
 
 export interface AssetUsage {
