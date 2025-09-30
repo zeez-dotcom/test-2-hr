@@ -1,4 +1,20 @@
 import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  lte,
+  ne,
+  or,
+  sql,
+  type AnyColumn,
+  type SQL,
+} from "drizzle-orm";
+import { db } from "./db";
+import {
   type Department,
   type InsertDepartment,
   type Employee,
@@ -158,6 +174,24 @@ export interface FleetUsage {
   notes: string | null;
 }
 
+export interface EmployeeFilters {
+  limit?: number;
+  offset?: number;
+  includeTerminated?: boolean;
+  status?: string[];
+  departmentId?: string;
+  companyId?: string;
+  search?: string;
+  sort?:
+    | "name"
+    | "position"
+    | "department"
+    | "salary"
+    | "status"
+    | "startDate";
+  order?: "asc" | "desc";
+}
+
 export interface CarAssignmentFilters {
   plateNumber?: string;
   vin?: string;
@@ -197,6 +231,8 @@ export interface IStorage {
   upsertTemplate(key: string, data: { en: string; ar: string }): Promise<import("@shared/schema").Template>;
 
   // Employee methods
+  getEmployees(filters?: EmployeeFilters): Promise<EmployeeWithDepartment[]>;
+  countEmployees(filters?: EmployeeFilters): Promise<number>;
   getEmployee(id: string): Promise<EmployeeWithDepartment | undefined>;
   createEmployee(employee: InsertEmployee): Promise<Employee>;
   createEmployeesBulk(
@@ -383,6 +419,8 @@ export class DatabaseStorage implements IStorage {
 
 
 
+  }
+
   async updateUser(id: string, user: Partial<typeof users.$inferInsert>): Promise<User | undefined> {
 
     const [updated] = await db.update(users).set(user).where(eq(users.id, id)).returning();
@@ -398,6 +436,133 @@ export class DatabaseStorage implements IStorage {
     sort?: EmployeeFilters["sort"],
     order: EmployeeFilters["order"] = "asc",
   ): (AnyColumn | SQL)[] {
+    const direction = order === "desc" ? desc : asc;
+
+    const buildNameOrder = () => [
+      direction(employees.firstName),
+      direction(employees.lastName),
+      direction(employees.employeeCode),
+    ];
+
+    switch (sort) {
+      case "name":
+        return buildNameOrder();
+      case "position":
+        return [direction(employees.position), ...buildNameOrder()];
+      case "department":
+        return [direction(departments.name), ...buildNameOrder()];
+      case "salary":
+        return [direction(employees.salary), ...buildNameOrder()];
+      case "status":
+        return [direction(employees.status), ...buildNameOrder()];
+      case "startDate":
+        return [direction(employees.startDate), ...buildNameOrder()];
+      default:
+        return buildNameOrder();
+    }
+  }
+
+  private buildEmployeeConditions(filters: EmployeeFilters = {}): SQL<unknown>[] {
+    const conditions: SQL<unknown>[] = [];
+
+    const statuses = filters.status?.map(status => status.trim()).filter(Boolean);
+    if (statuses && statuses.length > 0) {
+      conditions.push(inArray(employees.status, statuses));
+    } else if (!filters.includeTerminated) {
+      conditions.push(ne(employees.status, "terminated"));
+    }
+
+    if (filters.departmentId) {
+      conditions.push(eq(employees.departmentId, filters.departmentId));
+    }
+
+    if (filters.companyId) {
+      conditions.push(eq(employees.companyId, filters.companyId));
+    }
+
+    const searchTerm = filters.search?.trim();
+    if (searchTerm) {
+      const sanitized = searchTerm.replace(/[%_]/g, "\\$&");
+      const likeTerm = `%${sanitized}%`;
+      conditions.push(
+        or(
+          ilike(employees.firstName, likeTerm),
+          ilike(employees.lastName, likeTerm),
+          ilike(employees.arabicName, likeTerm),
+          ilike(employees.nickname, likeTerm),
+          ilike(employees.email, likeTerm),
+          ilike(employees.phone, likeTerm),
+          ilike(employees.employeeCode, likeTerm),
+          ilike(employees.position, likeTerm),
+          ilike(departments.name, likeTerm),
+          ilike(companies.name, likeTerm),
+        ),
+      );
+    }
+
+    return conditions;
+  }
+
+  async getEmployees(filters: EmployeeFilters = {}): Promise<EmployeeWithDepartment[]> {
+    const conditions = this.buildEmployeeConditions(filters);
+    const whereCondition =
+      conditions.length > 1 ? and(...conditions) : conditions[0];
+
+    let query = db
+      .select({
+        employee: employees,
+        department: departments,
+        company: companies,
+      })
+      .from(employees)
+      .leftJoin(departments, eq(employees.departmentId, departments.id))
+      .leftJoin(companies, eq(employees.companyId, companies.id));
+
+    if (whereCondition) {
+      query = query.where(whereCondition);
+    }
+
+    const orderByExpressions = this.buildEmployeeOrder(filters.sort, filters.order);
+    if (orderByExpressions.length > 0) {
+      query = query.orderBy(...orderByExpressions);
+    }
+
+    if (typeof filters.limit === "number") {
+      query = query.limit(filters.limit);
+    }
+
+    if (typeof filters.offset === "number") {
+      query = query.offset(filters.offset);
+    }
+
+    const rows = await query;
+
+    return rows.map(row => ({
+      ...row.employee,
+      department: row.department ?? undefined,
+      company: row.company ?? undefined,
+    }));
+  }
+
+  async countEmployees(filters: EmployeeFilters = {}): Promise<number> {
+    const conditions = this.buildEmployeeConditions(filters);
+    const whereCondition =
+      conditions.length > 1 ? and(...conditions) : conditions[0];
+
+    let query = db
+      .select({ count: sql<number>`count(*)` })
+      .from(employees)
+      .leftJoin(departments, eq(employees.departmentId, departments.id))
+      .leftJoin(companies, eq(employees.companyId, companies.id));
+
+    if (whereCondition) {
+      query = query.where(whereCondition);
+    }
+
+    const [result] = await query;
+    return result ? Number(result.count) : 0;
+  }
+
   private formatLoanPaymentForInsert(payment: InsertLoanPayment): typeof loanPayments.$inferInsert {
 
     return {
@@ -3972,578 +4137,6 @@ export class DatabaseStorage implements IStorage {
 
 export const storage = new DatabaseStorage();
 
-  // Asset methods
-  async getAssets(): Promise<AssetWithAssignment[]> {
-    const allAssets = await db.select().from(assets);
-    const result: AssetWithAssignment[] = [];
-
-    for (const asset of allAssets) {
-      const [currentAssignment] = await db.query.assetAssignments.findMany({
-        where: and(eq(assetAssignments.assetId, asset.id), eq(assetAssignments.status, 'active')),
-        with: {
-          employee: true,
-        },
-      });
-
-      result.push({
-        ...asset,
-        currentAssignment: currentAssignment || undefined,
-      });
-    }
-
-    return result.sort((a, b) => a.name.localeCompare(b.name));
-  }
-
-  async getAsset(id: string): Promise<AssetWithAssignment | undefined> {
-    const [asset] = await db.select().from(assets).where(eq(assets.id, id));
-    if (!asset) return undefined;
-
-    const [currentAssignment] = await db.query.assetAssignments.findMany({
-      where: and(eq(assetAssignments.assetId, id), eq(assetAssignments.status, 'active')),
-      with: {
-        employee: true,
-      },
-    });
-
-    return {
-      ...asset,
-      currentAssignment: currentAssignment || undefined,
-    };
-  }
-
-  async createAsset(asset: InsertAsset): Promise<Asset> {
-    const [newAsset] = await db
-      .insert(assets)
-      .values({
-        ...asset,
-        status: asset.status || "available",
-      })
-      .returning();
-    return newAsset;
-  }
-
-  async updateAsset(id: string, asset: Partial<InsertAsset>): Promise<Asset | undefined> {
-    const [updated] = await db
-      .update(assets)
-      .set(asset)
-      .where(eq(assets.id, id))
-      .returning();
-    return updated || undefined;
-  }
-
-  async deleteAsset(id: string): Promise<boolean> {
-    const result = await db.delete(assets).where(eq(assets.id, id));
-    return (result.rowCount ?? 0) > 0;
-  }
-
-  // Asset assignment methods
-  async getAssetAssignments(): Promise<AssetAssignmentWithDetails[]> {
-    const assignments = await db.query.assetAssignments.findMany({
-      with: {
-        asset: true,
-        employee: true,
-        assigner: true,
-      },
-      orderBy: desc(assetAssignments.createdAt),
-    });
-    return assignments.map(assignment => ({
-      ...assignment,
-      asset: assignment.asset || undefined,
-      employee: assignment.employee || undefined,
-      assigner: assignment.assigner || undefined,
-    }));
-  }
-
-  async getAssetAssignment(id: string): Promise<AssetAssignmentWithDetails | undefined> {
-    const assignment = await db.query.assetAssignments.findFirst({
-      where: eq(assetAssignments.id, id),
-      with: {
-        asset: true,
-        employee: true,
-        assigner: true,
-      },
-    });
-    if (!assignment) return undefined;
-    return {
-      ...assignment,
-      asset: assignment.asset || undefined,
-      employee: assignment.employee || undefined,
-      assigner: assignment.assigner || undefined,
-    };
-  }
-
-  async createAssetAssignment(assignment: InsertAssetAssignment): Promise<AssetAssignment> {
-    // Ensure only one active assignment exists per asset
-    const existingActiveAssignment = await db.query.assetAssignments.findFirst({
-      where: and(
-        eq(assetAssignments.assetId, assignment.assetId),
-        eq(assetAssignments.status, 'active'),
-      ),
-    });
-
-    if (existingActiveAssignment) {
-      // If the asset is already assigned to the same employee, reject
-      if (existingActiveAssignment.employeeId === assignment.employeeId) {
-        throw new Error('Asset already assigned to this employee');
-      }
-
-      // Otherwise auto-complete the existing assignment
-      await db
-        .update(assetAssignments)
-        .set({
-          status: 'completed',
-          returnDate: assignment.assignedDate,
-        })
-        .where(eq(assetAssignments.id, existingActiveAssignment.id));
-    }
-
-    const [newAssignment] = await db
-      .insert(assetAssignments)
-      .values({
-        ...assignment,
-        status: assignment.status ?? 'active',
-      })
-      .returning();
-
-    return newAssignment;
-  }
-
-  async updateAssetAssignment(id: string, assignment: Partial<InsertAssetAssignment>): Promise<AssetAssignment | undefined> {
-    const [updated] = await db
-      .update(assetAssignments)
-      .set(assignment)
-      .where(eq(assetAssignments.id, id))
-      .returning();
-    return updated || undefined;
-  }
-
-  async deleteAssetAssignment(id: string): Promise<boolean> {
-    const result = await db.delete(assetAssignments).where(eq(assetAssignments.id, id));
-    return (result.rowCount ?? 0) > 0;
-  }
-
-  // Car methods
-  async getCars(): Promise<CarWithAssignment[]> {
-    const allCars = await db.select().from(cars);
-    const result: CarWithAssignment[] = [];
-
-    for (const car of allCars) {
-      const [currentAssignment] = await db.query.carAssignments.findMany({
-        where: and(eq(carAssignments.carId, car.id), eq(carAssignments.status, 'active')),
-        with: {
-          employee: true,
-        },
-      });
-
-      result.push({
-        ...car,
-        currentAssignment: currentAssignment || undefined,
-      });
-    }
-
-    return result.sort((a, b) => a.make.localeCompare(b.make));
-  }
-
-  async getCar(id: string): Promise<CarWithAssignment | undefined> {
-    const [car] = await db.select().from(cars).where(eq(cars.id, id));
-    if (!car) return undefined;
-
-    const [currentAssignment] = await db.query.carAssignments.findMany({
-      where: and(eq(carAssignments.carId, id), eq(carAssignments.status, 'active')),
-      with: {
-        employee: true,
-      },
-    });
-
-    return {
-      ...car,
-      currentAssignment: currentAssignment || undefined,
-    };
-  }
-
-  async createCar(car: InsertCar): Promise<Car> {
-    const [newCar] = await db
-      .insert(cars)
-      .values({
-        ...car,
-        purchasePrice: car.purchasePrice?.toString(),
-        status: car.status || "available",
-        mileage: car.mileage || 0,
-      })
-      .returning();
-    return newCar;
-  }
-
-  async updateCar(id: string, car: Partial<InsertCar>): Promise<Car | undefined> {
-    const [updated] = await db
-      .update(cars)
-      .set({
-        ...car,
-        purchasePrice: car.purchasePrice?.toString(),
-      })
-      .where(eq(cars.id, id))
-      .returning();
-    return updated || undefined;
-  }
-
-  async deleteCar(id: string): Promise<boolean> {
-    const result = await db.delete(cars).where(eq(cars.id, id));
-    return (result.rowCount ?? 0) > 0;
-  }
-
-  // Car repair methods
-  async getCarRepairs(carId: string): Promise<CarRepair[]> {
-    return await db.query.carRepairs.findMany({
-      where: eq(carRepairs.carId, carId),
-      orderBy: desc(carRepairs.repairDate),
-    });
-  }
-
-  async createCarRepair(repair: InsertCarRepair): Promise<CarRepair> {
-    const [newRepair] = await db
-      .insert(carRepairs)
-      .values({
-        ...repair,
-        cost: repair.cost ? repair.cost.toString() : undefined,
-      })
-      .returning();
-    return newRepair;
-  }
-
-  // Attendance methods
-  async getAttendance(start?: Date, end?: Date): Promise<Attendance[]> {
-    if (!start || !end) return await db.select().from(attendance);
-    const s = start.toISOString().split('T')[0];
-    const e = end.toISOString().split('T')[0];
-    return await db.query.attendance.findMany({
-      where: (att, { gte, lte, and }) => and(gte(att.date, s), lte(att.date, e)),
-    });
-  }
-
-  async getAttendanceForEmployee(employeeId: string, start?: Date, end?: Date): Promise<Attendance[]> {
-    if (!start || !end) return await db.query.attendance.findMany({ where: (att, { eq }) => eq(att.employeeId, employeeId) });
-    const s = start.toISOString().split('T')[0];
-    const e = end.toISOString().split('T')[0];
-    return await db.query.attendance.findMany({
-      where: (att, { gte, lte, and, eq }) => and(eq(att.employeeId, employeeId), gte(att.date, s), lte(att.date, e)),
-    });
-  }
-
-  async createAttendance(record: InsertAttendance): Promise<Attendance> {
-    const [row] = await db.insert(attendance).values(record).returning();
-    return row;
-  }
-
-  async updateAttendance(id: string, record: Partial<InsertAttendance>): Promise<Attendance | undefined> {
-    const [row] = await db.update(attendance).set(record).where(eq(attendance.id, id)).returning();
-    return row || undefined;
-  }
-
-  async deleteAttendance(id: string): Promise<boolean> {
-    const result = await db.delete(attendance).where(eq(attendance.id, id));
-    return (result.rowCount ?? 0) > 0;
-  }
-
-  async getAttendanceSummary(start: Date, end: Date): Promise<Record<string, number>> {
-    const rows = await this.getAttendance(start, end);
-    const present: Record<string, Set<string>> = {};
-    for (const r of rows) {
-      if (!r.checkIn || !r.checkOut) continue;
-      const d = (r.date as any as string);
-      if (!present[r.employeeId]) present[r.employeeId] = new Set();
-      present[r.employeeId].add(d);
-    }
-    const summary: Record<string, number> = {};
-    for (const [emp, days] of Object.entries(present)) {
-      summary[emp] = days.size;
-    }
-    return summary;
-  }
-
-  // Car assignment methods
-  async getCarAssignments(filters?: CarAssignmentFilters): Promise<CarAssignmentWithDetails[]> {
-    const assignments = await db.query.carAssignments.findMany({
-      with: {
-        car: true,
-        employee: true,
-        assigner: true,
-      },
-      orderBy: desc(carAssignments.createdAt),
-    });
-    const normalizedAssignments = assignments.map(assignment => ({
-      ...assignment,
-      car: assignment.car || undefined,
-      employee: assignment.employee || undefined,
-      assigner: assignment.assigner || undefined,
-    }));
-    if (!filters) return normalizedAssignments;
-
-    const normalizedFilters = {
-      plateNumber: filters.plateNumber?.trim().toLowerCase() || "",
-      vin: filters.vin?.trim().toLowerCase() || "",
-      serial: filters.serial?.trim().toLowerCase() || "",
-    };
-
-    const hasFilter = Object.values(normalizedFilters).some(value => value.length > 0);
-    if (!hasFilter) return normalizedAssignments;
-
-    return normalizedAssignments.filter(assignment => {
-      const car = assignment.car;
-      if (!car) return false;
-
-      const plateMatches = normalizedFilters.plateNumber
-        ? car.plateNumber?.toLowerCase().includes(normalizedFilters.plateNumber) ?? false
-        : true;
-      const vinMatches = normalizedFilters.vin
-        ? car.vin?.toLowerCase().includes(normalizedFilters.vin) ?? false
-        : true;
-      const serialMatches = normalizedFilters.serial
-        ? car.serial?.toLowerCase().includes(normalizedFilters.serial) ?? false
-        : true;
-
-      return plateMatches && vinMatches && serialMatches;
-    });
-  }
-
-  async getCarAssignment(id: string): Promise<CarAssignmentWithDetails | undefined> {
-    const assignment = await db.query.carAssignments.findFirst({
-      where: eq(carAssignments.id, id),
-      with: {
-        car: true,
-        employee: true,
-        assigner: true,
-      },
-    });
-    if (!assignment) return undefined;
-    return {
-      ...assignment,
-      car: assignment.car || undefined,
-      employee: assignment.employee || undefined,
-      assigner: assignment.assigner || undefined,
-    };
-  }
-
-  async createCarAssignment(carAssignment: InsertCarAssignment): Promise<CarAssignment> {
-    const [newCarAssignment] = await db
-      .insert(carAssignments)
-      .values({
-        ...carAssignment,
-        status: carAssignment.status || "active",
-      })
-      .returning();
-    return newCarAssignment;
-  }
-
-  async updateCarAssignment(id: string, carAssignment: Partial<InsertCarAssignment>): Promise<CarAssignment | undefined> {
-    const [updated] = await db
-      .update(carAssignments)
-      .set(carAssignment)
-      .where(eq(carAssignments.id, id))
-      .returning();
-    return updated || undefined;
-  }
-
-  async deleteCarAssignment(id: string): Promise<boolean> {
-    const result = await db.delete(carAssignments).where(eq(carAssignments.id, id));
-    return (result.rowCount ?? 0) > 0;
-  }
-
-  // Notification methods
-  async getNotifications(): Promise<NotificationWithEmployee[]> {
-    return await db.query.notifications.findMany({
-      with: {
-        employee: true,
-      },
-      orderBy: desc(notifications.createdAt),
-    });
-  }
-
-  async getUnreadNotifications(): Promise<NotificationWithEmployee[]> {
-    return await db.query.notifications.findMany({
-      where: eq(notifications.status, 'unread'),
-      with: {
-        employee: true,
-      },
-      orderBy: desc(notifications.createdAt),
-    });
-  }
-
-  async createNotification(notification: InsertNotification): Promise<Notification> {
-    // Deduplicate by employeeId+type+title+expiryDate
-    const existing = await db.query.notifications.findFirst({
-      where: (n, { and, eq }) => and(
-        eq(n.employeeId, notification.employeeId),
-        eq(n.type, notification.type),
-        eq(n.title, notification.title),
-        eq(n.expiryDate, notification.expiryDate as any)
-      ),
-    });
-    if (existing) return existing;
-    const [newNotification] = await db
-      .insert(notifications)
-      .values({
-        ...notification,
-        status: notification.status || "unread",
-        priority: notification.priority || "medium",
-        emailSent: notification.emailSent || false,
-      })
-      .returning();
-    return newNotification;
-  }
-
-  async updateNotification(id: string, notification: Partial<InsertNotification>): Promise<Notification | undefined> {
-    const [updated] = await db
-      .update(notifications)
-      .set(notification)
-      .where(eq(notifications.id, id))
-      .returning();
-    return updated || undefined;
-  }
-
-  async markNotificationAsRead(id: string): Promise<boolean> {
-    const result = await db
-      .update(notifications)
-      .set({ status: 'read' })
-      .where(eq(notifications.id, id));
-    return (result.rowCount ?? 0) > 0;
-  }
-
-  async deleteNotification(id: string): Promise<boolean> {
-    const result = await db.delete(notifications).where(eq(notifications.id, id));
-    return (result.rowCount ?? 0) > 0;
-  }
-
-  async getAssetDocuments(assetId: string): Promise<AssetDocument[]> {
-    return await db.query.assetDocuments.findMany({ where: (t, { eq }) => eq(t.assetId, assetId), orderBy: desc(assetDocuments.createdAt) });
-  }
-  async createAssetDocument(doc: InsertAssetDocument): Promise<AssetDocument> {
-    const [row] = await db.insert(assetDocuments).values(doc).returning();
-    return row;
-  }
-  async getAssetRepairs(assetId: string): Promise<AssetRepair[]> {
-    return await db.query.assetRepairs.findMany({ where: (t,{eq}) => eq(t.assetId, assetId), orderBy: desc(assetRepairs.repairDate) });
-  }
-  async createAssetRepair(repair: InsertAssetRepair): Promise<AssetRepair> {
-    const [row] = await db.insert(assetRepairs).values(repair).returning();
-    return row;
-  }
-
-  // Email alert methods
-  async getEmailAlerts(): Promise<EmailAlert[]> {
-    return await db.select().from(emailAlerts).orderBy(desc(emailAlerts.createdAt));
-  }
-
-  async createEmailAlert(alert: InsertEmailAlert): Promise<EmailAlert> {
-    const [newEmailAlert] = await db
-      .insert(emailAlerts)
-      .values({
-        ...alert,
-        status: alert.status || "pending",
-      })
-      .returning();
-    return newEmailAlert;
-  }
-
-  async updateEmailAlert(id: string, alert: Partial<InsertEmailAlert>): Promise<EmailAlert | undefined> {
-    const [updated] = await db
-      .update(emailAlerts)
-      .set(alert)
-      .where(eq(emailAlerts.id, id))
-      .returning();
-    return updated || undefined;
-  }
-
-  // Employee event methods
-  async getEmployeeEvents(
-    start?: Date,
-    end?: Date,
-  ): Promise<(EmployeeEvent & { employee: Employee })[]> {
-    const where =
-      start && end
-        ? and(
-            gte(employeeEvents.eventDate, start.toISOString().split("T")[0]),
-            lte(employeeEvents.eventDate, end.toISOString().split("T")[0]),
-          )
-        : undefined;
-
-    const events = await db.query.employeeEvents.findMany({
-      with: {
-        employee: true,
-      },
-      where,
-      orderBy: desc(employeeEvents.createdAt),
-    });
-    return events;
-  }
-
-  async getEmployeeEvent(id: string): Promise<EmployeeEvent | undefined> {
-    const [event] = await db.select().from(employeeEvents).where(eq(employeeEvents.id, id));
-    return event || undefined;
-  }
-
-  async createEmployeeEvent(event: InsertEmployeeEvent): Promise<EmployeeEvent> {
-    const [newEvent] = await db
-      .insert(employeeEvents)
-      .values({
-        ...event,
-        status: event.status || "active",
-        affectsPayroll: event.affectsPayroll ?? true,
-      })
-      .returning();
-    return newEvent;
-  }
-
-  async updateEmployeeEvent(id: string, event: Partial<InsertEmployeeEvent>): Promise<EmployeeEvent | undefined> {
-    const [updated] = await db
-      .update(employeeEvents)
-      .set(event)
-      .where(eq(employeeEvents.id, id))
-      .returning();
-    return updated || undefined;
-  }
-
-  async deleteEmployeeEvent(id: string): Promise<boolean> {
-    const result = await db.delete(employeeEvents).where(eq(employeeEvents.id, id));
-    return (result.rowCount ?? 0) > 0;
-  }
-
-  async getMonthlyEmployeeSummary(
-    employeeId: string,
-    month: Date
-  ): Promise<{ payroll: PayrollEntry[]; loans: Loan[]; events: EmployeeEvent[] }> {
-    const startDate = new Date(
-      month.getFullYear(),
-      month.getMonth(),
-      1
-    )
-      .toISOString()
-      .split("T")[0];
-    const endDate = new Date(
-      month.getFullYear(),
-      month.getMonth() + 1,
-      0
-    )
-      .toISOString()
-      .split("T")[0];
-
-    return await db.transaction(async (tx) => {
-      const [payrollRows, loansRows, eventRows] = await Promise.all([
-        tx
-          .select({ entry: payrollEntries })
-          .from(payrollEntries)
-          .innerJoin(payrollRuns, eq(payrollEntries.payrollRunId, payrollRuns.id))
-          .where(
-            and(
-              eq(payrollEntries.employeeId, employeeId),
-              gte(payrollRuns.startDate, startDate),
-              lte(payrollRuns.startDate, endDate)
-            )
-          ),
-        tx
-          .select()
-          .from(loans)
-          .where(
-            and(
               eq(loans.employeeId, employeeId),
               eq(loans.status, "active"),
               lte(loans.startDate, endDate)
