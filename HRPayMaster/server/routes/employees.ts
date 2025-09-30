@@ -1028,11 +1028,11 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
 
   employeesRouter.delete("/api/employees/:id", async (req, res, next) => {
     try {
-      const deleted = await storage.deleteEmployee(req.params.id);
-      if (!deleted) {
+      const terminatedEmployee = await storage.deleteEmployee(req.params.id);
+      if (!terminatedEmployee) {
         return next(new HttpError(404, "Employee not found"));
       }
-      res.json(deleted);
+      res.json(terminatedEmployee);
     } catch (error) {
       next(new HttpError(500, "Failed to delete employee"));
     }

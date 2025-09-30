@@ -128,7 +128,8 @@ export class DuplicateEmployeeCodeError extends Error {
 
   deleteEmployee(id: string): Promise<Employee | undefined>;
 
-  period: string;
+  deleteEmployee(id: string): Promise<Employee | undefined>;
+
   payrollEntries: PayrollEntry[];
 }
 
@@ -231,8 +232,8 @@ export interface IStorage {
   upsertTemplate(key: string, data: { en: string; ar: string }): Promise<import("@shared/schema").Template>;
   async deleteEmployee(id: string): Promise<Employee | undefined> {
     return await this.terminateEmployee(id);
-
-  getEmployees(): Promise<EmployeeWithDepartment[]>;
+  async deleteEmployee(id: string): Promise<Employee | undefined> {
+    return await this.terminateEmployee(id);
   getEmployee(id: string): Promise<EmployeeWithDepartment | undefined>;
   createEmployee(employee: InsertEmployee): Promise<Employee>;
   createEmployeesBulk(
@@ -470,8 +471,9 @@ export interface IStorage {
     return await this.terminateEmployee(id);
   }
 
-  getEmployeeReport(
-    employeeId: string,
+  async deleteEmployee(id: string): Promise<Employee | undefined> {
+    return await this.terminateEmployee(id);
+  }
     range: { startDate: string; endDate: string; groupBy: "month" | "year" }
   ): Promise<EmployeeReportPeriod[]>;
   getCompanyPayrollSummary(
