@@ -174,8 +174,10 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
     }
 
     // Get all active employees
-    const employees = await storage.getEmployees();
-    const activeEmployees = employees.filter(emp => emp.status === "active");
+    const activeEmployees = await storage.getEmployees({
+      status: ["active"],
+      includeTerminated: false,
+    });
 
     if (activeEmployees.length === 0) {
       return next(new HttpError(400, "No active employees found"));

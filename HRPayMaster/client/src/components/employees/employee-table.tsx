@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import {
   Eye,
   Edit,
-  Trash2,
+  UserX,
   User,
   ArrowUpDown,
   ChevronDown,
@@ -34,19 +34,22 @@ interface EmployeeTableProps {
   // retained for backwards compatibility but unused
   employees?: EmployeeWithDepartment[];
   isLoading?: boolean;
-  onDeleteEmployee: (employeeId: string) => void;
+  onTerminateEmployee: (employeeId: string) => void;
   onEditEmployee: (employee: EmployeeWithDepartment) => void;
-  isDeleting: boolean;
+  isMutating: boolean;
+  initialStatusFilter?: string;
 }
 
 export default function EmployeeTable({
-  onDeleteEmployee,
+  onTerminateEmployee,
   onEditEmployee,
-  isDeleting,
+  isMutating,
+  initialStatusFilter,
 }: EmployeeTableProps) {
+  const normalizedInitialStatus = (initialStatusFilter || "all").toLowerCase();
   const [nameFilter, setNameFilter] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState(normalizedInitialStatus);
   const [sortBy, setSortBy] = useState("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
@@ -133,7 +136,7 @@ export default function EmployeeTable({
       if (params.nameFilter) searchParams.set("name", params.nameFilter);
       if (params.departmentFilter !== "all")
         searchParams.set("department", params.departmentFilter);
-      if (params.statusFilter !== "all")
+      if (params.statusFilter)
         searchParams.set("status", params.statusFilter);
       if (params.sortBy) searchParams.set("sort", params.sortBy);
       searchParams.set("order", params.sortOrder);
@@ -169,6 +172,8 @@ export default function EmployeeTable({
         return 'bg-warning text-white';
       case 'inactive':
         return 'bg-gray-500 text-white';
+      case 'terminated':
+        return 'bg-destructive text-white';
       default:
         return 'bg-secondary text-secondary-foreground';
     }
@@ -182,6 +187,10 @@ export default function EmployeeTable({
         return 'On Leave';
       case 'inactive':
         return 'Inactive';
+      case 'terminated':
+        return 'Terminated';
+      case 'resigned':
+        return 'Resigned';
       default:
         return status;
     }
@@ -326,6 +335,8 @@ export default function EmployeeTable({
             <SelectItem value="active">Active</SelectItem>
             <SelectItem value="on_leave">On Leave</SelectItem>
             <SelectItem value="inactive">Inactive</SelectItem>
+            <SelectItem value="resigned">Resigned</SelectItem>
+            <SelectItem value="terminated">Terminated</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -494,11 +505,12 @@ export default function EmployeeTable({
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => onDeleteEmployee(employee.id)}
-                    disabled={isDeleting}
+                    onClick={() => onTerminateEmployee(employee.id)}
+                    disabled={isMutating}
                     className="text-red-600 hover:text-red-700"
+                    aria-label="Terminate employee"
                   >
-                    <Trash2 size={16} />
+                    <UserX size={16} />
                   </Button>
                 </div>
               </td>
@@ -629,3 +641,7 @@ export default function EmployeeTable({
     </div>
   );
 }
+  useEffect(() => {
+    const next = (initialStatusFilter || "all").toLowerCase();
+    setStatusFilter(prev => (prev === next ? prev : next));
+  }, [initialStatusFilter]);

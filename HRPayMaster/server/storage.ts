@@ -24,11 +24,41 @@ import {
   type AssetAssignment,
   type InsertAssetAssignment,
   type AssetAssignmentWithDetails,
-  assetDocuments,
-  type AssetDocument,
-  type InsertAssetDocument,
-  assetRepairs,
-  type AssetRepair,
+import { db } from "./db";
+import {
+  eq,
+  desc,
+  asc,
+  and,
+  gte,
+  lte,
+  sql,
+  inArray,
+  ne,
+  type AnyColumn,
+  type SQL,
+} from "drizzle-orm";
+export interface PayrollDepartmentSummaryRow {
+  period: string;
+  departmentId: string | null;
+  departmentName: string | null;
+  grossPay: number;
+  netPay: number;
+}
+
+export interface EmployeeFilters {
+  status?: string[];
+  departmentId?: string;
+  companyId?: string;
+  name?: string;
+  search?: string;
+  includeTerminated?: boolean;
+  limit?: number;
+  offset?: number;
+  sort?: "name" | "position" | "department" | "salary" | "status" | "startDate";
+  order?: "asc" | "desc";
+}
+
   type InsertAssetRepair,
   type Car,
   type InsertCar,
@@ -84,8 +114,11 @@ export class DuplicateEmployeeCodeError extends Error {
     this.name = "DuplicateEmployeeCodeError";
   }
 }
-
-export interface EmployeeReportPeriod {
+  // Employee methods
+  getEmployees(filters?: EmployeeFilters): Promise<EmployeeWithDepartment[]>;
+  terminateEmployee(id: string): Promise<Employee | undefined>;
+  countEmployees(filters?: EmployeeFilters): Promise<number>;
+
   period: string;
   payrollEntries: PayrollEntry[];
   employeeEvents: EmployeeEvent[];
@@ -225,15 +258,115 @@ export interface IStorage {
     id: string,
     value: Partial<InsertEmployeeCustomValue>
   ): Promise<EmployeeCustomValue | undefined>;
-  deleteEmployeeCustomValue(id: string): Promise<boolean>;
-
-  // Payroll methods
-  getPayrollRuns(): Promise<PayrollRun[]>;
-  getPayrollRun(id: string): Promise<PayrollRunWithEntries | undefined>;
-  createPayrollRun(payrollRun: InsertPayrollRun): Promise<PayrollRun>;
-  updatePayrollRun(id: string, payrollRun: Partial<InsertPayrollRun>): Promise<PayrollRun | undefined>;
-  deletePayrollRun(id: string): Promise<boolean>;
-
+  deleteEmployeeCustomValue(id: string): Promise<boolean>;  async deleteCompany(id: string): Promise<boolean> {
+    const result = await db.delete(companies).where(eq(companies.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  private buildEmployeeFilters(filters: EmployeeFilters = {}): SQL[] {
+    const conditions: SQL[] = [];
+    const normalizedStatuses = filters.status?.map(status => status.toLowerCase());
+
+    if (normalizedStatuses && normalizedStatuses.length > 0) {
+      conditions.push(inArray(employees.status, normalizedStatuses));
+    }
+
+    const includeTerminated = filters.includeTerminated ?? true;
+    const wantsTerminated = normalizedStatuses?.includes("terminated") ?? false;
+    if (!includeTerminated && !wantsTerminated) {
+      conditions.push(ne(employees.status, "terminated"));
+    }
+
+    if (filters.departmentId) {
+      conditions.push(eq(employees.departmentId, filters.departmentId));
+    }
+
+    if (filters.companyId) {
+      conditions.push(eq(employees.companyId, filters.companyId));
+    }
+
+    const searchTerm = filters.search ?? filters.name;
+    if (searchTerm) {
+      const like = `%${searchTerm.toLowerCase()}%`;
+      conditions.push(
+        sql`(lower(${employees.firstName}) LIKE ${like}
+          OR lower(coalesce(${employees.lastName}, '')) LIKE ${like}
+          OR lower(coalesce(${employees.email}, '')) LIKE ${like}
+          OR lower(coalesce(${employees.employeeCode}, '')) LIKE ${like}
+          OR lower(coalesce(${employees.position}, '')) LIKE ${like})`,
+      );
+    }
+
+    return conditions;
+  }
+
+  private buildEmployeeOrder(sort?: EmployeeFilters["sort"], order: EmployeeFilters["order"] = "asc"): (AnyColumn | SQL)[] {
+    const isDesc = order === "desc";
+    switch (sort) {
+      case "position":
+        return [isDesc ? desc(employees.position) : asc(employees.position)];
+      case "department":
+        return [
+          isDesc ? desc(departments.name) : asc(departments.name),
+          isDesc ? desc(employees.departmentId) : asc(employees.departmentId),
+        ];
+      case "salary":
+        return [isDesc ? desc(employees.salary) : asc(employees.salary)];
+      case "status":
+        return [isDesc ? desc(employees.status) : asc(employees.status)];
+      case "startDate":
+        return [isDesc ? desc(employees.startDate) : asc(employees.startDate)];
+      case "name":
+      default:
+        return [
+          isDesc ? desc(employees.firstName) : asc(employees.firstName),
+          isDesc ? desc(employees.lastName) : asc(employees.lastName),
+        ];
+    }
+  }
+
+  // Employee methods
+  async getEmployees(filters: EmployeeFilters = {}): Promise<EmployeeWithDepartment[]> {
+    const conditions = this.buildEmployeeFilters(filters);
+    const orderBy = this.buildEmployeeOrder(filters.sort, filters.order);
+
+    let query = db
+      .select({ employee: employees, department: departments })
+      .from(employees)
+      .leftJoin(departments, eq(departments.id, employees.departmentId));
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    if (orderBy.length > 0) {
+      query = query.orderBy(...orderBy);
+    }
+
+    if (typeof filters.limit === "number") {
+      query = query.limit(filters.limit);
+    }
+
+    if (typeof filters.offset === "number") {
+      query = query.offset(filters.offset);
+    }
+
+    const rows = await query;
+    return rows.map(row => ({
+      ...row.employee,
+      department: row.department || undefined,
+    }));
+  }
+
+  async countEmployees(filters: EmployeeFilters = {}): Promise<number> {
+    const conditions = this.buildEmployeeFilters(filters);
+    let query = db.select({ count: sql<number>`count(*)` }).from(employees);
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    const [result] = await query;
+    return Number(result?.count ?? 0);
+  }
   // Payroll entry methods
   getPayrollEntries(payrollRunId: string): Promise<PayrollEntry[]>;
   createPayrollEntry(payrollEntry: InsertPayrollEntry): Promise<PayrollEntry>;
@@ -295,12 +428,26 @@ export interface IStorage {
   // Notification methods
   getNotifications(): Promise<NotificationWithEmployee[]>;
   getUnreadNotifications(): Promise<NotificationWithEmployee[]>;
-  createNotification(notification: InsertNotification): Promise<Notification>;
-  updateNotification(id: string, notification: Partial<InsertNotification>): Promise<Notification | undefined>;
-  markNotificationAsRead(id: string): Promise<boolean>;
-  deleteNotification(id: string): Promise<boolean>;
-
-  // Email alert methods
+  createNotification(notification: InsertNotification): Promise<Notification>;  async updateEmployee(
+    id: string,
+    employee: Partial<Omit<InsertEmployee, "employeeCode">>
+  ): Promise<Employee | undefined> {
+    return updated || undefined;
+  }
+
+  async terminateEmployee(id: string): Promise<Employee | undefined> {
+    const [updated] = await db
+      .update(employees)
+      .set({ status: "terminated" })
+      .where(eq(employees.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteEmployee(id: string): Promise<boolean> {
+    const terminated = await this.terminateEmployee(id);
+    return Boolean(terminated);
+  }
   getEmailAlerts(): Promise<EmailAlert[]>;
   createEmailAlert(alert: InsertEmailAlert): Promise<EmailAlert>;
   updateEmailAlert(id: string, alert: Partial<InsertEmailAlert>): Promise<EmailAlert | undefined>;

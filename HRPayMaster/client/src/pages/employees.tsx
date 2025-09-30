@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useMutation } from "@tanstack/react-query";
 
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Search } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
-import { apiPost, apiPut, apiDelete } from "@/lib/http";
+import { apiPost, apiPut } from "@/lib/http";
 import { buildBilingualActionReceipt, buildAndEncodePdf } from "@/lib/pdf";
 import { useToast } from "@/hooks/use-toast";
 import { toastApiError } from "@/lib/toastError";
@@ -19,7 +19,11 @@ import type { EmployeeWithDepartment, Department, InsertEmployee, Company } from
 import { useLocation } from "wouter";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
 
-export default function Employees() {
+interface EmployeesProps {
+  defaultStatus?: string;
+}
+
+export default function Employees({ defaultStatus = "active" }: EmployeesProps) {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
@@ -27,7 +31,7 @@ export default function Employees() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<EmployeeWithDepartment | null>(null);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
-  const [employeeToDelete, setEmployeeToDelete] = useState<string | null>(null);
+  const [employeeToTerminate, setEmployeeToTerminate] = useState<string | null>(null);
   const { toast } = useToast();
 
   const {
@@ -39,8 +43,8 @@ export default function Employees() {
     queryKey: ["/api/employees"],
   });
   const [location] = useLocation();
-  const params = new URLSearchParams(location.split('?')[1] || '');
-  const statusFilterParam = params.get('status');
+  const params = useMemo(() => new URLSearchParams(location.split('?')[1] || ''), [location]);
+  const statusFilterParam = params.get('status')?.toLowerCase() || defaultStatus?.toLowerCase();
 
   const {
     data: departments,
@@ -58,9 +62,9 @@ export default function Employees() {
     queryKey: ["/api/companies"],
   });
 
-  const deleteEmployeeMutation = useMutation({
+  const terminateEmployeeMutation = useMutation({
     mutationFn: async (employeeId: string) => {
-      const res = await apiDelete(`/api/employees/${employeeId}`);
+      const res = await apiPost(`/api/employees/${employeeId}/terminate`, {});
       if (!res.ok) throw res;
       return employeeId;
     },
@@ -70,11 +74,11 @@ export default function Employees() {
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       toast({
         title: "Success",
-        description: "Employee deleted successfully",
+        description: "Employee terminated successfully",
       });
     },
     onError: (err) => {
-      toastApiError(err as any, "Failed to delete employee");
+      toastApiError(err as any, "Failed to terminate employee");
     },
   });
 
@@ -148,28 +152,30 @@ export default function Employees() {
       employee.position.toLowerCase().includes(searchQuery.toLowerCase());
     
     const matchesDepartment = departmentFilter === "" || departmentFilter === "all" || employee.departmentId === departmentFilter;
-    const matchesStatus = statusFilterParam ? (employee.status || '').toLowerCase() === statusFilterParam.toLowerCase() : true;
+    const matchesStatus = statusFilterParam && statusFilterParam !== "all"
+      ? (employee.status || '').toLowerCase() === statusFilterParam
+      : true;
     
     return matchesSearch && matchesDepartment && matchesStatus;
   }) || [];
 
   const handleDeleteEmployee = (employeeId: string) => {
-    setEmployeeToDelete(employeeId);
+    setEmployeeToTerminate(employeeId);
     setIsConfirmOpen(true);
   };
 
   const confirmDeleteEmployee = () => {
-    if (employeeToDelete) {
-      deleteEmployeeMutation.mutate(employeeToDelete);
+    if (employeeToTerminate) {
+      terminateEmployeeMutation.mutate(employeeToTerminate);
     }
     setIsConfirmOpen(false);
-    setEmployeeToDelete(null);
+    setEmployeeToTerminate(null);
   };
 
   const handleConfirmOpenChange = (open: boolean) => {
     setIsConfirmOpen(open);
     if (!open) {
-      setEmployeeToDelete(null);
+      setEmployeeToTerminate(null);
     }
   };
 
@@ -257,9 +263,10 @@ export default function Employees() {
         <EmployeeTable
           employees={filteredEmployees}
           isLoading={employeesLoading}
-          onDeleteEmployee={handleDeleteEmployee}
+          onTerminateEmployee={handleDeleteEmployee}
           onEditEmployee={handleEditEmployee}
-          isDeleting={deleteEmployeeMutation.isPending}
+          isMutating={terminateEmployeeMutation.isPending}
+          initialStatusFilter={statusFilterParam || undefined}
         />
 
         {/* Edit Employee Dialog */}
@@ -336,9 +343,9 @@ export default function Employees() {
         <ConfirmDialog
           open={isConfirmOpen}
           onOpenChange={handleConfirmOpenChange}
-          title={t('employeesPage.deleteEmployee', 'Delete Employee')}
-          description={t('employeesPage.deleteDesc', 'Are you sure you want to delete this employee?')}
-          confirmText={t('actions.delete')}
+          title={t('employeesPage.terminateEmployee', 'Terminate Employee')}
+          description={t('employeesPage.terminateDesc', 'Are you sure you want to terminate this employee?')}
+          confirmText={t('actions.delete', 'Terminate')}
           onConfirm={confirmDeleteEmployee}
         />
       </div>

@@ -1,6 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { HttpError } from "../errorHandler";
-import { storage, DuplicateEmployeeCodeError } from "../storage";
+import { storage, DuplicateEmployeeCodeError, type EmployeeFilters } from "../storage";
 import { assetService } from "../assetService";
 import {
   insertDepartmentSchema,
@@ -367,7 +367,91 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
   // Employee routes
   employeesRouter.get("/api/employees", async (req, res, next) => {
     try {
-      const employees = await storage.getEmployees();
+      const { page, limit, status, department, company, name, search, sort, order, includeTerminated } = req.query;
+
+      const limitNum = typeof limit === "string" ? Math.max(1, Math.min(100, Number.parseInt(limit, 10) || 0)) : undefined;
+      const pageNum = typeof page === "string" ? Math.max(1, Number.parseInt(page, 10) || 1) : 1;
+      const offset = limitNum ? (pageNum - 1) * limitNum : undefined;
+
+      const statusValues = Array.isArray(status)
+        ? status
+        : typeof status === "string"
+          ? status.split(",")
+          : [];
+      const normalizedStatuses = statusValues
+        .map(value => value.trim().toLowerCase())
+        .filter(value => value.length > 0);
+
+      const allowedStatuses = new Set(["active", "inactive", "on_leave", "resigned", "terminated"]);
+      const hasAllStatuses = normalizedStatuses.includes("all");
+      let includeTerminatedFlag = normalizedStatuses.includes("terminated") || hasAllStatuses;
+      if (typeof includeTerminated === "string") {
+        includeTerminatedFlag = includeTerminated.toLowerCase() === "true";
+      }
+      if (!status && typeof includeTerminated !== "string") {
+        includeTerminatedFlag = false;
+      }
+      const filteredStatuses = normalizedStatuses
+        .filter(value => value !== "all")
+        .filter(value => allowedStatuses.has(value));
+
+      const filters: EmployeeFilters = {
+        limit: limitNum,
+        offset,
+        includeTerminated: includeTerminatedFlag,
+      };
+
+      if (filteredStatuses.length > 0) {
+        filters.status = filteredStatuses;
+      }
+
+      if (typeof department === "string" && department.trim() !== "") {
+        filters.departmentId = department;
+      }
+
+      if (typeof company === "string" && company.trim() !== "") {
+        filters.companyId = company;
+      }
+
+      const searchTerm = typeof name === "string" && name.trim() !== ""
+        ? name
+        : typeof search === "string" && search.trim() !== ""
+          ? search
+          : undefined;
+      if (searchTerm) {
+        filters.search = searchTerm;
+      }
+
+      const sortMap: Record<string, import("../storage").EmployeeFilters["sort"]> = {
+        name: "name",
+        position: "position",
+        department: "department",
+        salary: "salary",
+        status: "status",
+        startdate: "startDate",
+        start_date: "startDate",
+      };
+
+      if (typeof sort === "string") {
+        const normalizedSort = sort.toLowerCase();
+        if (sortMap[normalizedSort]) {
+          filters.sort = sortMap[normalizedSort];
+        }
+      }
+
+      if (typeof order === "string") {
+        const normalizedOrder = order.toLowerCase();
+        if (normalizedOrder === "asc" || normalizedOrder === "desc") {
+          filters.order = normalizedOrder;
+        }
+      }
+
+      const [employees, total] = await Promise.all([
+        storage.getEmployees(filters),
+        storage.countEmployees({ ...filters, limit: undefined, offset: undefined }),
+      ]);
+
+      res.setHeader("X-Total-Count", total.toString());
       res.json(employees);
     } catch (error) {
       next(new HttpError(500, "Failed to fetch employees"));
@@ -391,8 +475,10 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
   });
 
   const employeeSchema = insertEmployeeSchema.extend({
-    status: z.preprocess(v => (emptyToUndef(v) as string | undefined)?.toLowerCase(),
-      z.enum(["active", "on_leave", "resigned"]).optional()),
+    status: z.preprocess(
+      v => (emptyToUndef(v) as string | undefined)?.toLowerCase(),
+      z.enum(["active", "inactive", "on_leave", "resigned", "terminated"]).optional(),
+    ),
     paymentMethod: z.preprocess(v => (emptyToUndef(v) as string | undefined)?.toLowerCase(),
       z.enum(["bank", "cash", "link"]).optional()),
   });
@@ -928,6 +1014,18 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
     }
   });
 
+  employeesRouter.post("/api/employees/:id/terminate", async (req, res, next) => {
+    try {
+      const terminated = await storage.terminateEmployee(req.params.id);
+      if (!terminated) {
+        return next(new HttpError(404, "Employee not found"));
+      }
+      res.json(terminated);
+    } catch (error) {
+      next(new HttpError(500, "Failed to terminate employee"));
+    }
+  });
+
   employeesRouter.delete("/api/employees/:id", async (req, res, next) => {
     try {
       const deleted = await storage.deleteEmployee(req.params.id);
@@ -936,7 +1034,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
       }
       res.status(204).send();
     } catch (error) {
-      next(new HttpError(500, "Failed to delete employee"));
+      next(new HttpError(500, "Failed to terminate employee"));
     }
   });
 
