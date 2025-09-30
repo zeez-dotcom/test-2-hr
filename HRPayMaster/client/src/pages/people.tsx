@@ -12,7 +12,7 @@ import { useTranslation } from "react-i18next";
 
 export default function People() {
   const { t } = useTranslation();
-  const allowed = ["employees", "departments", "vacations", "events", "attendance", "logs", "docgen"] as const;
+  const allowed = ["employees", "terminated", "departments", "vacations", "events", "attendance", "logs", "docgen"] as const;
   const defaultTab = "employees" as const;
   const [location, navigate] = useLocation();
   const search = useSearch();
@@ -30,7 +30,18 @@ export default function People() {
   const onTabChange = (value: string) => {
     const next = allowed.includes(value as any) ? value : defaultTab;
     setTab(next as any);
-    navigate(`${location}?tab=${next}`);
+    const params = new URLSearchParams(search);
+    params.set("tab", next);
+    if (next === "employees") {
+      params.set("status", "active");
+    } else if (next === "terminated") {
+      params.set("status", "terminated");
+    } else {
+      params.delete("status");
+    }
+    const base = location.split("?")[0] || location;
+    const qs = params.toString();
+    navigate(`${base}?${qs}`);
   };
   return (
     <div className="space-y-4">
@@ -38,6 +49,7 @@ export default function People() {
       <Tabs value={tab} onValueChange={onTabChange} className="space-y-4">
         <TabsList>
           <TabsTrigger value="employees">{t('nav.employees','Employees')}</TabsTrigger>
+          <TabsTrigger value="terminated">{t('employeesPage.terminatedTab','Terminated')}</TabsTrigger>
           <TabsTrigger value="departments">{t('nav.departments','Departments')}</TabsTrigger>
           <TabsTrigger value="vacations">{t('nav.vacations','Vacations')}</TabsTrigger>
           <TabsTrigger value="events">{t('nav.employeeEvents','Events')}</TabsTrigger>
@@ -46,7 +58,10 @@ export default function People() {
           <TabsTrigger value="docgen">{t('docgen.title','Document Generator')}</TabsTrigger>
         </TabsList>
         <TabsContent value="employees">
-          <Employees />
+          <Employees defaultStatus="active" />
+        </TabsContent>
+        <TabsContent value="terminated">
+          <Employees defaultStatus="terminated" />
         </TabsContent>
         <TabsContent value="departments">
           <Departments />

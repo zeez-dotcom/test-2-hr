@@ -71,6 +71,7 @@ describe('Employees page', () => {
         salary: '0',
         workLocation: 'Office',
         startDate: '2024-01-01',
+        status: 'active',
       },
       {
         id: '2',
@@ -81,6 +82,7 @@ describe('Employees page', () => {
         salary: '0',
         workLocation: 'Office',
         startDate: '2024-01-01',
+        status: 'active',
       },
     ];
     queryClient.setQueryData(['/api/employees'], employees);
