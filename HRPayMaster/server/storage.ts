@@ -4134,42 +4134,7 @@ export class DatabaseStorage implements IStorage {
 }
 
 export const storage = new DatabaseStorage();
-
-        const dateA = new Date(a.assignedDate);
-        const dateB = new Date(b.assignedDate);
-        return dateA.getTime() - dateB.getTime();
-      });
-  }
-
-  // Document expiry check methods
-  async checkDocumentExpiries(): Promise<DocumentExpiryCheck[]> {
-    const allEmployees = await db.select().from(employees);
-    const checks: DocumentExpiryCheck[] = [];
-
-    allEmployees.forEach(employee => {
-      const check: DocumentExpiryCheck = {
-        employeeId: employee.id,
-        employeeName: `${employee.firstName} ${employee.lastName}`,
-        email: employee.email,
-      };
-
-      // Check visa expiry
-      if (employee.visaExpiryDate && employee.visaNumber) {
-        const daysUntilExpiry = this.calculateDaysUntilExpiry(employee.visaExpiryDate);
-        check.visa = {
-          number: employee.visaNumber,
-          expiryDate: employee.visaExpiryDate,
-          alertDays: employee.visaAlertDays || 30,
-          daysUntilExpiry,
-        };
-      }
-
-      // Check civil ID expiry
-      if (employee.civilIdExpiryDate && employee.civilId) {
-        const daysUntilExpiry = this.calculateDaysUntilExpiry(employee.civilIdExpiryDate);
-        check.civilId = {
-          number: employee.civilId,
-          expiryDate: employee.civilIdExpiryDate,
+
           alertDays: employee.civilIdAlertDays || 60,
           daysUntilExpiry,
         };
