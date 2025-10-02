@@ -4135,15 +4135,6 @@ export class DatabaseStorage implements IStorage {
 
 export const storage = new DatabaseStorage();
 
-        checks.push(check);
-      }
-    });
-
-    return checks;
-  }
-
-  private calculateDaysUntilExpiry(expiryDate: string): number {
-    const today = new Date();
     const expiry = new Date(expiryDate);
     const diffTime = expiry.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
