@@ -19,6 +19,7 @@ import type { PayrollRunWithEntries, PayrollEntry } from "@shared/schema";
 import { DeductionForm } from "@/components/payroll/deduction-form";
 import { BonusForm } from "@/components/payroll/bonus-form";
 import { toastApiError } from "@/lib/toastError";
+import { getEmployeeDisplayDetails } from "./employee-display";
 
 interface PayrollEditViewProps {
   payrollId: string;
@@ -305,86 +306,95 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
-                  {payrollRun.entries.map((entry) => (
-                    <tr key={entry.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
-                          Employee {entry.employeeId}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          ID: {entry.employeeId}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                        <EditableCell
-                          entryId={entry.id}
-                          field="baseSalary"
-                          value={entry.baseSalary || entry.grossPay}
-                        />
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                        <EditableCell
-                          entryId={entry.id}
-                          field="workingDays"
-                          value={entry.workingDays || 30}
-                          type="number"
-                        />
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                        <EditableCell
-                          entryId={entry.id}
-                          field="vacationDays"
-                          value={entry.vacationDays || 0}
-                          type="number"
-                        />
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-green-600">
-                        <div
-                          className="cursor-pointer hover:bg-green-50 p-1 rounded text-green-600"
-                          onDoubleClick={() => handleAddBonus(entry)}
-                          title="Double-click to add bonus"
-                        >
-                          +{formatCurrency(parseFloat(entry.bonusAmount) || 0)}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-red-600">
-                        <div className="text-sm text-red-600">
-                          -{formatCurrency(
-                            (parseFloat(entry.taxDeduction) || 0) +
-                            (parseFloat(entry.socialSecurityDeduction) || 0) +
-                            (parseFloat(entry.healthInsuranceDeduction) || 0) +
-                            (parseFloat(entry.loanDeduction) || 0) +
-                            (parseFloat(entry.otherDeductions) || 0)
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {formatCurrency(entry.netPay)}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-center">
-                        <div className="flex justify-center space-x-1">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleAddBonus(entry)}
-                            className="text-green-600 hover:text-green-700"
-                            title="Add Bonus"
+                  {payrollRun.entries.map((entry) => {
+                    const { englishName, arabicName, code } = getEmployeeDisplayDetails(entry);
+
+                    return (
+                      <tr key={entry.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">
+                            {englishName}
+                          </div>
+                          {arabicName ? (
+                            <div className="text-sm text-gray-600">
+                              {arabicName}
+                            </div>
+                          ) : null}
+                          <div className="text-xs text-gray-500">
+                            Code: {code}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                          <EditableCell
+                            entryId={entry.id}
+                            field="baseSalary"
+                            value={entry.baseSalary || entry.grossPay}
+                          />
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                          <EditableCell
+                            entryId={entry.id}
+                            field="workingDays"
+                            value={entry.workingDays || 30}
+                            type="number"
+                          />
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                          <EditableCell
+                            entryId={entry.id}
+                            field="vacationDays"
+                            value={entry.vacationDays || 0}
+                            type="number"
+                          />
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-green-600">
+                          <div
+                            className="cursor-pointer hover:bg-green-50 p-1 rounded text-green-600"
+                            onDoubleClick={() => handleAddBonus(entry)}
+                            title="Double-click to add bonus"
                           >
-                            <Plus size={12} />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleAddDeduction(entry)}
-                            className="text-red-600 hover:text-red-700"
-                            title="Add Deduction"
-                          >
-                            <Minus size={12} />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                            +{formatCurrency(parseFloat(entry.bonusAmount) || 0)}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-red-600">
+                          <div className="text-sm text-red-600">
+                            -{formatCurrency(
+                              (parseFloat(entry.taxDeduction) || 0) +
+                              (parseFloat(entry.socialSecurityDeduction) || 0) +
+                              (parseFloat(entry.healthInsuranceDeduction) || 0) +
+                              (parseFloat(entry.loanDeduction) || 0) +
+                              (parseFloat(entry.otherDeductions) || 0)
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {formatCurrency(entry.netPay)}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-center">
+                          <div className="flex justify-center space-x-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleAddBonus(entry)}
+                              className="text-green-600 hover:text-green-700"
+                              title="Add Bonus"
+                            >
+                              <Plus size={12} />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleAddDeduction(entry)}
+                              className="text-red-600 hover:text-red-700"
+                              title="Add Deduction"
+                            >
+                              <Minus size={12} />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

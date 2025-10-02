@@ -25,6 +25,7 @@ import { SmartVacationForm } from "@/components/payroll/smart-vacation-form";
 import { SmartDeductionForm } from "@/components/payroll/smart-deduction-form";
 import { apiPut } from "@/lib/http";
 import { toastApiError } from "@/lib/toastError";
+import { getEmployeeDisplayDetails } from "./employee-display";
 
 interface EnhancedPayrollTableProps {
   entries: any[];
@@ -313,19 +314,23 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
                     ? "text-green-600"
                     : "text-gray-900";
 
+              const { englishName, arabicName, code } = getEmployeeDisplayDetails(entry);
+
               return (
                 <tr key={entry.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div>
                         <div className="text-sm font-medium text-gray-900">
-                          {entry.employee?.name || 
-                           (entry.employee?.firstName && entry.employee?.lastName ? 
-                            `${entry.employee.firstName} ${entry.employee.lastName}` : 
-                            `Employee ${entry.employeeId}`)}
+                          {englishName}
                         </div>
+                        {arabicName ? (
+                          <div className="text-sm text-gray-600">
+                            {arabicName}
+                          </div>
+                        ) : null}
                         <div className="text-xs text-gray-500">
-                          ID: {entry.employeeId}
+                          Code: {code}
                         </div>
                       </div>
                     </div>
