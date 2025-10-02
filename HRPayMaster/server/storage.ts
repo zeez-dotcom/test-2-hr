@@ -1301,6 +1301,8 @@ export class DatabaseStorage implements IStorage {
 
         id: employees.id,
 
+        employeeCode: employees.employeeCode,
+
         firstName: employees.firstName,
 
         lastName: employees.lastName,
