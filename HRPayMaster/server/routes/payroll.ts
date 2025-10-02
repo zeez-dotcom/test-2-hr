@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { HttpError } from "../errorHandler";
-import { storage } from "../storage";
+import { LoanPaymentUndoError, storage } from "../storage";
 import {
   insertPayrollRunSchema,
   insertPayrollEntrySchema,
@@ -477,6 +477,19 @@ payrollRouter.delete("/:id", async (req, res, next) => {
     }
     res.status(204).send();
   } catch (error) {
+    if (error instanceof LoanPaymentUndoError) {
+      return next(
+        new HttpError(
+          409,
+          "Payroll run cannot be deleted because loan payments from this run cannot be reversed.",
+          {
+            loanId: error.loanId,
+            reason: error.message,
+          },
+          "payrollRunLoanUndoBlocked",
+        ),
+      );
+    }
     next(new HttpError(500, "Failed to delete payroll run"));
   }
 });

@@ -14,6 +14,8 @@ import {
   type SQL,
 } from "drizzle-orm";
 import { db } from "./db";
+
+type TransactionClient = Parameters<Parameters<typeof db.transaction>[0]>[0];
 import {
   type Department,
   type InsertDepartment,
@@ -31,7 +33,6 @@ import {
   type Loan,
   type InsertLoan,
   type LoanWithEmployee,
-  loanPayments,
   type LoanPayment,
   type InsertLoanPayment,
   type Asset,
@@ -98,6 +99,16 @@ export class DuplicateEmployeeCodeError extends Error {
   constructor(code: string) {
     super(`Employee code ${code} already exists`);
     this.name = "DuplicateEmployeeCodeError";
+  }
+}
+
+export class LoanPaymentUndoError extends Error {
+  constructor(
+    message: string,
+    public readonly loanId?: string,
+  ) {
+    super(message);
+    this.name = "LoanPaymentUndoError";
   }
 }
 
@@ -1387,11 +1398,224 @@ export class DatabaseStorage implements IStorage {
 
 
 
+  private async undoPayrollLoanDeductions(
+    tx: TransactionClient,
+    payrollRunId: string,
+  ): Promise<void> {
+
+    const payments = await tx
+
+      .select({ loanId: loanPayments.loanId, amount: loanPayments.amount })
+
+      .from(loanPayments)
+
+      .where(eq(loanPayments.payrollRunId, payrollRunId));
+
+
+
+    if (payments.length === 0) {
+
+      return;
+
+    }
+
+
+
+    const totalsByLoan = new Map<string, number>();
+
+
+
+    for (const payment of payments) {
+
+      const loanId = payment.loanId;
+
+      if (!loanId) continue;
+
+      const amount = Number.parseFloat(String(payment.amount ?? 0));
+
+      if (!Number.isFinite(amount)) {
+
+        throw new LoanPaymentUndoError(
+
+          `Unable to undo payroll deductions; invalid payment amount for loan ${loanId}.`,
+
+          loanId,
+
+        );
+
+      }
+
+      totalsByLoan.set(loanId, (totalsByLoan.get(loanId) ?? 0) + amount);
+
+    }
+
+
+
+    if (totalsByLoan.size === 0) {
+
+      return;
+
+    }
+
+
+
+    const loanIds = Array.from(totalsByLoan.keys());
+
+
+
+    const loansToRestore = await tx
+
+      .select({
+
+        id: loans.id,
+
+        amount: loans.amount,
+
+        remainingAmount: loans.remainingAmount,
+
+        status: loans.status,
+
+      })
+
+      .from(loans)
+
+      .where(inArray(loans.id, loanIds));
+
+
+
+    const loanLookup = new Map(loansToRestore.map(loan => [loan.id, loan] as const));
+
+    const EPSILON = 0.01;
+
+
+
+    for (const [loanId, amountToRestore] of totalsByLoan.entries()) {
+
+      if (!(amountToRestore > 0)) {
+
+        continue;
+
+      }
+
+
+
+      const loan = loanLookup.get(loanId);
+
+      if (!loan) {
+
+        throw new LoanPaymentUndoError(
+
+          `Loan ${loanId} referenced by payroll run is missing and cannot be restored.`,
+
+          loanId,
+
+        );
+
+      }
+
+
+
+      const remainingAmount = Number.parseFloat(String(loan.remainingAmount ?? 0));
+
+      if (!Number.isFinite(remainingAmount)) {
+
+        throw new LoanPaymentUndoError(
+
+          `Loan ${loanId} has an invalid remaining balance and cannot be restored.`,
+
+          loanId,
+
+        );
+
+      }
+
+
+
+      const originalAmountRaw =
+
+        loan.amount == null ? undefined : Number.parseFloat(String(loan.amount));
+
+      const hasOriginalAmount =
+
+        originalAmountRaw !== undefined && Number.isFinite(originalAmountRaw);
+
+
+
+      const updatedRemaining = remainingAmount + amountToRestore;
+
+
+
+      if (
+
+        hasOriginalAmount &&
+
+        (originalAmountRaw as number) > 0 &&
+
+        updatedRemaining - (originalAmountRaw as number) > EPSILON
+
+      ) {
+
+        throw new LoanPaymentUndoError(
+
+          `Reverting payroll deductions would exceed the original amount for loan ${loanId}.`,
+
+          loanId,
+
+        );
+
+      }
+
+
+
+      const clampedRemaining = hasOriginalAmount
+
+        ? Math.min(originalAmountRaw as number, updatedRemaining)
+
+        : updatedRemaining;
+
+
+
+      const nextStatus = clampedRemaining <= EPSILON ? "completed" : "active";
+
+
+
+      await tx
+
+        .update(loans)
+
+        .set({
+
+          remainingAmount: clampedRemaining.toFixed(2),
+
+          status: nextStatus,
+
+        })
+
+        .where(eq(loans.id, loanId));
+
+    }
+
+  }
+
+
+
   async deletePayrollRun(id: string): Promise<boolean> {
     const payrollRunNotFound = Symbol("PAYROLL_RUN_NOT_FOUND");
 
     try {
       return await db.transaction(async tx => {
+        const [existingRun] = await tx
+          .select({ id: payrollRuns.id })
+          .from(payrollRuns)
+          .where(eq(payrollRuns.id, id))
+          .limit(1);
+
+        if (!existingRun) {
+          throw payrollRunNotFound;
+        }
+
+        await this.undoPayrollLoanDeductions(tx, id);
+
         await tx
           .delete(loanPayments)
           .where(eq(loanPayments.payrollRunId, id));
