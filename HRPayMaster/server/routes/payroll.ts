@@ -51,43 +51,100 @@ payrollRouter.post(
     try {
       const runId = req.params.id;
 
-      // Load entries for this run
-      const entries = await db
-        .select()
-        .from(payrollEntriesTable)
-        .where(eq(payrollEntriesTable.payrollRunId, runId));
+      const existingRun = await db.query.payrollRuns.findFirst({
+        where: (runs, { eq: eqFn }) => eqFn(runs.id, runId),
+      });
 
-      if (!entries || entries.length === 0) {
-        return next(new HttpError(404, "No payroll entries found for this run"));
+      if (!existingRun) {
+        return next(new HttpError(404, "Payroll run not found"));
       }
 
-      // Recompute net per entry and update if needed; compute totals
-      let grossAmount = 0;
-      let totalDeductions = 0;
-      let netAmount = 0;
+      const parsedDeductions = deductionsSchema.safeParse(req.body?.deductions ?? {});
+      if (!parsedDeductions.success) {
+        return next(
+          new HttpError(400, "Invalid deduction data", parsedDeductions.error.errors),
+        );
+      }
 
-      await db.transaction(async (tx) => {
-        for (const e of entries) {
-          const gross = parseFloat(e.grossPay as any);
-          const tax = parseFloat((e.taxDeduction as any) ?? "0");
-          const soc = parseFloat((e.socialSecurityDeduction as any) ?? "0");
-          const health = parseFloat((e.healthInsuranceDeduction as any) ?? "0");
-          const loan = parseFloat((e.loanDeduction as any) ?? "0");
-          const other = parseFloat((e.otherDeductions as any) ?? "0");
-          const ded = tax + soc + health + loan + other;
-          const net = Math.max(0, gross - ded);
+      const start = new Date(existingRun.startDate);
+      const end = new Date(existingRun.endDate);
 
-          grossAmount += gross;
-          totalDeductions += ded;
-          netAmount += net;
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+        return next(new HttpError(400, "Invalid payroll run period"));
+      }
 
-          const storedNet = parseFloat((e.netPay as any) ?? "0");
-          if (Math.abs(storedNet - net) > 0.01) {
-            await tx
-              .update(payrollEntriesTable)
-              .set({ netPay: net.toString() })
-              .where(eq(payrollEntriesTable.id, e.id));
-          }
+      const activeEmployees = await storage.getEmployees({
+        status: ["active"],
+        includeTerminated: false,
+      });
+
+      const loans = await storage.getLoans(start, end);
+      const vacationRequests = await storage.getVacationRequests(start, end);
+      const rawEvents = await storage.getEmployeeEvents(start, end);
+      const employeeEvents = rawEvents.map(({ employee, ...event }) => ({
+        ...event,
+        affectsPayroll: (event as any).affectsPayroll ?? true,
+      }));
+
+      const companies = await storage.getCompanies();
+      const company = companies[0];
+      const useAttendance =
+        req.body?.useAttendance !== undefined
+          ? Boolean(req.body.useAttendance)
+          : Boolean((company as any)?.useAttendanceForDeductions);
+      const attendanceSummary = useAttendance
+        ? await storage.getAttendanceSummary(start, end)
+        : ({} as Record<string, number>);
+
+      const deductionConfig = parsedDeductions.data;
+
+      const payrollEntries = await Promise.all(
+        activeEmployees.map(employee => {
+          const employeeWorkingDays =
+            employee.standardWorkingDays ||
+            (Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+
+          return calculateEmployeePayroll({
+            employee,
+            loans,
+            vacationRequests,
+            employeeEvents,
+            start,
+            end,
+            workingDays: employeeWorkingDays,
+            attendanceDays: attendanceSummary[employee.id],
+            config: deductionConfig,
+          });
+        }),
+      );
+
+      const { grossAmount, totalDeductions, netAmount } = calculateTotals(payrollEntries);
+
+      await db.transaction(async tx => {
+        await tx
+          .delete(payrollEntriesTable)
+          .where(eq(payrollEntriesTable.payrollRunId, runId));
+
+        if (payrollEntries.length > 0) {
+          await tx.insert(payrollEntriesTable).values(
+            payrollEntries.map(entry => ({
+              employeeId: entry.employeeId,
+              grossPay: entry.grossPay.toString(),
+              baseSalary: entry.baseSalary.toString(),
+              bonusAmount: entry.bonusAmount.toString(),
+              workingDays: entry.workingDays,
+              actualWorkingDays: entry.actualWorkingDays,
+              vacationDays: entry.vacationDays,
+              taxDeduction: entry.taxDeduction.toString(),
+              socialSecurityDeduction: entry.socialSecurityDeduction.toString(),
+              healthInsuranceDeduction: entry.healthInsuranceDeduction.toString(),
+              loanDeduction: entry.loanDeduction.toString(),
+              otherDeductions: entry.otherDeductions.toString(),
+              netPay: entry.netPay.toString(),
+              adjustmentReason: entry.adjustmentReason,
+              payrollRunId: runId,
+            })),
+          );
         }
 
         await tx
@@ -100,13 +157,12 @@ payrollRouter.post(
           .where(eq(payrollRuns.id, runId));
       });
 
-      res.json({
-        id: runId,
-        grossAmount: grossAmount.toString(),
-        totalDeductions: totalDeductions.toString(),
-        netAmount: netAmount.toString(),
-        updated: true,
-      });
+      const updatedRun = await storage.getPayrollRun(runId);
+      if (!updatedRun) {
+        return next(new HttpError(500, "Failed to load updated payroll run"));
+      }
+
+      res.json(updatedRun);
     } catch (error) {
       console.error("Recalculate payroll error:", error);
       next(new HttpError(500, "Failed to recalculate payroll totals"));
