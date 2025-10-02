@@ -57,6 +57,16 @@ responses include both a `status` code and additional `details` to aid
 debugging. In production, these fields are omitted and only a general
 error message is returned.
 
+### Payroll run deletion safeguards
+
+- `DELETE /api/payroll/:id` now restores any loan balances before removing
+  a payroll run. If a loan cannot be rolled back because subsequent
+  repayments would be invalidated (for example, a later payroll run
+  already reduced the balance), the endpoint responds with HTTP `409`
+  (`error.code: "payrollRunLoanUndoBlocked"`). The JSON body includes the
+  affected `loanId` and a human-readable `reason` so API consumers can
+  surface actionable guidance to administrators.
+
 ## Employee Import Guide
 
 ### Preparing the Excel file
