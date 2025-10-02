@@ -1388,17 +1388,33 @@ export class DatabaseStorage implements IStorage {
 
 
   async deletePayrollRun(id: string): Promise<boolean> {
+    const payrollRunNotFound = Symbol("PAYROLL_RUN_NOT_FOUND");
 
-    // Delete associated payroll entries first
+    try {
+      return await db.transaction(async tx => {
+        await tx
+          .delete(loanPayments)
+          .where(eq(loanPayments.payrollRunId, id));
 
-    await db.delete(payrollEntries).where(eq(payrollEntries.payrollRunId, id));
+        await tx
+          .delete(payrollEntries)
+          .where(eq(payrollEntries.payrollRunId, id));
 
-    
+        const result = await tx.delete(payrollRuns).where(eq(payrollRuns.id, id));
 
-    const result = await db.delete(payrollRuns).where(eq(payrollRuns.id, id));
+        if ((result.rowCount ?? 0) === 0) {
+          throw payrollRunNotFound;
+        }
 
-    return (result.rowCount ?? 0) > 0;
+        return true;
+      });
+    } catch (error) {
+      if (error === payrollRunNotFound) {
+        return false;
+      }
 
+      throw error;
+    }
   }
 
 
