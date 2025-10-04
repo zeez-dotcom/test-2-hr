@@ -1,6 +1,8 @@
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
 import type { TDocumentDefinitions, Content, TableLayout } from 'pdfmake/interfaces';
+import enLocale from '@/locales/en.json';
+import arLocale from '@/locales/ar.json';
 import { amiriRegularVfs, interRegularVfs, interSemiBoldVfs, interItalicVfs } from './font-vfs';
 import { getBrand } from './brand';
 import { sanitizeImageSrc } from './sanitizeImageSrc';
@@ -190,6 +192,100 @@ const formatCurrencyValue = (value: number | null | undefined): string => {
     maximumFractionDigits: 2,
   }).format(value);
 };
+
+type EmployeeFileLabels = {
+  title: string;
+  sections: {
+    summary: string;
+    events: string;
+    loans: string;
+    documents: string;
+  };
+  fields: {
+    name: string;
+    position: string;
+    employeeId: string;
+  };
+  tables: {
+    events: { title: string; date: string };
+    loans: { amount: string; remaining: string; monthly: string; status: string };
+    documents: { title: string; created: string };
+  };
+};
+
+const defaultEmployeeFileLabels: Record<'en' | 'ar', EmployeeFileLabels> = {
+  en: {
+    title: 'Employee File Report',
+    sections: {
+      summary: 'Employee Summary',
+      events: 'Events',
+      loans: 'Loans',
+      documents: 'Documents',
+    },
+    fields: {
+      name: 'Name',
+      position: 'Position',
+      employeeId: 'Employee ID',
+    },
+    tables: {
+      events: { title: 'Title', date: 'Date' },
+      loans: { amount: 'Amount', remaining: 'Remaining', monthly: 'Monthly Deduction', status: 'Status' },
+      documents: { title: 'Title', created: 'Created' },
+    },
+  },
+  ar: {
+    title: 'تقرير ملف الموظف',
+    sections: {
+      summary: 'ملخص الموظف',
+      events: 'الأحداث',
+      loans: 'القروض',
+      documents: 'الوثائق',
+    },
+    fields: {
+      name: 'الاسم',
+      position: 'الوظيفة',
+      employeeId: 'رقم الموظف',
+    },
+    tables: {
+      events: { title: 'العنوان', date: 'التاريخ' },
+      loans: { amount: 'المبلغ', remaining: 'المتبقي', monthly: 'القسط الشهري', status: 'الحالة' },
+      documents: { title: 'العنوان', created: 'تاريخ الإنشاء' },
+    },
+  },
+};
+
+function mergeEmployeeFileLabels(
+  base: EmployeeFileLabels,
+  overrides?: Partial<EmployeeFileLabels>
+): EmployeeFileLabels {
+  if (!overrides) {
+    return base;
+  }
+  return {
+    ...base,
+    title: overrides.title ?? base.title,
+    sections: { ...base.sections, ...(overrides.sections ?? {}) },
+    fields: { ...base.fields, ...(overrides.fields ?? {}) },
+    tables: {
+      events: { ...base.tables.events, ...(overrides.tables?.events ?? {}) },
+      loans: { ...base.tables.loans, ...(overrides.tables?.loans ?? {}) },
+      documents: { ...base.tables.documents, ...(overrides.tables?.documents ?? {}) },
+    },
+  };
+}
+
+const employeeFileLabelsByLocale: Record<'en' | 'ar', EmployeeFileLabels> = {
+  en: mergeEmployeeFileLabels(
+    defaultEmployeeFileLabels.en,
+    (enLocale as any)?.pdf?.employeeFile as Partial<EmployeeFileLabels> | undefined
+  ),
+  ar: mergeEmployeeFileLabels(
+    defaultEmployeeFileLabels.ar,
+    (arLocale as any)?.pdf?.employeeFile as Partial<EmployeeFileLabels> | undefined
+  ),
+};
+
+type DualLabel = { en: string; ar: string };
 
 export interface EmployeeLite {
   firstName: string;
@@ -394,17 +490,176 @@ export function buildEmployeeFileReport(params: {
   events: EmployeeEventLite[];
   loans: { amount: string; remainingAmount: string; monthlyDeduction: string; status: string }[];
   documents: { title: string; createdAt?: string; url?: string }[];
+  language?: 'en' | 'ar';
 }): TDocumentDefinitions {
-  const { employee, events, loans, documents } = params;
-  const base = buildEmployeeReport({ employee, events });
-  const loansBody = [
-    ['Amount', 'Remaining', 'Monthly', 'Status'],
-    ...loans.map(l => [l.amount, l.remainingAmount, l.monthlyDeduction, l.status]),
+  const { employee, events, loans, documents, language = 'en' } = params;
+  const primaryLanguage: 'en' | 'ar' = language === 'ar' ? 'ar' : 'en';
+  const secondaryLanguage: 'en' | 'ar' = primaryLanguage === 'en' ? 'ar' : 'en';
+  const labels = employeeFileLabelsByLocale;
+
+  const selectLabel = (selector: (locale: EmployeeFileLabels) => string): DualLabel => ({
+    en: selector(labels.en),
+    ar: selector(labels.ar),
+  });
+
+  type TextStyle = {
+    fontSize?: number;
+    bold?: boolean;
+    color?: string;
+    alignment?: 'left' | 'right' | 'center';
+    lineHeight?: number;
+  };
+
+  const createText = (value: string, lang: 'en' | 'ar', style?: TextStyle): Content => {
+    const sanitized = sanitizeString(value);
+    if (!sanitized) {
+      return { text: '' };
+    }
+    const { alignment, ...rest } = style ?? {};
+    return {
+      text: sanitized,
+      font: lang === 'ar' ? 'Amiri' : 'Inter',
+      alignment: alignment ?? (lang === 'ar' ? 'right' : 'left'),
+      ...rest,
+    } as Content;
+  };
+
+  const createBilingualTexts = (
+    label: DualLabel,
+    primaryStyle?: TextStyle,
+    secondaryStyle?: TextStyle
+  ): Content[] => {
+    const parts: Content[] = [];
+    const primaryValue = label[primaryLanguage];
+    if (primaryValue) {
+      parts.push(createText(primaryValue, primaryLanguage, primaryStyle));
+    }
+    if (secondaryLanguage !== primaryLanguage) {
+      const secondaryValue = label[secondaryLanguage];
+      if (secondaryValue) {
+        parts.push(createText(secondaryValue, secondaryLanguage, secondaryStyle));
+      }
+    }
+    return parts;
+  };
+
+  const createStack = (
+    label: DualLabel,
+    options?: {
+      primaryStyle?: TextStyle;
+      secondaryStyle?: TextStyle;
+      margin?: [number, number, number, number];
+    }
+  ): Content => ({
+    stack: createBilingualTexts(label, options?.primaryStyle, options?.secondaryStyle),
+    margin: options?.margin ?? [0, 0, 0, 0],
+  });
+
+  const brand = getBrand();
+  const brandName = sanitizeString(brand.name || 'HRPayMaster');
+  const brandLogo = brand.logo ? sanitizeImageSrc(brand.logo) : undefined;
+  const titleColor = brand.primaryColor || '#0F172A';
+  const accentColor = brand.secondaryColor || titleColor;
+
+  const firstName = sanitizeString(employee.firstName);
+  const lastName = sanitizeString(employee.lastName);
+  const fullName = `${firstName} ${lastName}`.trim();
+  const position = employee.position ? sanitizeString(employee.position) : '';
+  const employeeId = sanitizeString(employee.id);
+  const profileImage = employee.profileImage ? sanitizeImageSrc(employee.profileImage) : undefined;
+
+  const brandHeader: Content = {
+    columns:
+      brandLogo
+        ? [
+            { image: brandLogo, width: 64, height: 64, margin: [0, 0, 12, 0] },
+            {
+              stack: [
+                { text: brandName, font: 'Inter', fontSize: 18, bold: true, color: titleColor },
+                { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 250, y2: 0, lineWidth: 2, lineColor: accentColor }] },
+              ],
+              margin: [0, 8, 0, 0],
+            },
+          ]
+        : [
+            {
+              stack: [
+                { text: brandName, font: 'Inter', fontSize: 18, bold: true, color: titleColor },
+                { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 250, y2: 0, lineWidth: 2, lineColor: accentColor }] },
+              ],
+            },
+          ],
+    columnGap: 12,
+    margin: [0, 0, 0, 16],
+  };
+
+  const titleBlock = createStack(selectLabel(l => l.title), {
+    primaryStyle: { fontSize: 20, bold: true, color: titleColor },
+    secondaryStyle: { fontSize: 18, color: '#475569' },
+    margin: [0, 0, 0, 12],
+  });
+
+  const summaryLabel = createStack(selectLabel(l => l.sections.summary), {
+    primaryStyle: { fontSize: 12, bold: true, color: titleColor },
+    secondaryStyle: { fontSize: 11, color: '#475569' },
+    margin: [0, 0, 0, 6],
+  });
+
+  const summaryItems: Content[] = [];
+  const summaryPairs: Array<{ label: DualLabel; value: string | null }> = [
+    { label: selectLabel(l => l.fields.name), value: fullName || null },
+    { label: selectLabel(l => l.fields.position), value: position || null },
+    { label: selectLabel(l => l.fields.employeeId), value: employeeId || null },
   ];
-  const docsBody = [
-    ['Title', 'Created'],
-    ...documents.map(d => [d.title, formatYMD(d.createdAt, '')])
-  ];
+
+  for (const pair of summaryPairs) {
+    if (!pair.value) continue;
+    summaryItems.push(
+      createStack(
+        {
+          en: `${pair.label.en}: ${pair.value}`,
+          ar: `${pair.label.ar}: ${pair.value}`,
+        },
+        {
+          primaryStyle: { fontSize: 10, color: '#111827' },
+          secondaryStyle: { fontSize: 10, color: '#111827' },
+          margin: [0, 0, 0, 2],
+        }
+      )
+    );
+  }
+
+  const headerRowImage: Content = {
+    columns: [
+      profileImage ? { image: profileImage, width: 56, height: 56, margin: [0, 0, 10, 0] } : { text: '' },
+      {
+        stack: summaryItems,
+      },
+    ],
+    columnGap: 10,
+    margin: [0, 0, 0, 12],
+  };
+
+  const sectionHeader = (
+    selector: (labels: EmployeeFileLabels) => string,
+    options?: { margin?: [number, number, number, number]; pageBreak?: boolean }
+  ): Content => {
+    const block = createStack(selectLabel(selector), {
+      primaryStyle: { fontSize: 12, bold: true, color: titleColor },
+      secondaryStyle: { fontSize: 11, color: '#475569' },
+      margin: options?.margin ?? [0, 16, 0, 6],
+    });
+    if (options?.pageBreak) {
+      (block as any).pageBreak = 'before';
+    }
+    return block;
+  };
+
+  const headerCell = (label: DualLabel): Content => ({
+    stack: createBilingualTexts(label, { fontSize: 10, bold: true, color: titleColor }, { fontSize: 9, color: '#1F2937' }),
+    margin: [0, 2, 0, 2],
+  });
+
   const tableLayout: TableLayout = {
     fillColor: (rowIndex: number) => (rowIndex === 0 ? '#F8FAFC' : rowIndex % 2 === 0 ? '#F1F5F9' : null),
     hLineColor: () => '#E5E7EB',
@@ -414,11 +669,88 @@ export function buildEmployeeFileReport(params: {
     paddingTop: () => 6,
     paddingBottom: () => 6,
   };
-  (base.content as any[]).push({ text: 'Loans', style: 'section', pageBreak: 'before' });
-  (base.content as any[]).push({ table: { headerRows: 1, widths: ['auto','auto','auto','auto'], body: loansBody }, layout: tableLayout });
-  (base.content as any[]).push({ text: 'Documents', style: 'section', margin: [0,10,0,0] });
-  (base.content as any[]).push({ table: { headerRows: 1, widths: ['*','auto'], body: docsBody }, layout: tableLayout });
-  return base;
+
+  const eventsBody: any[] = [
+    [headerCell(selectLabel(l => l.tables.events.title)), headerCell(selectLabel(l => l.tables.events.date))],
+    ...events.map(event => [
+      sanitizeString(event.title),
+      formatYMD(event.eventDate, ''),
+    ]),
+  ];
+
+  const loansBody: any[] = [
+    [
+      headerCell(selectLabel(l => l.tables.loans.amount)),
+      headerCell(selectLabel(l => l.tables.loans.remaining)),
+      headerCell(selectLabel(l => l.tables.loans.monthly)),
+      headerCell(selectLabel(l => l.tables.loans.status)),
+    ],
+    ...loans.map(loan => [
+      sanitizeString(loan.amount),
+      sanitizeString(loan.remainingAmount),
+      sanitizeString(loan.monthlyDeduction),
+      sanitizeString(loan.status),
+    ]),
+  ];
+
+  const documentsBody: any[] = [
+    [headerCell(selectLabel(l => l.tables.documents.title)), headerCell(selectLabel(l => l.tables.documents.created))],
+    ...documents.map(doc => [
+      sanitizeString(doc.title),
+      formatYMD(doc.createdAt, ''),
+    ]),
+  ];
+
+  const content: Content[] = [brandHeader, titleBlock, summaryLabel, headerRowImage];
+
+  content.push(sectionHeader(l => l.sections.events, { margin: [0, 12, 0, 6] }));
+  content.push({
+    table: {
+      headerRows: 1,
+      widths: ['*', 'auto'],
+      body: eventsBody,
+    },
+    layout: tableLayout,
+  });
+
+  const loansSectionHeader = sectionHeader(l => l.sections.loans, { pageBreak: events.length > 0, margin: [0, 16, 0, 6] });
+  content.push(loansSectionHeader);
+  content.push({
+    table: {
+      headerRows: 1,
+      widths: ['auto', 'auto', 'auto', 'auto'],
+      body: loansBody,
+    },
+    layout: tableLayout,
+  });
+
+  content.push(sectionHeader(l => l.sections.documents, { margin: [0, 16, 0, 6] }));
+  content.push({
+    table: {
+      headerRows: 1,
+      widths: ['*', 'auto'],
+      body: documentsBody,
+    },
+    layout: tableLayout,
+  });
+
+  return {
+    info: { title: `${fullName || employeeId} ${labels.en.title}`.trim() },
+    pageMargins: [40, 56, 40, 56],
+    content,
+    defaultStyle: { fontSize: 10, color: '#111827', font: 'Inter' },
+    footer: (currentPage: number, pageCount: number) => ({
+      columns: ((): any[] => {
+        const left = brand.name || 'HRPayMaster';
+        const contact = [brand.website, brand.phone, brand.email].filter(Boolean).join(' | ');
+        return [
+          { text: contact ? `${left} | ${contact}` : left, color: '#64748B', fontSize: 9, font: 'Inter' },
+          { text: `Page ${currentPage} of ${pageCount}`, alignment: 'right', color: '#64748B', fontSize: 9, font: 'Inter' },
+        ];
+      })(),
+      margin: [40, 0, 40, 20],
+    }),
+  };
 }
 
 export function buildEmployeeProfileReport(data: EmployeeProfileReportParams): TDocumentDefinitions {
