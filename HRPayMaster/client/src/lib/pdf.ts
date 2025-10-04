@@ -200,6 +200,7 @@ type EmployeeFileLabels = {
     events: string;
     loans: string;
     documents: string;
+    assets: string;
   };
   fields: {
     name: string;
@@ -210,6 +211,10 @@ type EmployeeFileLabels = {
     events: { title: string; date: string };
     loans: { amount: string; remaining: string; monthly: string; status: string };
     documents: { title: string; created: string };
+    assets: { asset: string; type: string; assigned: string; returned: string; status: string; notes: string };
+  };
+  empty: {
+    assets: string;
   };
 };
 
@@ -221,6 +226,7 @@ const defaultEmployeeFileLabels: Record<'en' | 'ar', EmployeeFileLabels> = {
       events: 'Events',
       loans: 'Loans',
       documents: 'Documents',
+      assets: 'Asset Assignments',
     },
     fields: {
       name: 'Name',
@@ -231,6 +237,10 @@ const defaultEmployeeFileLabels: Record<'en' | 'ar', EmployeeFileLabels> = {
       events: { title: 'Title', date: 'Date' },
       loans: { amount: 'Amount', remaining: 'Remaining', monthly: 'Monthly Deduction', status: 'Status' },
       documents: { title: 'Title', created: 'Created' },
+      assets: { asset: 'Asset', type: 'Type', assigned: 'Assigned', returned: 'Returned', status: 'Status', notes: 'Notes' },
+    },
+    empty: {
+      assets: 'No asset assignments available.',
     },
   },
   ar: {
@@ -240,6 +250,7 @@ const defaultEmployeeFileLabels: Record<'en' | 'ar', EmployeeFileLabels> = {
       events: 'الأحداث',
       loans: 'القروض',
       documents: 'الوثائق',
+      assets: 'العهد المسلّمة',
     },
     fields: {
       name: 'الاسم',
@@ -250,6 +261,10 @@ const defaultEmployeeFileLabels: Record<'en' | 'ar', EmployeeFileLabels> = {
       events: { title: 'العنوان', date: 'التاريخ' },
       loans: { amount: 'المبلغ', remaining: 'المتبقي', monthly: 'القسط الشهري', status: 'الحالة' },
       documents: { title: 'العنوان', created: 'تاريخ الإنشاء' },
+      assets: { asset: 'الأصل', type: 'النوع', assigned: 'تاريخ التسليم', returned: 'تاريخ الإرجاع', status: 'الحالة', notes: 'ملاحظات' },
+    },
+    empty: {
+      assets: 'لا توجد عهد مسجلة لهذا الموظف.',
     },
   },
 };
@@ -270,7 +285,9 @@ function mergeEmployeeFileLabels(
       events: { ...base.tables.events, ...(overrides.tables?.events ?? {}) },
       loans: { ...base.tables.loans, ...(overrides.tables?.loans ?? {}) },
       documents: { ...base.tables.documents, ...(overrides.tables?.documents ?? {}) },
+      assets: { ...base.tables.assets, ...(overrides.tables?.assets ?? {}) },
     },
+    empty: { ...base.empty, ...(overrides.empty ?? {}) },
   };
 }
 
@@ -490,9 +507,19 @@ export function buildEmployeeFileReport(params: {
   events: EmployeeEventLite[];
   loans: { amount: string; remainingAmount: string; monthlyDeduction: string; status: string }[];
   documents: { title: string; createdAt?: string; url?: string }[];
+  assets?: {
+    name: string;
+    type?: string | null;
+    assignedDate?: string | Date | null;
+    returnDate?: string | Date | null;
+    status?: string | null;
+    notes?: string | null;
+  }[];
   language?: 'en' | 'ar';
 }): TDocumentDefinitions {
   const { employee, events, loans, documents, language = 'en' } = params;
+  const includeAssetsSection = Array.isArray(params.assets);
+  const assets = params.assets ?? [];
   const primaryLanguage: 'en' | 'ar' = language === 'ar' ? 'ar' : 'en';
   const secondaryLanguage: 'en' | 'ar' = primaryLanguage === 'en' ? 'ar' : 'en';
   const labels = employeeFileLabelsByLocale;
@@ -701,6 +728,25 @@ export function buildEmployeeFileReport(params: {
     ]),
   ];
 
+  const assetsBody: any[] = [
+    [
+      headerCell(selectLabel(l => l.tables.assets.asset)),
+      headerCell(selectLabel(l => l.tables.assets.type)),
+      headerCell(selectLabel(l => l.tables.assets.assigned)),
+      headerCell(selectLabel(l => l.tables.assets.returned)),
+      headerCell(selectLabel(l => l.tables.assets.status)),
+      headerCell(selectLabel(l => l.tables.assets.notes)),
+    ],
+    ...assets.map(asset => [
+      sanitizeString(asset.name),
+      sanitizeString(asset.type ?? ''),
+      formatYMD(asset.assignedDate, ''),
+      formatYMD(asset.returnDate, ''),
+      sanitizeString(asset.status ?? ''),
+      sanitizeString(asset.notes ?? ''),
+    ]),
+  ];
+
   const content: Content[] = [brandHeader, titleBlock, summaryLabel, headerRowImage];
 
   content.push(sectionHeader(l => l.sections.events, { margin: [0, 12, 0, 6] }));
@@ -723,6 +769,28 @@ export function buildEmployeeFileReport(params: {
     },
     layout: tableLayout,
   });
+
+  if (includeAssetsSection) {
+    const includeAssets = assets.length > 0;
+    content.push(sectionHeader(l => l.sections.assets, { margin: [0, 16, 0, 6] }));
+    if (includeAssets) {
+      content.push({
+        table: {
+          headerRows: 1,
+          widths: ['*', 'auto', 'auto', 'auto', 'auto', '*'],
+          body: assetsBody,
+        },
+        layout: tableLayout,
+      });
+    } else {
+      content.push(
+        createStack(selectLabel(l => l.empty.assets), {
+          primaryStyle: { fontSize: 9, color: '#64748B' },
+          secondaryStyle: { fontSize: 9, color: '#64748B' },
+        })
+      );
+    }
+  }
 
   content.push(sectionHeader(l => l.sections.documents, { margin: [0, 16, 0, 6] }));
   content.push({

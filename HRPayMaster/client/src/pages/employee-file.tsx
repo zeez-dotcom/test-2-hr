@@ -26,6 +26,11 @@ export default function EmployeeFile() {
     enabled: !!id,
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
+  const { data: assetAssignments = [] } = useQuery<any[]>({
+    queryKey: ["/api/asset-assignments"],
+    enabled: !!id,
+    queryFn: getQueryFn({ on401: "returnNull" }),
+  });
 
   // Optional payroll report for period
   const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
@@ -68,6 +73,34 @@ export default function EmployeeFile() {
             startDate: l.startDate,
             endDate: l.endDate,
           }));
+        const assignments = (assetAssignments || [])
+          .filter((assignment: any) => assignment.employeeId === id)
+          .map((assignment: any) => ({
+            name: String(
+              assignment.asset?.name ??
+              assignment.assetName ??
+              assignment.assetId ??
+              ''
+            ),
+            type: String(
+              assignment.asset?.type ??
+              assignment.assetType ??
+              ''
+            ),
+            status: String(
+              assignment.status ??
+              assignment.asset?.status ??
+              assignment.assetStatus ??
+              ''
+            ),
+            assignedDate: assignment.assignedDate,
+            returnDate: assignment.returnDate,
+            notes: String(
+              assignment.notes ??
+              assignment.asset?.details ??
+              ''
+            ),
+          }));
         const doc = buildEmployeeFileReport({
           employee: {
             id: String(employee.id),
@@ -83,6 +116,7 @@ export default function EmployeeFile() {
           })),
           loans: sections.size === 0 || sections.has('loans') ? lns : [],
           documents: sections.size === 0 || sections.has('documents') ? docs : [],
+          assets: sections.size === 0 || sections.has('assets') ? assignments : undefined,
           language,
         });
         // Optional breakdown and narrative
@@ -138,7 +172,7 @@ export default function EmployeeFile() {
     } catch (err) {
       console.error('Failed to generate employee file PDF', err);
     }
-  }, [employee, events, loans, id, language]);
+  }, [employee, events, loans, assetAssignments, id, language]);
 
   return null;
 }
