@@ -1,6 +1,29 @@
 import { describe, it, expect } from 'vitest';
 import pdfMake from 'pdfmake/build/pdfmake';
-import { pdfBuffer, sanitizeString, buildEmployeeReport, buildEmployeeHistoryReport } from './pdf';
+import { pdfBuffer, sanitizeString, buildEmployeeReport, buildEmployeeHistoryReport, buildBilingualActionReceipt } from './pdf';
+
+const hasImage = (node: any): boolean => {
+  if (!node) return false;
+  if (Array.isArray(node)) return node.some(hasImage);
+  if (typeof node === 'object') {
+    if ('image' in node) return true;
+    return Object.values(node).some(hasImage);
+  }
+  return false;
+};
+
+const collectTexts = (node: any): string[] => {
+  if (!node) return [];
+  if (typeof node === 'string') return [node];
+  if (Array.isArray(node)) return node.flatMap(collectTexts);
+  if (typeof node === 'object') {
+    const values = Object.entries(node)
+      .filter(([key]) => key === 'text' || key === 'stack' || key === 'columns' || key === 'table' || key === 'body')
+      .map(([, value]) => value);
+    return values.flatMap(collectTexts);
+  }
+  return [];
+};
 
 describe('pdf utility', () => {
   it('sanitizes strings', () => {
@@ -56,16 +79,27 @@ describe('pdf utility', () => {
       },
       events: [],
     });
-    const hasImage = (n: any): boolean => {
-      if (!n) return false;
-      if (Array.isArray(n)) return n.some(hasImage);
-      if (typeof n === 'object') {
-        if ('image' in n) return true;
-        return Object.values(n).some(hasImage);
-      }
-      return false;
-    };
     expect(hasImage(def.content)).toBe(true);
+  });
+
+  it('adds employee code row and profile image to action receipt', () => {
+    const def = buildBilingualActionReceipt({
+      titleEn: 'Test Receipt',
+      titleAr: 'إيصال الاختبار',
+      detailsEn: [],
+      detailsAr: [],
+      employee: {
+        firstName: 'Alice',
+        lastName: 'Smith',
+        id: '1',
+        employeeCode: 'EMP-001',
+        profileImage: 'data:image/png;base64,AAAA',
+      },
+    });
+
+    expect(hasImage(def.content)).toBe(true);
+    const texts = collectTexts(def.content);
+    expect(texts).toContain('Employee Code: EMP-001');
   });
 
   it('creates employee history report', async () => {

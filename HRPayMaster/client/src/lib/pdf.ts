@@ -706,6 +706,8 @@ export function buildBilingualActionReceipt(params: {
     id: string;
     position?: string | null;
     phone?: string | null;
+    employeeCode?: string | null;
+    profileImage?: string | null;
   };
   detailsEn: string[];
   detailsAr: string[];
@@ -726,6 +728,8 @@ export function buildBilingualActionReceipt(params: {
   const employeeId = sanitizeString(params.employee.id);
   const employeePhone = params.employee.phone ? sanitizeString(params.employee.phone) : null;
   const employeePosition = params.employee.position ? sanitizeString(params.employee.position) : null;
+  const employeeCode = params.employee.employeeCode ? sanitizeString(params.employee.employeeCode) : null;
+  const profileImage = params.employee.profileImage ? sanitizeImageSrc(params.employee.profileImage) : null;
 
   const titleEn = sanitizeString(params.titleEn);
   const titleAr = sanitizeString(params.titleAr);
@@ -782,12 +786,13 @@ export function buildBilingualActionReceipt(params: {
 
   const employeeSummary: string[] = [
     `Employee: ${fullName}`,
+    `Employee Code: ${employeeCode || 'N/A'}`,
     `Employee ID: ${employeeId}`,
   ];
   if (employeePhone) employeeSummary.push(`Phone: ${employeePhone}`);
   if (employeePosition) employeeSummary.push(`Position: ${employeePosition}`);
 
-  content.push({
+  const summaryTable: Content = {
     table: {
       widths: ['*'],
       body: employeeSummary.map((line) => [{ text: line, style: 'detailText' }]),
@@ -800,8 +805,20 @@ export function buildBilingualActionReceipt(params: {
       paddingTop: () => 6,
       paddingBottom: () => 6,
     },
-    margin: [0, 0, 0, 16],
-  });
+  };
+
+  if (profileImage) {
+    content.push({
+      columns: [
+        { image: profileImage, width: 96, height: 96, margin: [0, 0, 16, 0] },
+        { ...summaryTable, margin: [0, 0, 0, 16] } as Content,
+      ],
+      columnGap: 16,
+      margin: [0, 0, 0, 16],
+    });
+  } else {
+    content.push({ ...summaryTable, margin: [0, 0, 0, 16] } as Content);
+  }
 
   const detailsEn = (params.detailsEn ?? []).map((detail) => sanitizeString(detail));
   const detailsArSource = params.detailsAr ?? params.detailsEn ?? [];

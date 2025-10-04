@@ -158,6 +158,8 @@ export function Chatbot() {
     id: selectedEmployee ?? selectedEmployeeRecord?.id ?? "",
     position: selectedEmployeeRecord?.position ?? null,
     phone: selectedEmployeeRecord?.phone ?? null,
+    employeeCode: selectedEmployeeRecord?.employeeCode ?? null,
+    profileImage: selectedEmployeeRecord?.profileImage ?? null,
   };
   const employeeLine = `${employeeDisplayName} (Phone: ${employeePhoneLabel})`;
 

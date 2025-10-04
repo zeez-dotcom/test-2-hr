@@ -8,7 +8,10 @@ import { buildAndEncodePdf, buildBilingualActionReceipt, controllerNumber, openP
 import { sanitizeImageSrc } from "@/lib/sanitizeImageSrc";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
-type MinimalEmployee = Pick<Employee, "firstName" | "lastName" | "id" | "position" | "phone">;
+type MinimalEmployee = Pick<Employee, "firstName" | "lastName" | "id" | "position" | "phone"> & {
+  employeeCode?: Employee["employeeCode"] | null;
+  profileImage?: Employee["profileImage"] | null;
+};
 
 function normalizeEmployee(
   employee?: MinimalEmployee | null,
@@ -20,6 +23,8 @@ function normalizeEmployee(
     id: employee?.id ?? fallbackId ?? "",
     position: employee?.position ?? null,
     phone: employee?.phone ?? null,
+    employeeCode: employee?.employeeCode ?? null,
+    profileImage: employee?.profileImage ?? null,
   } as MinimalEmployee;
 }
 
@@ -194,6 +199,8 @@ export async function generateEventReceipt(options: {
       id: normalized.id,
       position: normalized.position ?? null,
       phone: normalized.phone ?? null,
+      employeeCode: normalized.employeeCode ?? null,
+      profileImage: normalized.profileImage ?? null,
     },
   });
 
