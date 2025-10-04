@@ -212,6 +212,11 @@
       "amount": "Amount: {{amount}}",
       "description": "Description: {{description}}"
     },
+    "employeeLine": {
+      "phone": "Phone: {{value}}",
+      "code": "Employee Code: {{value}}",
+      "position": "Position: {{value}}"
+    },
     "yes": "Yes",
     "no": "No"
   }

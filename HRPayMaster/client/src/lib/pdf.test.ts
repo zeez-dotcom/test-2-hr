@@ -102,6 +102,26 @@ describe('pdf utility', () => {
     expect(texts).toContain('Employee Code: EMP-001');
   });
 
+  it('renders Arabic employee line when provided', () => {
+    const arabicLine = 'يؤكد هذا المستند أن أحمد (الهاتف: 123 • رمز الموظف: EMP-002) لديه سجل';
+    const def = buildBilingualActionReceipt({
+      titleEn: 'Test Receipt',
+      titleAr: 'إيصال الاختبار',
+      detailsEn: [],
+      detailsAr: [],
+      bodyEn: 'This document confirms the employee record.',
+      bodyAr: arabicLine,
+      employee: {
+        firstName: 'Ahmed',
+        lastName: 'Saleh',
+        id: '2',
+      },
+    });
+
+    const texts = collectTexts(def.content);
+    expect(texts).toContain(arabicLine);
+  });
+
   it('creates employee history report', async () => {
     const def = buildEmployeeHistoryReport([
       { firstName: '<b>Alice</b>', lastName: 'Smith', id: '1' },

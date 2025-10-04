@@ -212,6 +212,11 @@
       "amount": "المبلغ: {{amount}}",
       "description": "الوصف: {{description}}"
     },
+    "employeeLine": {
+      "phone": "الهاتف: {{value}}",
+      "code": "رمز الموظف: {{value}}",
+      "position": "المنصب: {{value}}"
+    },
     "yes": "نعم",
     "no": "لا"
   }
