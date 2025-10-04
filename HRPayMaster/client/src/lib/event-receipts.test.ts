@@ -21,7 +21,10 @@ describe("buildEventNarrative", () => {
       createdAt: new Date("2024-05-02"),
     } satisfies EmployeeEvent;
 
-    const narrative = buildEventNarrative(event, "John Doe (Phone: 555-0100)");
+    const narrative = buildEventNarrative(event, {
+      en: "John Doe (Phone: 555-0100)",
+      ar: "جون دو (الهاتف: ٥٥٥-٠١٠٠)",
+    });
 
     expect(narrative.title.ar).not.toEqual(narrative.title.en);
     expect(narrative.title.ar).toMatch(/[\u0600-\u06FF]/);

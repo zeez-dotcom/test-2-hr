@@ -73,7 +73,7 @@ type BilingualDetails = {
   ar: string[];
 };
 
-export function buildEventNarrative(event: EmployeeEvent, employeeLine: string) {
+export function buildEventNarrative(event: EmployeeEvent, employeeLine: BilingualText) {
   const tEn = i18n.getFixedT("en");
   const tAr = i18n.getFixedT("ar");
   const dateText = formatDate(event.eventDate);
@@ -88,14 +88,14 @@ export function buildEventNarrative(event: EmployeeEvent, employeeLine: string) 
 
   const bodyEnParts: string[] = [
     tEn("eventReceipts.body.intro", {
-      employee: employeeLine,
+      employee: employeeLine.en,
       title: baseTitle,
       date: dateText,
     }),
   ];
   const bodyArParts: string[] = [
     tAr("eventReceipts.body.intro", {
-      employee: employeeLine,
+      employee: employeeLine.ar,
       title: baseTitle,
       date: dateText,
     }),
@@ -180,7 +180,28 @@ export async function generateEventReceipt(options: {
 
   const fullName = `${normalized.firstName} ${normalized.lastName}`.trim() || normalized.id || "Employee";
   const phoneText = normalized.phone?.trim() || "N/A";
-  const employeeLine = `${fullName} (Phone: ${phoneText})`;
+  const employeeCodeText = normalized.employeeCode?.trim() || "N/A";
+  const positionText = normalized.position?.trim();
+
+  const tEn = i18n.getFixedT("en");
+  const tAr = i18n.getFixedT("ar");
+
+  const detailsEn: string[] = [tEn("eventReceipts.employeeLine.phone", { value: phoneText })];
+  const detailsAr: string[] = [tAr("eventReceipts.employeeLine.phone", { value: phoneText })];
+
+  detailsEn.push(tEn("eventReceipts.employeeLine.code", { value: employeeCodeText }));
+  detailsAr.push(tAr("eventReceipts.employeeLine.code", { value: employeeCodeText }));
+
+  if (positionText) {
+    detailsEn.push(tEn("eventReceipts.employeeLine.position", { value: positionText }));
+    detailsAr.push(tAr("eventReceipts.employeeLine.position", { value: positionText }));
+  }
+
+  const employeeLine = {
+    en: `${fullName} (${detailsEn.join(" • ")})`,
+    ar: `${fullName} (${detailsAr.join(" • ")})`,
+  } satisfies BilingualText;
+
   const narrative = buildEventNarrative(event, employeeLine);
 
   const doc = buildBilingualActionReceipt({
