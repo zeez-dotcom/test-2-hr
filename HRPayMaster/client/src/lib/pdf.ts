@@ -285,11 +285,40 @@ export function buildEmployeeReport(
   data: { employee: EmployeeLite; events: EmployeeEventLite[] }
 ): TDocumentDefinitions {
   const { employee, events } = data;
+  const brand = getBrand();
+  const brandName = sanitizeString(brand.name || 'HRPayMaster');
+  const brandLogo = brand.logo ? sanitizeImageSrc(brand.logo) : undefined;
+  const titleColor = brand.primaryColor || '#0F172A';
+  const accentColor = brand.secondaryColor || titleColor;
   const firstName = sanitizeString(employee.firstName);
   const lastName = sanitizeString(employee.lastName);
   const position = employee.position ? sanitizeString(employee.position) : '';
   const id = sanitizeString(employee.id);
   const image = employee.profileImage ? sanitizeImageSrc(employee.profileImage) : undefined;
+  const brandHeader: Content = {
+    columns:
+      brandLogo
+        ? [
+            { image: brandLogo, width: 64, height: 64, margin: [0, 0, 12, 0] },
+            {
+              stack: [
+                { text: brandName, style: 'brandTitle' },
+                { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 250, y2: 0, lineWidth: 2, lineColor: accentColor }] },
+              ],
+              margin: [0, 8, 0, 0],
+            },
+          ]
+        : [
+            {
+              stack: [
+                { text: brandName, style: 'brandTitle' },
+                { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 250, y2: 0, lineWidth: 2, lineColor: accentColor }] },
+              ],
+            },
+          ],
+    columnGap: 12,
+    margin: [0, 0, 0, 16],
+  };
   const headerRow: Content = {
     columns: [
       image ? { image, width: 56, margin: [0, 0, 10, 0] } : { text: '' },
@@ -316,6 +345,7 @@ export function buildEmployeeReport(
   };
 
   const content: any[] = [
+    brandHeader,
     headerRow,
     { text: 'Events', style: 'section' },
     {
@@ -334,13 +364,12 @@ export function buildEmployeeReport(
     },
   ];
 
-  const brand = getBrand();
-  const titleColor = brand.primaryColor || '#0F172A';
   return {
     info: { title: `${firstName} ${lastName} Report` },
     pageMargins: [40, 56, 40, 56],
     content,
     styles: {
+      brandTitle: { fontSize: 18, bold: true, color: titleColor },
       title: { fontSize: 20, bold: true, color: titleColor },
       section: { fontSize: 12, bold: true, color: titleColor, margin: [0, 14, 0, 6] },
       muted: { fontSize: 10, color: '#64748B' },
