@@ -204,6 +204,45 @@ export async function generateEventReceipt(options: {
 
   const narrative = buildEventNarrative(event, employeeLine);
 
+  const receiptLabels = {
+    meta: {
+      documentNumber: {
+        en: tEn("eventReceipts.receiptLayout.meta.documentNumber"),
+        ar: tAr("eventReceipts.receiptLayout.meta.documentNumber"),
+      },
+      issuedDate: {
+        en: tEn("eventReceipts.receiptLayout.meta.issuedDate"),
+        ar: tAr("eventReceipts.receiptLayout.meta.issuedDate"),
+      },
+    },
+    employeeSummary: {
+      name: {
+        en: tEn("eventReceipts.receiptLayout.employeeSummary.name"),
+        ar: tAr("eventReceipts.receiptLayout.employeeSummary.name"),
+      },
+      code: {
+        en: tEn("eventReceipts.receiptLayout.employeeSummary.code"),
+        ar: tAr("eventReceipts.receiptLayout.employeeSummary.code"),
+      },
+      id: {
+        en: tEn("eventReceipts.receiptLayout.employeeSummary.id"),
+        ar: tAr("eventReceipts.receiptLayout.employeeSummary.id"),
+      },
+      phone: {
+        en: tEn("eventReceipts.receiptLayout.employeeSummary.phone"),
+        ar: tAr("eventReceipts.receiptLayout.employeeSummary.phone"),
+      },
+      position: {
+        en: tEn("eventReceipts.receiptLayout.employeeSummary.position"),
+        ar: tAr("eventReceipts.receiptLayout.employeeSummary.position"),
+      },
+    },
+    sections: {
+      detailsEn: tEn("eventReceipts.receiptLayout.sections.detailsEn"),
+      detailsAr: tAr("eventReceipts.receiptLayout.sections.detailsAr"),
+    },
+  } as const;
+
   const doc = buildBilingualActionReceipt({
     titleEn: narrative.title.en,
     titleAr: narrative.title.ar,
@@ -214,6 +253,7 @@ export async function generateEventReceipt(options: {
     detailsEn: narrative.details.en,
     detailsAr: narrative.details.ar,
     docNumber,
+    labels: receiptLabels,
     employee: {
       firstName: normalized.firstName,
       lastName: normalized.lastName ?? "",

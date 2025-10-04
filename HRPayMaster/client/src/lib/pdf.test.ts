@@ -122,6 +122,52 @@ describe('pdf utility', () => {
     expect(texts).toContain(arabicLine);
   });
 
+  it('allows overriding receipt layout labels in both languages', () => {
+    const def = buildBilingualActionReceipt({
+      titleEn: 'Custom Receipt',
+      titleAr: 'إيصال مخصص',
+      detailsEn: ['First detail'],
+      detailsAr: ['التفصيل الأول'],
+      docNumber: 'DOC-123',
+      issuedDate: '2024-01-01',
+      employee: {
+        firstName: 'Alice',
+        lastName: 'Smith',
+        id: '99',
+        phone: '555-0100',
+        position: 'Manager',
+        employeeCode: 'EMP-999',
+      },
+      labels: {
+        meta: {
+          documentNumber: { en: 'Doc No', ar: 'رقم الوثيقة' },
+          issuedDate: { en: 'Issued On', ar: 'تاريخ الإصدار' },
+        },
+        employeeSummary: {
+          name: { en: 'Staff', ar: 'الموظفون' },
+          code: { en: 'Staff Code', ar: 'رمز الطاقم' },
+          id: { en: 'Staff ID', ar: 'هوية الطاقم' },
+          phone: { en: 'Contact', ar: 'الاتصال' },
+          position: { en: 'Role', ar: 'الدور' },
+        },
+        sections: {
+          detailsEn: 'Overview',
+          detailsAr: 'نظرة عامة',
+        },
+      },
+    });
+
+    const texts = collectTexts(def.content);
+    expect(texts).toContain('Doc No: DOC-123');
+    expect(texts).toContain('رقم الوثيقة: DOC-123');
+    expect(texts).toContain('Staff: Alice Smith');
+    expect(texts).toContain('الموظفون: Alice Smith');
+    expect(texts).toContain('Staff Code: EMP-999');
+    expect(texts).toContain('رمز الطاقم: EMP-999');
+    expect(texts).toContain('Overview');
+    expect(texts).toContain('نظرة عامة');
+  });
+
   it('creates employee history report', async () => {
     const def = buildEmployeeHistoryReport([
       { firstName: '<b>Alice</b>', lastName: 'Smith', id: '1' },
