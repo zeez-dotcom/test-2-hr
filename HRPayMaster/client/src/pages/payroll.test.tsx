@@ -22,6 +22,7 @@ vi.mock('@tanstack/react-query', async () => {
         shouldError: false,
         error: undefined as any,
         isPending: false,
+        reset: vi.fn(),
         mutate: async (vars: any) => {
           if (mock.shouldError) {
             await options.onError?.(mock.error ?? { ok: false, status: 500, error: { message: 'error' } }, vars, null);
@@ -74,6 +75,8 @@ vi.mock('@/components/ui/badge', () => ({
 vi.mock('@/components/ui/dialog', () => ({
   Dialog: ({ children }: any) => <div>{children}</div>,
   DialogContent: ({ children }: any) => <div>{children}</div>,
+  DialogDescription: ({ children }: any) => <div>{children}</div>,
+  DialogFooter: ({ children }: any) => <div>{children}</div>,
   DialogHeader: ({ children }: any) => <div>{children}</div>,
   DialogTitle: ({ children }: any) => <div>{children}</div>,
   DialogTrigger: ({ children }: any) => <div>{children}</div>,
