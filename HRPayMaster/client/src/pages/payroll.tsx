@@ -7,14 +7,21 @@ import PayrollEditView from "@/components/payroll/payroll-edit-view-simple";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Calculator, DollarSign, FileText, Trash2, Eye, Edit, RefreshCcw, Printer } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
-import { apiPost, apiDelete } from "@/lib/http";
+import { apiPost, apiDelete, apiGet } from "@/lib/http";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { PayrollRun, User } from "@shared/schema";
-import ConfirmDialog from "@/components/ui/confirm-dialog";
 import { useSearch, useLocation } from "wouter";
 import { toastApiError } from "@/lib/toastError";
 import { useTranslation } from "react-i18next";
@@ -60,6 +67,10 @@ export default function Payroll() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [payrollToDelete, setPayrollToDelete] = useState<string | null>(null);
+  const [requiresLoanUndo, setRequiresLoanUndo] = useState(false);
+  const [loanUndoComplete, setLoanUndoComplete] = useState(false);
+  const [loanBlockMessage, setLoanBlockMessage] = useState<string | null>(null);
+  const [isCheckingLoanStatus, setIsCheckingLoanStatus] = useState(false);
   const [printHandler, setPrintHandler] = useState<(() => void) | null>(null);
   const [pendingPrint, setPendingPrint] = useState(false);
   const { toast } = useToast();
@@ -149,9 +160,54 @@ export default function Payroll() {
         title: t('common.success','Success'),
         description: t('payroll.deleted','Payroll run deleted successfully'),
       });
+      handleConfirmOpenChange(false);
+    },
+    onError: (err, payrollId) => {
+      const status = (err as any)?.status;
+      if (status === 409 || status === 422) {
+        const message =
+          getErrorMessage((err as any)?.error) ??
+          t(
+            'payroll.loanDeletionBlocked',
+            'Loan deductions were applied to this payroll run. Undo them before deleting to keep loan balances accurate.',
+          );
+        setLoanBlockMessage(message);
+        setRequiresLoanUndo(true);
+        setLoanUndoComplete(false);
+        setPayrollToDelete(payrollId ?? payrollToDelete);
+        setIsConfirmOpen(true);
+        setIsCheckingLoanStatus(false);
+        return;
+      }
+      toastApiError(err as any, t('payroll.deleteFailed','Failed to delete payroll run'));
+    },
+  });
+
+  const undoLoanDeductionsMutation = useMutation({
+    mutationFn: async (payrollId: string) => {
+      const res = await apiPost(`/api/payroll/${payrollId}/undo-loan-deductions`);
+      if (!res.ok) throw res;
+      return payrollId;
+    },
+    onSuccess: (_, payrollId) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
+      if (payrollId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
+      }
+      setLoanUndoComplete(true);
+      setLoanBlockMessage(
+        t(
+          'payroll.loanUndoComplete',
+          'Loan deductions have been undone. You can now safely delete this payroll run.',
+        ),
+      );
+      toast({
+        title: t('common.success','Success'),
+        description: t('payroll.loanUndoSuccess','Loan deductions were returned to their original balances.'),
+      });
     },
     onError: (err) => {
-      toastApiError(err as any, t('payroll.deleteFailed','Failed to delete payroll run'));
+      toastApiError(err as any, t('payroll.loanUndoFailed','Failed to undo loan deductions'));
     },
   });
 
@@ -193,23 +249,72 @@ export default function Payroll() {
     generatePayrollMutation.mutate(data);
   };
 
-  const handleDeletePayroll = (payrollId: string) => {
-    setPayrollToDelete(payrollId);
-    setIsConfirmOpen(true);
-  };
+  const handleDeletePayroll = useCallback(
+    async (payrollId: string) => {
+      setPayrollToDelete(payrollId);
+      setRequiresLoanUndo(false);
+      setLoanUndoComplete(false);
+      setLoanBlockMessage(null);
+      setIsCheckingLoanStatus(true);
+      setIsConfirmOpen(true);
+
+      const res = await apiGet(`/api/payroll/${payrollId}`);
+      if (!res.ok) {
+        setIsConfirmOpen(false);
+        setPayrollToDelete(null);
+        setIsCheckingLoanStatus(false);
+        if (res.status === 401) {
+          navigate("/login");
+          return;
+        }
+        toastApiError(res as any, t('payroll.loadFailed','Failed to load payroll run'));
+        return;
+      }
+
+      const entries = Array.isArray((res.data as any)?.entries)
+        ? ((res.data as any).entries as Array<{ loanDeduction?: unknown }>)
+        : [];
+      const hasLoanDeductions = entries.some(entry => {
+        const value = entry?.loanDeduction;
+        if (value === null || value === undefined) return false;
+        const numericValue = Number.parseFloat(
+          typeof value === "string" ? value : value?.toString?.() ?? String(value),
+        );
+        return Number.isFinite(numericValue) && numericValue > 0;
+      });
+
+      if (hasLoanDeductions) {
+        setRequiresLoanUndo(true);
+        setLoanBlockMessage(
+          t(
+            'payroll.loanDeletionWarning',
+            'Loan deductions were applied to this payroll run. Undo them before deleting to keep loan balances accurate.',
+          ),
+        );
+      }
+
+      setIsCheckingLoanStatus(false);
+    },
+    [navigate, t, toastApiError],
+  );
 
   const confirmDeletePayroll = () => {
-    if (payrollToDelete) {
-      deletePayrollMutation.mutate(payrollToDelete);
+    if (!payrollToDelete) return;
+    if (requiresLoanUndo && !loanUndoComplete) {
+      return;
     }
-    setIsConfirmOpen(false);
-    setPayrollToDelete(null);
+    deletePayrollMutation.mutate(payrollToDelete);
   };
 
   const handleConfirmOpenChange = (open: boolean) => {
     setIsConfirmOpen(open);
     if (!open) {
       setPayrollToDelete(null);
+      setRequiresLoanUndo(false);
+      setLoanUndoComplete(false);
+      setLoanBlockMessage(null);
+      setIsCheckingLoanStatus(false);
+      undoLoanDeductionsMutation.reset();
     }
   };
 
@@ -284,6 +389,14 @@ export default function Payroll() {
   const totalPayroll = payrollRuns?.reduce((sum, run) => sum + parseFloat(run.grossAmount), 0) || 0;
   const completedRuns = payrollRuns?.filter(run => run.status === 'completed').length || 0;
   const pendingRuns = payrollRuns?.filter(run => run.status === 'pending').length || 0;
+
+  const deleteDialogDescription = isCheckingLoanStatus
+    ? t('payroll.checkingLoanDeductions','Checking payroll for loan deductions...')
+    : requiresLoanUndo
+      ? loanUndoComplete
+        ? loanBlockMessage ?? t('payroll.loanUndoComplete','Loan deductions have been undone. You can now safely delete this payroll run.')
+        : loanBlockMessage ?? t('payroll.loanDeletionWarning','Loan deductions were applied to this payroll run. Undo them before deleting to keep loan balances accurate.')
+      : loanBlockMessage ?? t('payroll.deleteDesc','Are you sure you want to delete this payroll run?');
 
   return (
     <div className="space-y-6">
@@ -536,14 +649,64 @@ export default function Payroll() {
                 )}
               </DialogContent>
             </Dialog>
-            <ConfirmDialog
-              open={isConfirmOpen}
-              onOpenChange={handleConfirmOpenChange}
-              title={t('payroll.deleteTitle','Delete Payroll Run')}
-              description={t('payroll.deleteDesc','Are you sure you want to delete this payroll run?')}
-              confirmText={t('actions.delete','Delete')}
-              onConfirm={confirmDeletePayroll}
-            />
+            <Dialog open={isConfirmOpen} onOpenChange={handleConfirmOpenChange}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>{t('payroll.deleteTitle','Delete Payroll Run')}</DialogTitle>
+                  <DialogDescription>{deleteDialogDescription}</DialogDescription>
+                </DialogHeader>
+                {requiresLoanUndo && (
+                  <div className="space-y-3">
+                    {loanUndoComplete ? (
+                      <Badge variant="outline" className="w-fit bg-success/10 text-success">
+                        {t('payroll.loanUndoCompleteShort','Loan deductions undone')}
+                      </Badge>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => payrollToDelete && undoLoanDeductionsMutation.mutate(payrollToDelete)}
+                        disabled={
+                          !payrollToDelete ||
+                          undoLoanDeductionsMutation.isPending ||
+                          isCheckingLoanStatus
+                        }
+                        className="justify-start"
+                      >
+                        <RefreshCcw className="mr-2 h-4 w-4" />
+                        {undoLoanDeductionsMutation.isPending
+                          ? t('payroll.undoingLoanDeductions','Undoing loan deductions...')
+                          : t('payroll.undoLoanDeductions','Undo loan deductions')}
+                      </Button>
+                    )}
+                  </div>
+                )}
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => handleConfirmOpenChange(false)}
+                    disabled={deletePayrollMutation.isPending || undoLoanDeductionsMutation.isPending}
+                  >
+                    {t('common.cancel','Cancel')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={confirmDeletePayroll}
+                    disabled={
+                      deletePayrollMutation.isPending ||
+                      isCheckingLoanStatus ||
+                      (requiresLoanUndo && !loanUndoComplete)
+                    }
+                  >
+                    {deletePayrollMutation.isPending
+                      ? t('payroll.deleting','Deleting...')
+                      : t('actions.delete','Delete')}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
     </div>
   );
 }
