@@ -328,6 +328,8 @@ export default function Employees({ defaultStatus = "active" }: EmployeesProps) 
                         lastName: editingEmployee.lastName || '',
                         position: editingEmployee.position || null,
                         phone: editingEmployee.phone || null,
+                        employeeCode: editingEmployee.employeeCode || null,
+                        profileImage: editingEmployee.profileImage || null,
                       },
                     });
                     const pdfDataUrl = await buildAndEncodePdf(doc);
