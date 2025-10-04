@@ -144,27 +144,15 @@ pdfMakeAny.createPdf = ((docDefinition: TDocumentDefinitions, tableLayouts?: any
   ensurePdfMakeFonts();
   return originalCreatePdf(docDefinition, tableLayouts, fonts, vfs);
 }) as typeof pdfMakeAny.createPdf;
+const UNSAFE_CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+
 export const sanitizeString = (value: string | null | undefined): string => {
   if (value == null) {
     return '';
   }
+
   const str = typeof value === 'string' ? value : String(value);
-  return str.replace(/[&<>"']/g, c => {
-    switch (c) {
-      case '&':
-        return '&amp;';
-      case '<':
-        return '&lt;';
-      case '>':
-        return '&gt;';
-      case '"':
-        return '&quot;';
-      case "'":
-        return '&#39;';
-      default:
-        return c;
-    }
-  });
+  return str.replace(UNSAFE_CONTROL_CHARS, '');
 };
 
 function sanitize(obj: any): any {
