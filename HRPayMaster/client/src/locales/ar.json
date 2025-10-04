@@ -217,6 +217,23 @@
       "code": "رمز الموظف: {{value}}",
       "position": "المنصب: {{value}}"
     },
+    "receiptLayout": {
+      "meta": {
+        "documentNumber": "رقم المستند",
+        "issuedDate": "تاريخ الإصدار"
+      },
+      "employeeSummary": {
+        "name": "الموظف",
+        "code": "رمز الموظف",
+        "id": "رقم الموظف",
+        "phone": "الهاتف",
+        "position": "المنصب"
+      },
+      "sections": {
+        "detailsEn": "التفاصيل (إنجليزي)",
+        "detailsAr": "التفاصيل (عربي)"
+      }
+    },
     "yes": "نعم",
     "no": "لا"
   }

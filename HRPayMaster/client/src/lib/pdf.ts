@@ -695,6 +695,26 @@ export function controllerNumber(): string {
 }
 
 
+type BilingualLabel = { en: string; ar: string };
+
+export interface BilingualReceiptLabels {
+  meta?: {
+    documentNumber?: BilingualLabel;
+    issuedDate?: BilingualLabel;
+  };
+  employeeSummary?: {
+    name?: BilingualLabel;
+    code?: BilingualLabel;
+    id?: BilingualLabel;
+    phone?: BilingualLabel;
+    position?: BilingualLabel;
+  };
+  sections?: {
+    detailsEn?: string;
+    detailsAr?: string;
+  };
+}
+
 export function buildBilingualActionReceipt(params: {
   titleEn: string;
   titleAr: string;
@@ -716,6 +736,7 @@ export function buildBilingualActionReceipt(params: {
   logo?: string | null;
   docNumber?: string;
   issuedDate?: string;
+  labels?: BilingualReceiptLabels;
 }): TDocumentDefinitions {
   const brand = getBrand();
   const logo = params.logo ?? brand.logo ?? null;
@@ -723,6 +744,29 @@ export function buildBilingualActionReceipt(params: {
   const secondaryColor = brand.secondaryColor || '#334155';
   const docNo = params.docNumber ?? controllerNumber();
   const issued = params.issuedDate ?? new Date().toISOString().slice(0, 10);
+
+  const sanitizeLabel = (value: BilingualLabel | undefined, fallback: string): BilingualLabel => ({
+    en: sanitizeString(value?.en ?? fallback),
+    ar: sanitizeString(value?.ar ?? value?.en ?? fallback),
+  });
+
+  const metaLabels = {
+    documentNumber: sanitizeLabel(params.labels?.meta?.documentNumber, 'Document No'),
+    issuedDate: sanitizeLabel(params.labels?.meta?.issuedDate, 'Issued'),
+  };
+
+  const employeeSummaryLabels = {
+    name: sanitizeLabel(params.labels?.employeeSummary?.name, 'Employee'),
+    code: sanitizeLabel(params.labels?.employeeSummary?.code, 'Employee Code'),
+    id: sanitizeLabel(params.labels?.employeeSummary?.id, 'Employee ID'),
+    phone: sanitizeLabel(params.labels?.employeeSummary?.phone, 'Phone'),
+    position: sanitizeLabel(params.labels?.employeeSummary?.position, 'Position'),
+  };
+
+  const sectionLabels = {
+    detailsEn: sanitizeString(params.labels?.sections?.detailsEn ?? 'Details (EN)'),
+    detailsAr: sanitizeString(params.labels?.sections?.detailsAr ?? 'Details (AR)'),
+  };
 
   const fullName = `${sanitizeString(params.employee.firstName)} ${sanitizeString(params.employee.lastName)}`.trim();
   const employeeId = sanitizeString(params.employee.id);
@@ -768,8 +812,20 @@ export function buildBilingualActionReceipt(params: {
 
   content.push({
     columns: [
-      { text: `Document No: ${docNo}`, style: 'meta' },
-      { text: `Issued: ${issued}`, style: 'meta', alignment: 'right' },
+      {
+        width: '*',
+        stack: [
+          { text: `${metaLabels.documentNumber.en}: ${docNo}`, style: 'meta' } as Content,
+          { text: `${metaLabels.documentNumber.ar}: ${docNo}`, style: 'metaAr', alignment: 'right' } as Content,
+        ],
+      },
+      {
+        width: '*',
+        stack: [
+          { text: `${metaLabels.issuedDate.en}: ${issued}`, style: 'meta', alignment: 'right' } as Content,
+          { text: `${metaLabels.issuedDate.ar}: ${issued}`, style: 'metaAr', alignment: 'right' } as Content,
+        ],
+      },
     ],
     margin: [0, 0, 0, 12],
   });
@@ -784,18 +840,38 @@ export function buildBilingualActionReceipt(params: {
     });
   }
 
-  const employeeSummary: string[] = [
-    `Employee: ${fullName}`,
-    `Employee Code: ${employeeCode || 'N/A'}`,
-    `Employee ID: ${employeeId}`,
+  const employeeSummary: BilingualLabel[] = [
+    { en: `${employeeSummaryLabels.name.en}: ${fullName}`, ar: `${employeeSummaryLabels.name.ar}: ${fullName}` },
+    {
+      en: `${employeeSummaryLabels.code.en}: ${employeeCode || 'N/A'}`,
+      ar: `${employeeSummaryLabels.code.ar}: ${employeeCode || 'N/A'}`,
+    },
+    { en: `${employeeSummaryLabels.id.en}: ${employeeId}`, ar: `${employeeSummaryLabels.id.ar}: ${employeeId}` },
   ];
-  if (employeePhone) employeeSummary.push(`Phone: ${employeePhone}`);
-  if (employeePosition) employeeSummary.push(`Position: ${employeePosition}`);
+  if (employeePhone) {
+    employeeSummary.push({
+      en: `${employeeSummaryLabels.phone.en}: ${employeePhone}`,
+      ar: `${employeeSummaryLabels.phone.ar}: ${employeePhone}`,
+    });
+  }
+  if (employeePosition) {
+    employeeSummary.push({
+      en: `${employeeSummaryLabels.position.en}: ${employeePosition}`,
+      ar: `${employeeSummaryLabels.position.ar}: ${employeePosition}`,
+    });
+  }
 
   const summaryTable: Content = {
     table: {
       widths: ['*'],
-      body: employeeSummary.map((line) => [{ text: line, style: 'detailText' }]),
+      body: employeeSummary.map((line) => [
+        {
+          stack: [
+            { text: line.en, style: 'detailText' } as Content,
+            { text: line.ar, style: 'detailTextAr', alignment: 'right' } as Content,
+          ],
+        },
+      ]),
     },
     layout: {
       hLineColor: () => '#E2E8F0',
@@ -836,7 +912,7 @@ export function buildBilingualActionReceipt(params: {
 
           stack: [
 
-            { text: 'Details (EN)', style: 'sectionHeading', margin: [0, 0, 0, 6] } as Content,
+            { text: sectionLabels.detailsEn, style: 'sectionHeading', margin: [0, 0, 0, 6] } as Content,
 
             ...detailsEn.map((detail) => ({ text: detail, style: 'detailText', margin: [0, 0, 0, 4] } as Content)),
 
@@ -850,9 +926,9 @@ export function buildBilingualActionReceipt(params: {
 
           stack: [
 
-            { text: 'Details (AR)', style: 'sectionHeading', alignment: 'right', margin: [0, 0, 0, 6] } as Content,
+            { text: sectionLabels.detailsAr, style: 'sectionHeadingAr', alignment: 'right', margin: [0, 0, 0, 6] } as Content,
 
-            ...detailsAr.map((detail) => ({ text: detail, style: 'detailText', alignment: 'right', margin: [0, 0, 0, 4] } as Content)),
+            ...detailsAr.map((detail) => ({ text: detail, style: 'detailTextAr', alignment: 'right', margin: [0, 0, 0, 4] } as Content)),
 
           ],
 
@@ -877,10 +953,13 @@ export function buildBilingualActionReceipt(params: {
       subheadingEn: { fontSize: 12, color: secondaryColor, font: 'Inter' },
       subheadingAr: { fontSize: 12, color: secondaryColor, font: 'Amiri' },
       meta: { fontSize: 10, color: '#475569', font: 'Inter' },
+      metaAr: { fontSize: 10, color: '#475569', font: 'Amiri' },
       bodyEn: { fontSize: 11, color: '#111827', font: 'Inter' },
       bodyAr: { fontSize: 11, color: '#111827', alignment: 'right', font: 'Amiri' },
       sectionHeading: { fontSize: 11, bold: true, color: titleColor, font: 'Inter' },
+      sectionHeadingAr: { fontSize: 11, bold: true, color: titleColor, font: 'Amiri', alignment: 'right' },
       detailText: { fontSize: 10, color: '#0F172A', font: 'Inter' },
+      detailTextAr: { fontSize: 10, color: '#0F172A', font: 'Amiri', alignment: 'right' },
       muted: { fontSize: 9, color: '#64748B', font: 'Inter' },
     },
     defaultStyle: { fontSize: 10, color: '#111827', font: 'Inter' },

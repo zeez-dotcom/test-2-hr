@@ -217,6 +217,23 @@
       "code": "Employee Code: {{value}}",
       "position": "Position: {{value}}"
     },
+    "receiptLayout": {
+      "meta": {
+        "documentNumber": "Document No",
+        "issuedDate": "Issued"
+      },
+      "employeeSummary": {
+        "name": "Employee",
+        "code": "Employee Code",
+        "id": "Employee ID",
+        "phone": "Phone",
+        "position": "Position"
+      },
+      "sections": {
+        "detailsEn": "Details (EN)",
+        "detailsAr": "Details (AR)"
+      }
+    },
     "yes": "Yes",
     "no": "No"
   }
