@@ -4,7 +4,10 @@ import { pdfBuffer, sanitizeString, buildEmployeeReport, buildEmployeeHistoryRep
 
 describe('pdf utility', () => {
   it('sanitizes strings', () => {
-    expect(sanitizeString('<script>alert(1)</script>')).toBe('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(sanitizeString('<script>alert(1)</script>')).toBe('<script>alert(1)</script>');
+    expect(sanitizeString('"HR & Co" <Ltd>')).toBe('"HR & Co" <Ltd>');
+    expect(sanitizeString('مرحبا بالعالم')).toBe('مرحبا بالعالم');
+    expect(sanitizeString('Hello\u0000World\u0007!')).toBe('HelloWorld!');
     expect(sanitizeString(undefined)).toBe('');
     expect(sanitizeString(null)).toBe('');
   });
@@ -23,7 +26,7 @@ describe('pdf utility', () => {
     const buffer = await pdfBuffer({
       content: [
         { text: '<img src=x onerror=alert(1)>' },
-        ['<script>alert(1)</script>']
+        ['<script>alert(1)</script>', '"Quotes" & Co', 'مرحبا بالعالم']
       ],
       info: { title: '<b>Nested</b>', creationDate: new Date(0) }
     });
