@@ -9,6 +9,8 @@ export default function EmployeeFile() {
   const search = useSearch();
   const params = new URLSearchParams(search);
   const id = params.get('id') || '';
+  const rawLanguage = (params.get('lang') || 'en').toLowerCase();
+  const language: 'en' | 'ar' = rawLanguage === 'ar' ? 'ar' : 'en';
   const { data: employee } = useQuery<any>({
     queryKey: ["/api/employees", id],
     enabled: !!id,
@@ -81,6 +83,7 @@ export default function EmployeeFile() {
           })),
           loans: sections.size === 0 || sections.has('loans') ? lns : [],
           documents: sections.size === 0 || sections.has('documents') ? docs : [],
+          language,
         });
         // Optional breakdown and narrative
         if (sections.has('breakdown')) {
@@ -135,7 +138,7 @@ export default function EmployeeFile() {
     } catch (err) {
       console.error('Failed to generate employee file PDF', err);
     }
-  }, [employee, events, loans, id]);
+  }, [employee, events, loans, id, language]);
 
   return null;
 }

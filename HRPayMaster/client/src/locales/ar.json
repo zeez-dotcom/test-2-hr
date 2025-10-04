@@ -536,5 +536,37 @@
     "loadingRepairs": "جاري تحميل الصيانات…",
     "noRepairs": "لا توجد صيانات.",
     "repairLabel": "صيانة"
+  },
+  "pdf": {
+    "employeeFile": {
+      "title": "تقرير ملف الموظف",
+      "sections": {
+        "summary": "ملخص الموظف",
+        "events": "الأحداث",
+        "loans": "القروض",
+        "documents": "الوثائق"
+      },
+      "fields": {
+        "name": "الاسم",
+        "position": "الوظيفة",
+        "employeeId": "رقم الموظف"
+      },
+      "tables": {
+        "events": {
+          "title": "العنوان",
+          "date": "التاريخ"
+        },
+        "loans": {
+          "amount": "المبلغ",
+          "remaining": "المتبقي",
+          "monthly": "القسط الشهري",
+          "status": "الحالة"
+        },
+        "documents": {
+          "title": "العنوان",
+          "created": "تاريخ الإنشاء"
+        }
+      }
+    }
   }
 }

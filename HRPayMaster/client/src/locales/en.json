@@ -536,5 +536,37 @@
     "loadingRepairs": "Loading repairs…",
     "noRepairs": "No repairs found.",
     "repairLabel": "Repair"
+  },
+  "pdf": {
+    "employeeFile": {
+      "title": "Employee File Report",
+      "sections": {
+        "summary": "Employee Summary",
+        "events": "Events",
+        "loans": "Loans",
+        "documents": "Documents"
+      },
+      "fields": {
+        "name": "Name",
+        "position": "Position",
+        "employeeId": "Employee ID"
+      },
+      "tables": {
+        "events": {
+          "title": "Title",
+          "date": "Date"
+        },
+        "loans": {
+          "amount": "Amount",
+          "remaining": "Remaining",
+          "monthly": "Monthly Deduction",
+          "status": "Status"
+        },
+        "documents": {
+          "title": "Title",
+          "created": "Created"
+        }
+      }
+    }
   }
 }

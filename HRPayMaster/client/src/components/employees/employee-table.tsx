@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Eye,
   Edit,
@@ -56,7 +57,14 @@ export default function EmployeeTable({
   const pageSize = 10;
   const [viewEmployee, setViewEmployee] = useState<EmployeeWithDepartment | null>(null);
   const [reportEmployee, setReportEmployee] = useState<EmployeeWithDepartment | null>(null);
-  const [reportOptions, setReportOptions] = useState({ documents: true, loans: true, breakdown: true, start: '', end: '' });
+  const [reportOptions, setReportOptions] = useState({
+    documents: true,
+    loans: true,
+    breakdown: true,
+    start: '',
+    end: '',
+    language: 'en' as 'en' | 'ar',
+  });
 
   useEffect(() => {
     const next = (initialStatusFilter || "all").toLowerCase();
@@ -618,6 +626,29 @@ export default function EmployeeTable({
                 <input type="date" className="border rounded px-2 py-1 w-full" value={reportOptions.end} onChange={e => setReportOptions(r => ({...r, end: e.target.value}))} />
               </div>
             </div>
+            <div>
+              <label className="block text-muted-foreground mb-1">Language</label>
+              <RadioGroup
+                className="flex flex-wrap gap-4"
+                value={reportOptions.language}
+                onValueChange={(value) =>
+                  setReportOptions((r) => ({ ...r, language: value === 'ar' ? 'ar' : 'en' }))
+                }
+              >
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem id="employee-report-language-en" value="en" />
+                  <label htmlFor="employee-report-language-en" className="text-sm font-medium leading-none">
+                    English
+                  </label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem id="employee-report-language-ar" value="ar" />
+                  <label htmlFor="employee-report-language-ar" className="text-sm font-medium leading-none">
+                    العربية
+                  </label>
+                </div>
+              </RadioGroup>
+            </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setReportEmployee(null)}>Cancel</Button>
@@ -636,6 +667,7 @@ export default function EmployeeTable({
               if (sections) qs.push(`sections=${encodeURIComponent(sections)}`);
               if (reportOptions.start) qs.push(`startDate=${encodeURIComponent(reportOptions.start)}`);
               if (reportOptions.end) qs.push(`endDate=${encodeURIComponent(reportOptions.end)}`);
+              if (reportOptions.language) qs.push(`lang=${encodeURIComponent(reportOptions.language)}`);
               const url = `/employee-file?id=${encodeURIComponent(reportEmployee.id)}${qs.length ? `&${qs.join('&')}`: ''}`;
               window.open(url, '_blank');
               setReportEmployee(null);
