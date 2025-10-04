@@ -194,6 +194,28 @@
     }
   }
   ,
+  "eventReceipts": {
+    "title": "إيصال {{title}}",
+    "subheading": "نوع الحدث: {{type}}",
+    "defaultType": "حدث",
+    "body": {
+      "intro": "يؤكد هذا المستند أن {{employee}} لديه سجل \"{{title}}\" بتاريخ {{date}}.",
+      "amount": "المبلغ المسجل: {{amount}}.",
+      "notes": "ملاحظات: {{notes}}."
+    },
+    "details": {
+      "title": "العنوان: {{title}}",
+      "type": "النوع: {{type}}",
+      "recordedOn": "تاريخ التسجيل: {{date}}",
+      "status": "الحالة: {{status}}",
+      "affectsPayroll": "يؤثر على كشوف الرواتب: {{value}}",
+      "amount": "المبلغ: {{amount}}",
+      "description": "الوصف: {{description}}"
+    },
+    "yes": "نعم",
+    "no": "لا"
+  }
+  ,
   "notifications": {
     "unread": "غير مقروء",
     "none": "لا توجد إشعارات",

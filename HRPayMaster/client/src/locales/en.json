@@ -194,6 +194,28 @@
     }
   }
   ,
+  "eventReceipts": {
+    "title": "{{title}} Receipt",
+    "subheading": "{{type}}",
+    "defaultType": "Event",
+    "body": {
+      "intro": "This document confirms that {{employee}} has a \"{{title}}\" record dated {{date}}.",
+      "amount": "Recorded amount: {{amount}}.",
+      "notes": "Notes: {{notes}}."
+    },
+    "details": {
+      "title": "Title: {{title}}",
+      "type": "Type: {{type}}",
+      "recordedOn": "Recorded on: {{date}}",
+      "status": "Status: {{status}}",
+      "affectsPayroll": "Affects payroll: {{value}}",
+      "amount": "Amount: {{amount}}",
+      "description": "Description: {{description}}"
+    },
+    "yes": "Yes",
+    "no": "No"
+  }
+  ,
   "notifications": {
     "unread": "unread",
     "none": "No notifications",
