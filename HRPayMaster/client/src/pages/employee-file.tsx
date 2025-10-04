@@ -24,6 +24,12 @@ export default function EmployeeFile() {
     enabled: !!id,
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
+  const { data: assetAssignmentsData } = useQuery<any[]>({
+    queryKey: ["/api/asset-assignments"],
+    enabled: !!id,
+    queryFn: getQueryFn({ on401: "returnNull" }),
+  });
+  const assetAssignments = assetAssignmentsData ?? [];
 
   // Optional payroll report for period
   const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
@@ -66,6 +72,16 @@ export default function EmployeeFile() {
             startDate: l.startDate,
             endDate: l.endDate,
           }));
+        const assets = assetAssignments
+          .filter((assignment: any) => assignment.employeeId === id)
+          .map((assignment: any) => ({
+            name: String(assignment.asset?.name ?? assignment.assetName ?? assignment.assetId ?? ''),
+            type: String(assignment.asset?.type ?? assignment.assetType ?? assignment.type ?? ''),
+            assignedDate: String(assignment.assignedDate ?? ''),
+            returnDate: String(assignment.returnDate ?? ''),
+            status: String(assignment.status ?? ''),
+            notes: String(assignment.notes ?? ''),
+          }));
         const doc = buildEmployeeFileReport({
           employee: {
             id: String(employee.id),
@@ -81,6 +97,7 @@ export default function EmployeeFile() {
           })),
           loans: sections.size === 0 || sections.has('loans') ? lns : [],
           documents: sections.size === 0 || sections.has('documents') ? docs : [],
+          assets: sections.size === 0 || sections.has('assets') ? assets : [],
         });
         // Optional breakdown and narrative
         if (sections.has('breakdown')) {
@@ -135,7 +152,7 @@ export default function EmployeeFile() {
     } catch (err) {
       console.error('Failed to generate employee file PDF', err);
     }
-  }, [employee, events, loans, id]);
+  }, [employee, events, loans, assetAssignmentsData, id]);
 
   return null;
 }

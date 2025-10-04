@@ -394,8 +394,9 @@ export function buildEmployeeFileReport(params: {
   events: EmployeeEventLite[];
   loans: { amount: string; remainingAmount: string; monthlyDeduction: string; status: string }[];
   documents: { title: string; createdAt?: string; url?: string }[];
+  assets: { name: string; type: string; assignedDate?: string; returnDate?: string; status: string; notes: string }[];
 }): TDocumentDefinitions {
-  const { employee, events, loans, documents } = params;
+  const { employee, events, loans, documents, assets } = params;
   const base = buildEmployeeReport({ employee, events });
   const loansBody = [
     ['Amount', 'Remaining', 'Monthly', 'Status'],
@@ -404,6 +405,17 @@ export function buildEmployeeFileReport(params: {
   const docsBody = [
     ['Title', 'Created'],
     ...documents.map(d => [d.title, formatYMD(d.createdAt, '')])
+  ];
+  const assetsBody = [
+    ['Asset', 'Type', 'Assigned', 'Returned', 'Status', 'Notes'],
+    ...assets.map(a => [
+      a.name,
+      a.type,
+      formatYMD(a.assignedDate, ''),
+      formatYMD(a.returnDate, ''),
+      a.status,
+      a.notes,
+    ]),
   ];
   const tableLayout: TableLayout = {
     fillColor: (rowIndex: number) => (rowIndex === 0 ? '#F8FAFC' : rowIndex % 2 === 0 ? '#F1F5F9' : null),
@@ -418,6 +430,15 @@ export function buildEmployeeFileReport(params: {
   (base.content as any[]).push({ table: { headerRows: 1, widths: ['auto','auto','auto','auto'], body: loansBody }, layout: tableLayout });
   (base.content as any[]).push({ text: 'Documents', style: 'section', margin: [0,10,0,0] });
   (base.content as any[]).push({ table: { headerRows: 1, widths: ['*','auto'], body: docsBody }, layout: tableLayout });
+  (base.content as any[]).push({ text: 'Asset Assignments', style: 'section', margin: [0,10,0,0] });
+  if (assets.length > 0) {
+    (base.content as any[]).push({
+      table: { headerRows: 1, widths: ['*','auto','auto','auto','auto','*'], body: assetsBody },
+      layout: tableLayout,
+    });
+  } else {
+    (base.content as any[]).push({ text: 'No asset assignments found.', style: 'muted', margin: [0, 0, 0, 8] });
+  }
   return base;
 }
 
