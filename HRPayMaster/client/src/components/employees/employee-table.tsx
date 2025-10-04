@@ -60,6 +60,7 @@ export default function EmployeeTable({
   const [reportOptions, setReportOptions] = useState({
     documents: true,
     loans: true,
+    assets: true,
     breakdown: true,
     start: '',
     end: '',
@@ -614,6 +615,9 @@ export default function EmployeeTable({
               <label className="flex items-center gap-2"><input type="checkbox" checked={reportOptions.loans} onChange={e => setReportOptions(r => ({...r, loans: e.target.checked}))} /> Include Loans</label>
             </div>
             <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2"><input type="checkbox" checked={reportOptions.assets} onChange={e => setReportOptions(r => ({...r, assets: e.target.checked}))} /> Include Asset Assignments</label>
+            </div>
+            <div className="flex items-center justify-between">
               <label className="flex items-center gap-2"><input type="checkbox" checked={reportOptions.breakdown} onChange={e => setReportOptions(r => ({...r, breakdown: e.target.checked}))} /> Include Breakdown (bonuses, deductions, commissions)</label>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -661,6 +665,7 @@ export default function EmployeeTable({
               const sections = [
                 reportOptions.documents ? 'documents' : null,
                 reportOptions.loans ? 'loans' : null,
+                reportOptions.assets ? 'assets' : null,
                 reportOptions.breakdown ? 'breakdown' : null,
               ].filter(Boolean).join(',');
               const qs: string[] = [];
