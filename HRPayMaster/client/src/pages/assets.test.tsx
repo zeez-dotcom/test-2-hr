@@ -13,6 +13,7 @@ const mutationMocks: any[] = [];
 const originalFileReader = (globalThis as any).FileReader;
 let nextFileReaderResult: string | null = null;
 let fileReaderShouldError = false;
+let assetDocumentsById: Record<string, any[]> = {};
 
 class MockFileReader {
   result: string | ArrayBuffer | null = null;
@@ -198,6 +199,7 @@ describe('Assets page', () => {
     nextFileReaderResult = null;
     fileReaderShouldError = false;
     (globalThis as any).FileReader = MockFileReader as any;
+    assetDocumentsById = {};
     // @ts-ignore
     global.fetch = vi.fn().mockImplementation(async (url: any, init?: any) => {
       if (
@@ -210,6 +212,44 @@ describe('Assets page', () => {
           status: 200,
           json: async () => [],
           headers: { get: () => null },
+        } as any;
+      }
+      if (
+        typeof url === 'string' &&
+        /\/api\/assets\/[^/]+\/documents/.test(url) &&
+        (!init || init.method === undefined || init.method === 'GET')
+      ) {
+        const match = /\/api\/assets\/([^/]+)\/documents/.exec(url);
+        const assetId = match?.[1] ?? '';
+        return {
+          ok: true,
+          status: 200,
+          json: async () => assetDocumentsById[assetId] ?? [],
+          headers: { get: () => null },
+        } as any;
+      }
+      if (
+        typeof url === 'string' &&
+        /\/api\/assets\/[^/]+\/documents/.test(url) &&
+        init?.method === 'POST'
+      ) {
+        const match = /\/api\/assets\/([^/]+)\/documents/.exec(url);
+        const assetId = match?.[1] ?? '';
+        const body = init?.body ? JSON.parse(init.body as string) : {};
+        const created = {
+          id: `doc-${Date.now()}`,
+          assetId,
+          title: body.title ?? 'Untitled',
+          documentUrl: body.documentUrl ?? '',
+          createdAt: new Date().toISOString(),
+        };
+        assetDocumentsById[assetId] = [...(assetDocumentsById[assetId] ?? []), created];
+        return {
+          ok: true,
+          status: 201,
+          json: async () => created,
+          headers: { get: () => null },
+          data: created,
         } as any;
       }
       if (typeof url === 'string' && url.startsWith('/api/assets') && (!init || init.method === undefined || init.method === 'GET')) {
@@ -407,6 +447,59 @@ describe('Assets page', () => {
       const parsed = JSON.parse(init!.body as string);
       expect(parsed.documentUrl).toBe(dataUrl);
     });
+  });
+
+  it('fetches and displays existing documents when the dialog is opened', async () => {
+    const assets = [
+      {
+        id: 'asset-1',
+        name: 'Projector',
+        type: 'Equipment',
+        status: 'available',
+        currentAssignment: null,
+      },
+    ];
+
+    const createdAt = '2024-05-01T10:00:00.000Z';
+    assetDocumentsById['asset-1'] = [
+      {
+        id: 'doc-1',
+        assetId: 'asset-1',
+        title: 'Warranty Certificate',
+        documentUrl: 'https://example.com/warranty.pdf',
+        createdAt,
+      },
+    ];
+
+    queryClient.setQueryData(['/api/assets'], assets);
+    queryClient.setQueryData(['/api/asset-assignments'], []);
+    queryClient.setQueryData(['/api/employees'], []);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Assets />
+      </QueryClientProvider>
+    );
+
+    const documentsButton = screen.getByRole('button', { name: 'Documents' });
+    fireEvent.click(documentsButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('Warranty Certificate')).toBeInTheDocument();
+    });
+
+    const viewLink = screen.getByText('View');
+    expect(viewLink).toHaveAttribute('href', 'https://example.com/warranty.pdf');
+
+    expect(screen.getByText('1 document')).toBeInTheDocument();
+
+    const fetchMock = global.fetch as unknown as Mock;
+    const documentFetchCall = fetchMock.mock.calls.find(([url, init]) =>
+      typeof url === 'string' &&
+      url.includes('/api/assets/asset-1/documents') &&
+      (!init || (init as RequestInit).method === undefined || (init as RequestInit).method === 'GET')
+    );
+    expect(documentFetchCall).toBeDefined();
   });
 
   it('allows editing an asset and saving changes', async () => {

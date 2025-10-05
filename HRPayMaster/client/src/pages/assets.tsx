@@ -29,6 +29,7 @@ import {
   type InsertAsset,
   type Employee,
   type VacationRequest,
+  type AssetDocument,
 } from "@shared/schema";
 
 export function hasVacationConflict(
@@ -85,6 +86,25 @@ export default function Assets() {
   const [docAssetId, setDocAssetId] = useState<string | null>(null);
   const [docTitle, setDocTitle] = useState("");
   const [docFile, setDocFile] = useState<File | null>(null);
+  const {
+    data: assetDocuments = [],
+    isFetching: isLoadingDocuments,
+    error: documentsError,
+  } = useQuery<AssetDocument[]>({
+    queryKey: docAssetId ? ["/api/assets", docAssetId, "documents"] : ["/api/assets", "documents", "noop"],
+    queryFn: async () => {
+      if (!docAssetId) return [];
+      const response = await fetch(`/api/assets/${docAssetId}/documents`, {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw new Error("Failed to load documents");
+      }
+      return response.json();
+    },
+    enabled: !!docAssetId,
+    staleTime: 1000 * 60 * 5,
+  });
   const [repairsAsset, setRepairsAsset] = useState<any | null>(null);
   const repairsQuery = useQuery<any[]>({ queryKey: repairsAsset ? ["/api/assets", repairsAsset.id, "repairs"] : ["noop"], queryFn: async()=>{ const r = await fetch(`/api/assets/${repairsAsset!.id}/repairs`, { credentials:'include' }); return r.json(); }, enabled: !!repairsAsset });
 
@@ -176,8 +196,18 @@ export default function Assets() {
       if (!res.ok) throw res;
       return res.data;
     },
-    onSuccess: () => {
-      setDocAssetId(null); setDocFile(null); setDocTitle("");
+    onSuccess: (created) => {
+      if (docAssetId) {
+        if (created) {
+          queryClient.setQueryData<AssetDocument[] | undefined>(
+            ["/api/assets", docAssetId, "documents"],
+            (existing) => (existing ? [...existing, created as AssetDocument] : [created as AssetDocument]),
+          );
+        }
+        queryClient.invalidateQueries({ queryKey: ["/api/assets", docAssetId, "documents"] });
+      }
+      setDocFile(null);
+      setDocTitle("");
       toast({ title: t('assets.documentUploaded','Document uploaded') });
     },
     onError: (err) => toastApiError(err as any, t('assets.uploadFailed','Failed to upload document')),
@@ -932,7 +962,31 @@ export default function Assets() {
                   )}
                   <div>
                     <Button size="sm" variant="outline" onClick={() => window.open(`/asset-file?id=${encodeURIComponent(asset.id)}`, '_blank')}>Print</Button>
-                    <Button size="sm" variant="outline" className="ml-2" onClick={() => setDocAssetId(asset.id)}>Add Document</Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="ml-2"
+                      onClick={() => {
+                        setDocAssetId(asset.id);
+                        setDocTitle("");
+                        setDocFile(null);
+                      }}
+                    >
+                      {t('assets.documentsButton', 'Documents')}
+                    </Button>
+                    {(() => {
+                      const docCount = queryClient.getQueryData<AssetDocument[]>(["/api/assets", asset.id, "documents"])?.length ?? 0;
+                      if (docCount === 0) return null;
+                      const badgeText =
+                        docCount === 1
+                          ? t('assets.documentsCount', '1 document', { count: docCount })
+                          : t('assets.documentsCount', `${docCount} documents`, { count: docCount });
+                      return (
+                        <Badge variant="secondary" className="ml-2">
+                          {badgeText}
+                        </Badge>
+                      );
+                    })()}
                     <Button size="sm" variant="outline" className="ml-2" onClick={() => setRepairsAsset(asset)}>Repairs</Button>
                     <Button
                       size="sm"
@@ -1309,16 +1363,83 @@ export default function Assets() {
       </Dialog>
 
       {/* Upload document dialog */}
-      <Dialog open={!!docAssetId} onOpenChange={(o)=>!o&&setDocAssetId(null)}>
+      <Dialog
+        open={!!docAssetId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDocAssetId(null);
+            setDocTitle("");
+            setDocFile(null);
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Upload Asset Document</DialogTitle>
+            <DialogTitle>{t('assets.documentsTitle', 'Asset Documents')}</DialogTitle>
+            <DialogDescription>
+              {t('assets.documentsDescription', 'View and upload documents for this asset.')}
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <Input placeholder="Title" value={docTitle} onChange={e=>setDocTitle(e.target.value)} />
-            <Input type="file" onChange={e=> setDocFile(e.target.files?.[0] || null)} />
-            <div className="flex justify-end">
-              <Button onClick={()=>uploadDoc.mutate()} disabled={uploadDoc.isPending || !docTitle || !docFile}>Upload</Button>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold text-muted-foreground">
+                {t('assets.existingDocuments', 'Existing documents')}
+              </h3>
+              {documentsError ? (
+                <div className="rounded border border-destructive/50 bg-destructive/10 p-2 text-sm text-destructive">
+                  {t('assets.documentsLoadError', 'Unable to load documents.')}
+                </div>
+              ) : isLoadingDocuments ? (
+                <div className="rounded border border-muted p-2 text-sm text-muted-foreground">
+                  {t('assets.documentsLoading', 'Loading documents...')}
+                </div>
+              ) : assetDocuments.length > 0 ? (
+                <div className="space-y-2">
+                  {assetDocuments.map((doc) => {
+                    const uploadedDate = doc.createdAt ? new Date(doc.createdAt).toLocaleString() : null;
+                    return (
+                      <div key={doc.id} className="flex items-start justify-between rounded border p-2 text-sm">
+                        <div>
+                          <div className="font-medium text-foreground">{doc.title}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {uploadedDate
+                              ? t('assets.documentUploadedAt', `Uploaded ${uploadedDate}`, {
+                                  date: uploadedDate,
+                                })
+                              : t('assets.documentUploadedUnknown', 'Uploaded date unavailable')}
+                          </div>
+                        </div>
+                        {doc.documentUrl ? (
+                          <a
+                            className="text-xs font-medium text-primary underline"
+                            href={doc.documentUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {t('assets.viewDocument', 'View')}
+                          </a>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded border border-dashed p-3 text-sm text-muted-foreground">
+                  {t('assets.noDocuments', 'No documents uploaded yet.')}
+                </div>
+              )}
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold text-muted-foreground">
+                {t('assets.uploadNewDocument', 'Upload new document')}
+              </h3>
+              <Input placeholder={t('assets.documentTitlePlaceholder', 'Title')} value={docTitle} onChange={e=>setDocTitle(e.target.value)} />
+              <Input type="file" onChange={e=> setDocFile(e.target.files?.[0] || null)} />
+              <div className="flex justify-end">
+                <Button onClick={()=>uploadDoc.mutate()} disabled={uploadDoc.isPending || !docTitle || !docFile}>
+                  {uploadDoc.isPending ? t('assets.uploadingDocument', 'Uploading...') : t('assets.uploadDocument', 'Upload')}
+                </Button>
+              </div>
             </div>
           </div>
         </DialogContent>
