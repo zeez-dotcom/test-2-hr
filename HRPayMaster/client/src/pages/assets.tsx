@@ -265,6 +265,18 @@ export default function Assets() {
   const assignedAssets = assets.filter(a => a.status === "assigned");
   const maintenanceAssets = assets.filter(a => a.status === "maintenance");
   const activeAssignments = assignments.filter((assignment) => assignment.status === "active");
+  const historyAssignments = assignments
+    .filter((assignment) => assignment.status !== "active")
+    .sort((a, b) => {
+      const getSortDate = (value?: string | null) => {
+        if (!value) return 0;
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+      };
+      const bDate = getSortDate(b.returnDate ?? b.assignedDate);
+      const aDate = getSortDate(a.returnDate ?? a.assignedDate);
+      return bDate - aDate;
+    });
 
   const totalAssets = assets.length;
   const availableCount = availableAssets.length;
@@ -488,6 +500,7 @@ export default function Assets() {
           <TabsTrigger value="overview">Assets Overview</TabsTrigger>
           <TabsTrigger value="active-assignments">Active Assignments</TabsTrigger>
           <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
+          <TabsTrigger value="history">{t('assets.historyTab', 'Assignment History')}</TabsTrigger>
         </TabsList>
         <TabsContent value="overview" className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -695,6 +708,89 @@ export default function Assets() {
                 <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20 p-6 text-sm text-muted-foreground">
                   <Package className="h-10 w-10 text-gray-400" />
                   No assets are currently marked for maintenance.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="history" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('assets.historyTab', 'Assignment History')}</CardTitle>
+              <CardDescription>
+                {t('assets.historyDescription', 'Review past asset assignments and returns.')}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {historyAssignments.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{t('assets.historyAsset', 'Asset')}</TableHead>
+                        <TableHead>{t('assets.historyEmployee', 'Employee')}</TableHead>
+                        <TableHead>{t('assets.historyPeriod', 'Assignment Period')}</TableHead>
+                        <TableHead>{t('assets.historyNotes', 'Notes')}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {historyAssignments.map((assignment) => {
+                        const assetName = assignment.asset?.name?.trim();
+                        const assetType = assignment.asset?.type?.trim();
+                        const employeeName = assignment.employee
+                          ? `${assignment.employee.firstName ?? ""} ${assignment.employee.lastName ?? ""}`.trim()
+                          : "";
+                        const employeePhone = assignment.employee?.phone?.trim();
+                        const assignedDate = formatDate(assignment.assignedDate);
+                        const returnDate = assignment.returnDate
+                          ? formatDate(assignment.returnDate)
+                          : t('assets.historyPresent', 'Present');
+                        const notes = assignment.notes?.trim() ?? "";
+
+                        return (
+                          <TableRow key={assignment.id}>
+                            <TableCell>
+                              <div className="font-medium">
+                                {assetName || t('assets.historyUnknownAsset', 'Unknown asset')}
+                              </div>
+                              {assetType && (
+                                <div className="text-sm text-muted-foreground">{assetType}</div>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="font-medium">
+                                {employeeName || t('assets.historyUnknownEmployee', 'Unknown employee')}
+                              </div>
+                              {employeePhone && (
+                                <div className="text-sm text-muted-foreground">{employeePhone}</div>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="text-sm font-medium">{assignedDate} – {returnDate}</div>
+                            </TableCell>
+                            <TableCell>
+                              {notes ? (
+                                <div className="text-sm whitespace-pre-wrap leading-relaxed">{notes}</div>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">
+                                  {t('assets.historyNoNotes', 'No notes recorded.')}
+                                </span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20 p-6 text-center text-sm text-muted-foreground">
+                  <Package className="mx-auto h-10 w-10 text-gray-400" />
+                  <h3 className="text-base font-medium text-foreground">
+                    {t('assets.historyEmpty', 'No past assignments found.')}
+                  </h3>
+                  <p>{t('assets.historyEmptyHint', 'Completed assignments will appear here once available.')}</p>
                 </div>
               )}
             </CardContent>

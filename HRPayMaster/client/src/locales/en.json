@@ -72,7 +72,19 @@
     "created": "Asset created",
     "createFailed": "Failed to create asset",
     "assigned": "Asset assigned",
-    "assignFailed": "Failed to assign asset"
+    "assignFailed": "Failed to assign asset",
+    "historyTab": "Assignment History",
+    "historyDescription": "Review past asset assignments and returns.",
+    "historyAsset": "Asset",
+    "historyEmployee": "Employee",
+    "historyPeriod": "Assignment Period",
+    "historyNotes": "Notes",
+    "historyPresent": "Present",
+    "historyUnknownAsset": "Unknown asset",
+    "historyUnknownEmployee": "Unknown employee",
+    "historyNoNotes": "No notes recorded.",
+    "historyEmpty": "No past assignments found.",
+    "historyEmptyHint": "Completed assignments will appear here once available."
   }
   ,
   "reports": {
