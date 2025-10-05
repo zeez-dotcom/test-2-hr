@@ -70,7 +70,7 @@ type AssetUsage = {
   assetType: string;
   assetStatus: string;
   assetDetails: string | null;
-  employeeId: string;
+  employeeId: string | null;
   employeeCode: string | null;
   employeeName: string;
   assignedDate: string;
@@ -244,6 +244,7 @@ export default function Reports() {
           .join(" ")
           .trim();
 
+        const fallbackName = assignment.employeeId ?? t('reports.unassignedEmployee', 'Unassigned');
         return {
           assignmentId: assignment.id,
           assetId: assignment.assetId,
@@ -257,7 +258,7 @@ export default function Reports() {
             employeeName ||
             employee?.firstName ||
             employee?.lastName ||
-            assignment.employeeId,
+            fallbackName,
           assignedDate,
           returnDate,
           status: assignment.status,
@@ -271,7 +272,7 @@ export default function Reports() {
         const dateB = toTimestamp(b.assignedDate) ?? 0;
         return dateA - dateB;
       });
-  }, [assetAssignments, startDate, endDate]);
+  }, [assetAssignments, startDate, endDate, t]);
 
   const sortedFleetUsage = useMemo(() => {
     const rangeStart = toTimestamp(startDate) ?? Number.NEGATIVE_INFINITY;
@@ -296,6 +297,7 @@ export default function Reports() {
           .join(" ")
           .trim();
 
+        const fallbackName = assignment.employeeId ?? t('reports.unassignedEmployee', 'Unassigned');
         return {
           assignmentId: assignment.id,
           carId: assignment.carId,
@@ -309,7 +311,7 @@ export default function Reports() {
             employeeName ||
             employee?.firstName ||
             employee?.lastName ||
-            assignment.employeeId,
+            fallbackName,
           assignedDate,
           returnDate,
           status: assignment.status,
@@ -323,7 +325,7 @@ export default function Reports() {
         const dateB = toTimestamp(b.assignedDate) ?? 0;
         return dateA - dateB;
       });
-  }, [carAssignments, startDate, endDate]);
+  }, [carAssignments, startDate, endDate, t]);
 
   if (
     employeesError ||

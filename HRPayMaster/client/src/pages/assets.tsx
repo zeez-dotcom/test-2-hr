@@ -177,6 +177,12 @@ export default function Assets() {
       if (variables.assetId) {
         queryClient.invalidateQueries({ queryKey: ["/api/assets", variables.assetId] });
       }
+      if (variables.status === "maintenance") {
+        queryClient.invalidateQueries({ queryKey: ["/api/asset-assignments"] });
+        if (variables.assetId) {
+          queryClient.invalidateQueries({ queryKey: ["/api/asset-assignments", variables.assetId] });
+        }
+      }
       const message =
         variables.toastMessage ??
         (variables.status === "maintenance"
@@ -887,7 +893,9 @@ export default function Assets() {
                           ? `${assignment.employee.firstName ?? ""} ${assignment.employee.lastName ?? ""}`.trim()
                           : "";
                         const employeePhone = assignment.employee?.phone?.trim();
-                        const isMaintenanceAssignment = assignment.status === "maintenance";
+                        const isMaintenanceAssignment =
+                          assignment.status === "maintenance" ||
+                          (!assignment.employeeId && !assignment.employee);
                         const employeeDisplayName = isMaintenanceAssignment
                           ? t("assets.historyMaintenance", "Maintenance")
                           : employeeName || t("assets.historyUnknownEmployee", "Unknown employee");
