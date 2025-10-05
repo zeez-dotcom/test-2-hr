@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
-import { apiPost, apiPut } from "@/lib/http";
+import { apiDelete, apiPost, apiPut } from "@/lib/http";
 import { toastApiError } from "@/lib/toastError";
 import { CheckCircle, Users, AlertTriangle, Package } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -26,6 +26,7 @@ import {
   type AssetWithAssignment,
   type AssetAssignmentWithDetails,
   type InsertAssetAssignment,
+  type InsertAsset,
   type Employee,
   type VacationRequest,
 } from "@shared/schema";
@@ -54,6 +55,7 @@ export function hasVacationConflict(
 export default function Assets() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isAssignOpen, setIsAssignOpen] = useState(false);
+  const [editingAsset, setEditingAsset] = useState<AssetWithAssignment | null>(null);
   const { toast } = useToast();
   const { t } = useTranslation();
 
@@ -172,7 +174,7 @@ export default function Assets() {
   });
 
   const createAsset = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: InsertAsset) => {
       const res = await apiPost("/api/assets", data);
       if (!res.ok) throw res;
       return res.data;
@@ -186,6 +188,48 @@ export default function Assets() {
       toast({ title: t('assets.created','Asset created') });
     },
     onError: (err) => toastApiError(err as any, t('assets.createFailed','Failed to create asset')),
+  });
+
+  const updateAssetMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<InsertAsset> }) => {
+      const res = await apiPut(`/api/assets/${id}`, data);
+      if (!res.ok) throw res;
+      return res.data;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/assets"] });
+      if (variables.id) {
+        queryClient.invalidateQueries({ queryKey: ["/api/assets", variables.id] });
+        queryClient.invalidateQueries({ queryKey: ["/api/asset-assignments", variables.id] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/asset-assignments"] });
+      setEditingAsset(null);
+      editAssetForm.reset({ name: "", type: "", status: "available", details: "" });
+      toast({ title: t('assets.updateSuccess', 'Asset updated') });
+    },
+    onError: (err) => toastApiError(err as any, t('assets.updateFailed', 'Failed to update asset')),
+  });
+
+  const deleteAssetMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiDelete(`/api/assets/${id}`);
+      if (!res.ok) throw res;
+      return res.data;
+    },
+    onSuccess: (_data, assetId) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/assets"] });
+      if (assetId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/assets", assetId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/asset-assignments", assetId] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/asset-assignments"] });
+      if (editingAsset?.id === assetId) {
+        setEditingAsset(null);
+        editAssetForm.reset({ name: "", type: "", status: "available", details: "" });
+      }
+      toast({ title: t('assets.deleteSuccess', 'Asset deleted') });
+    },
+    onError: (err) => toastApiError(err as any, t('assets.deleteFailed', 'Failed to delete asset')),
   });
 
   const assetStatusMutation = useMutation<
@@ -305,7 +349,17 @@ export default function Assets() {
     },
   });
 
-  const assetForm = useForm({
+  const assetForm = useForm<InsertAsset>({
+    resolver: zodResolver(insertAssetSchema),
+    defaultValues: {
+      name: "",
+      type: "",
+      status: "available",
+      details: "",
+    },
+  });
+
+  const editAssetForm = useForm<InsertAsset>({
     resolver: zodResolver(insertAssetSchema),
     defaultValues: {
       name: "",
@@ -367,7 +421,11 @@ export default function Assets() {
 
   const formatDate = (value?: string | null) => (value ? new Date(value).toLocaleDateString() : "—");
 
-  const onSubmitAsset = (data: any) => createAsset.mutate(data);
+  const onSubmitAsset = (data: InsertAsset) => createAsset.mutate(data);
+  const onSubmitEditAsset = (data: InsertAsset) => {
+    if (!editingAsset) return;
+    updateAssetMutation.mutate({ id: editingAsset.id, data });
+  };
   const onSubmitAssignment = (data: InsertAssetAssignment) => {
     const employeeId = data.employeeId;
     const assignedDateValue = data.assignedDate ?? new Date().toISOString().split("T")[0];
@@ -408,6 +466,24 @@ export default function Assets() {
       notes: assignment?.notes ?? "",
     });
     setReturnRepairForm(createAssetRepairForm());
+  };
+
+  const handleEditAsset = (asset: AssetWithAssignment) => {
+    setEditingAsset(asset);
+    editAssetForm.reset({
+      name: asset.name ?? "",
+      type: asset.type ?? "",
+      status: asset.status ?? "available",
+      details: asset.details ?? "",
+    });
+  };
+
+  const handleDeleteAsset = (asset: AssetWithAssignment) => {
+    const confirmed = window.confirm(
+      t('assets.confirmDelete', 'Are you sure you want to delete this asset?'),
+    );
+    if (!confirmed) return;
+    deleteAssetMutation.mutate(asset.id);
   };
 
   const handleAssetStatusChange = (
@@ -603,6 +679,117 @@ export default function Assets() {
             </DialogContent>
           </Dialog>
 
+          <Dialog
+            open={!!editingAsset}
+            onOpenChange={(open) => {
+              if (!open) {
+                setEditingAsset(null);
+                editAssetForm.reset({
+                  name: "",
+                  type: "",
+                  status: "available",
+                  details: "",
+                });
+              }
+            }}
+          >
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>{t('assets.editTitle', 'Edit Asset')}</DialogTitle>
+                <DialogDescription>
+                  {t('assets.editDescription', 'Update the asset details.')}
+                </DialogDescription>
+              </DialogHeader>
+              <Form {...editAssetForm}>
+                <form onSubmit={editAssetForm.handleSubmit(onSubmitEditAsset)} className="space-y-4">
+                  <FormField
+                    control={editAssetForm.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('assets.nameLabel', 'Name')}</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={editAssetForm.control}
+                    name="type"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('assets.typeLabel', 'Type')}</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={editAssetForm.control}
+                    name="status"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('assets.statusLabel', 'Status')}</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder={t('assets.statusPlaceholder', 'Select a status')} />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="available">{t('assets.statusAvailable', 'Available')}</SelectItem>
+                            <SelectItem value="assigned">{t('assets.statusAssigned', 'Assigned')}</SelectItem>
+                            <SelectItem value="maintenance">{t('assets.statusMaintenance', 'Maintenance')}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={editAssetForm.control}
+                    name="details"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('assets.detailsLabel', 'Details')}</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <DialogFooter>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setEditingAsset(null);
+                        editAssetForm.reset({
+                          name: "",
+                          type: "",
+                          status: "available",
+                          details: "",
+                        });
+                      }}
+                    >
+                      {t('assets.cancel', 'Cancel')}
+                    </Button>
+                    <Button type="submit" disabled={updateAssetMutation.isPending}>
+                      {updateAssetMutation.isPending
+                        ? t('assets.updating', 'Updating...')
+                        : t('assets.saveChanges', 'Save Changes')}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </Form>
+            </DialogContent>
+          </Dialog>
+
           <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
             <DialogTrigger asChild>
               <Button>Create Asset</Button>
@@ -737,6 +924,25 @@ export default function Assets() {
                     <Button size="sm" variant="outline" onClick={() => window.open(`/asset-file?id=${encodeURIComponent(asset.id)}`, '_blank')}>Print</Button>
                     <Button size="sm" variant="outline" className="ml-2" onClick={() => setDocAssetId(asset.id)}>Add Document</Button>
                     <Button size="sm" variant="outline" className="ml-2" onClick={() => setRepairsAsset(asset)}>Repairs</Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="ml-2"
+                      onClick={() => handleEditAsset(asset)}
+                    >
+                      {t('assets.edit', 'Edit')}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="ml-2"
+                      disabled={deleteAssetMutation.isPending && deleteAssetMutation.variables === asset.id}
+                      onClick={() => handleDeleteAsset(asset)}
+                    >
+                      {deleteAssetMutation.isPending && deleteAssetMutation.variables === asset.id
+                        ? t('assets.deleting', 'Deleting...')
+                        : t('assets.delete', 'Delete')}
+                    </Button>
                     <Button
                       size="sm"
                       variant="outline"
