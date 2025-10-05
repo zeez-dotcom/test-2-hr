@@ -57,7 +57,7 @@ const employeesFixture = [
   { id: '1', firstName: 'Alice', lastName: 'Smith' },
 ];
 
-const createSuccessResponse = <T>(data: T) => ({
+const createSuccessResponse = <T,>(data: T) => ({
   ok: true as const,
   status: 200,
   data,
