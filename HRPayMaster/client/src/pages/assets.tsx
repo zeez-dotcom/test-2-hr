@@ -26,8 +26,30 @@ import {
   type AssetWithAssignment,
   type AssetAssignmentWithDetails,
   type InsertAssetAssignment,
-  type Employee
+  type Employee,
+  type VacationRequest,
 } from "@shared/schema";
+
+export function hasVacationConflict(
+  vacations: VacationRequest[],
+  employeeId: string,
+  assignedDateValue: string,
+) {
+  if (!employeeId || !assignedDateValue) {
+    return false;
+  }
+  const assignedDate = new Date(assignedDateValue);
+  if (Number.isNaN(assignedDate.getTime())) {
+    return false;
+  }
+  return vacations.some((vacation) => {
+    if (vacation.employeeId !== employeeId) return false;
+    if (vacation.status !== "approved" && vacation.status !== "pending") return false;
+    const start = new Date(vacation.startDate);
+    const end = new Date(vacation.endDate);
+    return start <= assignedDate && end >= assignedDate;
+  });
+}
 
 export default function Assets() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -51,6 +73,10 @@ export default function Assets() {
 
   const { data: employees = [], error: employeesError } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
+  });
+
+  const { data: vacations = [] } = useQuery<VacationRequest[]>({
+    queryKey: ["/api/vacations"],
   });
 
   // Upload document dialog state
@@ -342,7 +368,25 @@ export default function Assets() {
   const formatDate = (value?: string | null) => (value ? new Date(value).toLocaleDateString() : "—");
 
   const onSubmitAsset = (data: any) => createAsset.mutate(data);
-  const onSubmitAssignment = (data: any) => assignAsset.mutate(data);
+  const onSubmitAssignment = (data: InsertAssetAssignment) => {
+    const employeeId = data.employeeId;
+    const assignedDateValue = data.assignedDate ?? new Date().toISOString().split("T")[0];
+    const hasVacationOverlap = hasVacationConflict(vacations, employeeId, assignedDateValue);
+
+    if (hasVacationOverlap) {
+      const confirmed = window.confirm(
+        t(
+          "assets.vacationConflictConfirm",
+          "This employee has a vacation overlapping the assignment date. Proceed with assigning the asset?",
+        ),
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    assignAsset.mutate(data);
+  };
 
   const getMaintenanceAssignmentForAsset = (
     asset: AssetWithAssignment

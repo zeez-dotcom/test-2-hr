@@ -25,6 +25,7 @@ vi.mock('./storage', () => ({
     deleteAssetAssignment: vi.fn(),
     updateAsset: vi.fn(),
     createEmployeeEvent: vi.fn(),
+    getVacationRequests: vi.fn(),
   },
 }));
 
@@ -66,6 +67,7 @@ describe('asset assignment routes', () => {
     await registerRoutes(app);
     app.use(errorHandler);
     vi.clearAllMocks();
+    vi.mocked(storage.getVacationRequests).mockResolvedValue([]);
   });
 
   it('POST /api/asset-assignments creates assignment', async () => {
@@ -95,6 +97,31 @@ describe('asset assignment routes', () => {
       assignedDate: '2024-02-01',
     });
     expect(storage.updateAsset).toHaveBeenCalledWith('asset1', { status: 'assigned' });
+    expect(storage.getVacationRequests).toHaveBeenCalled();
+  });
+
+  it('POST /api/asset-assignments returns 409 when vacation overlaps assignment date', async () => {
+    const vacation = {
+      id: 'vac1',
+      employeeId: 'emp1',
+      status: 'approved',
+      startDate: '2024-01-05',
+      endDate: '2024-01-10',
+    };
+    vi.mocked(storage.getVacationRequests).mockResolvedValue([vacation] as any);
+
+    const res = await request(app)
+      .post('/api/asset-assignments')
+      .send({ assetId: 'asset1', employeeId: 'emp1', assignedDate: '2024-01-08' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.message).toContain('Employee has approved vacation overlapping 2024-01-08');
+    expect(assetService.createAssignment).not.toHaveBeenCalled();
+    const [start, end] = vi.mocked(storage.getVacationRequests).mock.calls[0];
+    expect(start).toBeInstanceOf(Date);
+    expect(end).toBeInstanceOf(Date);
+    expect((start as Date).toISOString()).toBe(new Date('2024-01-08').toISOString());
+    expect((end as Date).toISOString()).toBe(new Date('2024-01-08').toISOString());
   });
 
   it('POST /api/asset-assignments validates required fields', async () => {
