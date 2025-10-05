@@ -51,6 +51,22 @@ vi.mock('./storage', () => {
   };
 });
 
+vi.mock('./assetService', () => ({
+  assetService: {
+    getAssets: vi.fn(),
+    getAsset: vi.fn(),
+    createAsset: vi.fn(),
+    updateAsset: vi.fn(),
+    deleteAsset: vi.fn(),
+    getAssignments: vi.fn(),
+    getAssignment: vi.fn(),
+    createAssignment: vi.fn(),
+    updateAssignment: vi.fn(),
+    deleteAssignment: vi.fn(),
+    invalidateAssignmentCache: vi.fn(),
+  },
+}));
+
 vi.mock('./db', () => {
   return {
     db: {
@@ -66,6 +82,7 @@ vi.mock('./db', () => {
 import { db } from './db';
 import { registerRoutes } from './routes';
 import { storage } from './storage';
+import { assetService } from './assetService';
 
 function createApp() {
   const app = express();
@@ -153,7 +170,7 @@ describe('employee routes', () => {
   });
 
   it('POST /api/assets/:id/status updates asset status and active assignment', async () => {
-    (storage.getAsset as any).mockResolvedValue({
+    (assetService.getAsset as any).mockResolvedValue({
       id: 'asset-1',
       status: 'assigned',
       currentAssignment: {
@@ -164,17 +181,47 @@ describe('employee routes', () => {
         returnDate: null,
       },
     });
-    (storage.updateAsset as any).mockResolvedValue({ id: 'asset-1', status: 'maintenance' });
+    (assetService.updateAsset as any).mockResolvedValue({ id: 'asset-1', status: 'maintenance' });
 
     const res = await request(app)
       .post('/api/assets/asset-1/status')
       .send({ status: 'Maintenance' });
 
     expect(res.status).toBe(200);
-    expect(storage.updateAsset).toHaveBeenCalledWith('asset-1', { status: 'maintenance' });
+    expect(assetService.updateAsset).toHaveBeenCalledWith('asset-1', { status: 'maintenance' });
     expect(storage.updateAssetAssignment).toHaveBeenCalledWith(
       'asg-1',
       expect.objectContaining({ status: 'maintenance', returnDate: expect.any(String) }),
+    );
+    expect(assetService.invalidateAssignmentCache).toHaveBeenCalled();
+  });
+
+  it('POST /api/assets/:id/status creates maintenance assignment for unassigned asset', async () => {
+    (assetService.getAsset as any).mockResolvedValue({
+      id: 'asset-2',
+      status: 'available',
+      currentAssignment: null,
+    });
+    (assetService.updateAsset as any).mockResolvedValue({ id: 'asset-2', status: 'maintenance' });
+    (assetService.createAssignment as any).mockResolvedValue({
+      id: 'new-assign',
+      assetId: 'asset-2',
+      assignedDate: '2024-05-01',
+      status: 'maintenance',
+    });
+
+    const res = await request(app)
+      .post('/api/assets/asset-2/status')
+      .send({ status: 'maintenance' });
+
+    expect(res.status).toBe(200);
+    expect(assetService.updateAsset).toHaveBeenCalledWith('asset-2', { status: 'maintenance' });
+    expect(assetService.createAssignment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assetId: 'asset-2',
+        status: 'maintenance',
+        assignedDate: expect.any(String),
+      }),
     );
   });
 

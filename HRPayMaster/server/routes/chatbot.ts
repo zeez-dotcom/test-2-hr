@@ -6,6 +6,7 @@ import { ensureAuth, requireRole } from "./auth";
 import { log } from "../vite";
 import { chatbotMonthlySummaryRequestsTotal } from "../metrics";
 import { addMonths, format } from "date-fns";
+import { assetService } from "../assetService";
 
 export const chatbotRouter = Router();
 
@@ -26,7 +27,9 @@ chatbotRouter.get(
       if (!employee) return next(new HttpError(404, "Employee not found"));
 
       // Assets assigned
-      const assets = (await storage.getAssetAssignments()).filter(a => a.employeeId === req.params.id && a.status === 'active');
+      const assets = (await assetService.getAssignments()).filter(
+        (a) => a.employeeId === req.params.id && a.status === "active",
+      );
       const cars = (await storage.getCarAssignments()).filter(a => a.employeeId === req.params.id && a.status === 'active');
 
       // Loans summary and forecast

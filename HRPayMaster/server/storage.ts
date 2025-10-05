@@ -160,7 +160,7 @@ export interface AssetUsage {
   assetType: string;
   assetStatus: string;
   assetDetails: string | null;
-  employeeId: string;
+  employeeId: string | null;
   employeeCode: string | null;
   employeeName: string;
   assignedDate: string;

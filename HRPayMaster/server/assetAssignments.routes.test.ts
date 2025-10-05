@@ -4,6 +4,7 @@ import request from 'supertest';
 import { registerRoutes } from './routes';
 import { errorHandler } from './errorHandler';
 import { storage } from './storage';
+import { assetService } from './assetService';
 
 vi.mock('./db', () => ({
   db: {
@@ -24,6 +25,22 @@ vi.mock('./storage', () => ({
     deleteAssetAssignment: vi.fn(),
     updateAsset: vi.fn(),
     createEmployeeEvent: vi.fn(),
+  },
+}));
+
+vi.mock('./assetService', () => ({
+  assetService: {
+    getAssets: vi.fn(),
+    getAsset: vi.fn(),
+    createAsset: vi.fn(),
+    updateAsset: vi.fn(),
+    deleteAsset: vi.fn(),
+    getAssignments: vi.fn(),
+    getAssignment: vi.fn(),
+    createAssignment: vi.fn(),
+    updateAssignment: vi.fn(),
+    deleteAssignment: vi.fn(),
+    invalidateAssignmentCache: vi.fn(),
   },
 }));
 
@@ -59,7 +76,7 @@ describe('asset assignment routes', () => {
       assignedDate: '2024-02-01',
       status: 'active',
     };
-    vi.mocked(storage.createAssetAssignment).mockResolvedValue(newAssignment as any);
+    vi.mocked(assetService.createAssignment).mockResolvedValue(newAssignment as any);
     vi.mocked(storage.getAssetAssignment).mockResolvedValue({
       ...newAssignment,
       asset: { name: 'Laptop' },
@@ -72,7 +89,7 @@ describe('asset assignment routes', () => {
 
     expect(res.status).toBe(201);
     expect(res.body).toEqual(newAssignment);
-    expect(storage.createAssetAssignment).toHaveBeenCalledWith({
+    expect(assetService.createAssignment).toHaveBeenCalledWith({
       assetId: 'asset1',
       employeeId: 'emp1',
       assignedDate: '2024-02-01',
@@ -84,11 +101,11 @@ describe('asset assignment routes', () => {
     const res = await request(app).post('/api/asset-assignments').send({});
     expect(res.status).toBe(400);
     expect(res.body.error.message).toBe('Invalid asset assignment data');
-    expect(storage.createAssetAssignment).not.toHaveBeenCalled();
+    expect(assetService.createAssignment).not.toHaveBeenCalled();
   });
 
   it('PUT /api/asset-assignments/:id updates assignment and asset status', async () => {
-    vi.mocked(storage.updateAssetAssignment).mockResolvedValue({
+    vi.mocked(assetService.updateAssignment).mockResolvedValue({
       id: 'assign1',
       assetId: 'asset1',
       employeeId: 'emp1',
@@ -111,6 +128,7 @@ describe('asset assignment routes', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('completed');
+    expect(assetService.updateAssignment).toHaveBeenCalledWith('assign1', { status: 'completed' });
     expect(storage.updateAsset).toHaveBeenCalledWith('asset1', { status: 'available' });
   });
 
@@ -123,11 +141,12 @@ describe('asset assignment routes', () => {
       asset: { name: 'Laptop' },
       employee: { firstName: 'John', lastName: 'Doe' },
     } as any);
-    vi.mocked(storage.deleteAssetAssignment).mockResolvedValue(true);
+    vi.mocked(assetService.deleteAssignment).mockResolvedValue(true);
 
     const res = await request(app).delete('/api/asset-assignments/assign1');
 
     expect(res.status).toBe(204);
+    expect(assetService.deleteAssignment).toHaveBeenCalledWith('assign1');
     expect(storage.updateAsset).toHaveBeenCalledWith('asset1', { status: 'available' });
   });
 });

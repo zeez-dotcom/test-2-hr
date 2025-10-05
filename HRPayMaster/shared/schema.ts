@@ -214,7 +214,7 @@ export const assets = pgTable("assets", {
 export const assetAssignments = pgTable("asset_assignments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   assetId: varchar("asset_id").references(() => assets.id).notNull(),
-  employeeId: varchar("employee_id").references(() => employees.id).notNull(),
+  employeeId: varchar("employee_id").references(() => employees.id),
   assignedDate: date("assigned_date").notNull(),
   returnDate: date("return_date"),
   status: text("status").notNull().default("active"),
@@ -655,10 +655,30 @@ export const insertAssetSchema = createInsertSchema(assets).omit({
   createdAt: true,
 });
 
-export const insertAssetAssignmentSchema = createInsertSchema(assetAssignments).omit({
-  id: true,
-  createdAt: true,
-});
+export const insertAssetAssignmentSchema = createInsertSchema(assetAssignments)
+  .omit({
+    id: true,
+    createdAt: true,
+  })
+  .extend({
+    employeeId: z.preprocess(
+      value => {
+        const normalized = emptyToUndef(value);
+        return normalized === undefined ? undefined : normalizeBigId(normalized);
+      },
+      z.string().min(1, "Employee is required").optional(),
+    ),
+  })
+  .refine(
+    data => {
+      if (!data.status || data.status === "maintenance") return true;
+      return !!data.employeeId;
+    },
+    {
+      path: ["employeeId"],
+      message: "Employee is required unless the asset is in maintenance",
+    },
+  );
 
 export const insertAssetDocumentSchema = createInsertSchema(assetDocuments).omit({
   id: true,

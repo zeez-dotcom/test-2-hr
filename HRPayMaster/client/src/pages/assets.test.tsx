@@ -782,4 +782,151 @@ describe('Assets page', () => {
       toastMessage: 'Asset returned successfully',
     });
   });
+
+  it('creates a maintenance assignment for unassigned assets and reuses it when returning to service', async () => {
+    const maintenanceId = 'assign-cycle';
+    const today = new Date().toISOString().split('T')[0];
+    const assets = [
+      {
+        id: 'asset-cycle',
+        name: 'Spare Monitor',
+        type: 'Equipment',
+        status: 'available',
+        currentAssignment: null,
+      },
+    ];
+
+    queryClient.setQueryData(['/api/assets'], assets);
+    queryClient.setQueryData(['/api/asset-assignments'], []);
+    queryClient.setQueryData(['/api/employees'], []);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Assets />
+      </QueryClientProvider>
+    );
+
+    const maintenanceButton = screen.getByRole('button', { name: 'Mark as Maintenance' });
+    fireEvent.click(maintenanceButton);
+
+    await waitFor(() => {
+      const mutation = mutationMocks.find(
+        mock => mock.variables?.assetId === 'asset-cycle' && mock.variables?.status === 'maintenance'
+      );
+      expect(mutation).toBeDefined();
+    });
+
+    toast.mockReset();
+
+    await act(async () => {
+      queryClient.setQueryData(
+        ['/api/assets'],
+        assets.map(asset =>
+          asset.id === 'asset-cycle'
+            ? { ...asset, status: 'maintenance' as const }
+            : asset
+        )
+      );
+      queryClient.setQueryData(['/api/asset-assignments'], [
+        {
+          id: maintenanceId,
+          assetId: 'asset-cycle',
+          employeeId: null,
+          assignedDate: today,
+          returnDate: null,
+          status: 'maintenance',
+          notes: '',
+          asset: { name: 'Spare Monitor', type: 'Equipment' },
+          employee: null,
+        },
+      ]);
+    });
+
+    fireEvent.click(screen.getAllByText('Maintenance')[0]);
+    await screen.findByText('Not currently assigned');
+
+    const [openDialogButton] = await screen.findAllByRole('button', {
+      name: 'Return to Service',
+    });
+    fireEvent.click(openDialogButton);
+
+    const descriptionField = await screen.findByPlaceholderText('What was repaired?');
+    fireEvent.change(descriptionField, { target: { value: 'Routine inspection' } });
+    const notesField = screen.getByPlaceholderText('Update assignment notes...');
+    fireEvent.change(notesField, { target: { value: 'Back in rotation' } });
+
+    const returnButtons = await screen.findAllByRole('button', {
+      name: 'Return to Service',
+    });
+    const submitButton = returnButtons[returnButtons.length - 1];
+
+    await act(async () => {
+      fireEvent.click(submitButton);
+    });
+
+    await waitFor(() => {
+      const mutation = mutationMocks.find(
+        mock => mock.variables?.assignmentId === maintenanceId
+      );
+      expect(mutation).toBeDefined();
+    });
+    const maintenanceAssignmentMutation = mutationMocks.find(
+      mock => mock.variables?.assignmentId === maintenanceId
+    );
+    expect(maintenanceAssignmentMutation?.variables).toMatchObject({
+      assignmentId: maintenanceId,
+      assetId: 'asset-cycle',
+      status: 'completed',
+      assetStatus: 'available',
+      notes: 'Back in rotation',
+    });
+
+    await waitFor(() => {
+      const statusMutation = mutationMocks.find(
+        mock => mock.variables?.assetId === 'asset-cycle' && mock.variables?.status === 'available'
+      );
+      expect(statusMutation).toBeDefined();
+    });
+
+    await act(async () => {
+      queryClient.setQueryData(
+        ['/api/assets'],
+        assets.map(asset =>
+          asset.id === 'asset-cycle'
+            ? { ...asset, status: 'available' as const, currentAssignment: null }
+            : asset
+        )
+      );
+      queryClient.setQueryData(['/api/asset-assignments'], [
+        {
+          id: maintenanceId,
+          assetId: 'asset-cycle',
+          employeeId: null,
+          assignedDate: today,
+          returnDate: today,
+          status: 'completed',
+          notes: 'Back in rotation',
+          asset: { name: 'Spare Monitor', type: 'Equipment' },
+          employee: null,
+        },
+      ]);
+    });
+
+    fireEvent.click(screen.getAllByText('Assignment History')[0]);
+
+    const localizedToday = new Date(today).toLocaleDateString();
+    const tables = await screen.findAllByRole('table');
+    const historyTable = tables.find(table =>
+      within(table).queryByText('Assignment Period')
+    );
+    expect(historyTable).toBeTruthy();
+
+    await waitFor(() =>
+      expect(within(historyTable!).getByText('Maintenance')).toBeInTheDocument()
+    );
+    expect(
+      within(historyTable!).getByText(`${localizedToday} – ${localizedToday}`)
+    ).toBeInTheDocument();
+    expect(within(historyTable!).getByText('Back in rotation')).toBeInTheDocument();
+  });
 });

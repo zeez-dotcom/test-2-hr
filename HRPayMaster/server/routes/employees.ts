@@ -1337,7 +1337,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
   // Asset assignment routes
   employeesRouter.get("/api/asset-assignments", async (req, res, next) => {
     try {
-      const assignments = await storage.getAssetAssignments();
+      const assignments = await assetService.getAssignments();
       res.json(assignments);
     } catch (error) {
       next(new HttpError(500, "Failed to fetch asset assignments"));
@@ -1359,7 +1359,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
   employeesRouter.post("/api/asset-assignments", async (req, res, next) => {
     try {
       const assignment = insertAssetAssignmentSchema.parse(req.body);
-      const newAssignment = await storage.createAssetAssignment(assignment);
+      const newAssignment = await assetService.createAssignment(assignment);
       // ensure the asset reflects its new assignment
       if (newAssignment?.assetId) {
         const desiredStatus =
@@ -1369,7 +1369,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
         });
       }
       const detailed = await storage.getAssetAssignment(newAssignment.id);
-      if (detailed) {
+      if (detailed?.employeeId) {
         const addedBy = await getAddedBy(req);
         const event: InsertEmployeeEvent = {
           employeeId: detailed.employeeId,
@@ -1395,7 +1395,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
   employeesRouter.put("/api/asset-assignments/:id", async (req, res, next) => {
     try {
       const updates = insertAssetAssignmentSchema.partial().parse(req.body);
-      const updated = await storage.updateAssetAssignment(req.params.id, updates);
+      const updated = await assetService.updateAssignment(req.params.id, updates);
       if (!updated) {
         return next(new HttpError(404, "Asset assignment not found"));
       }
@@ -1408,7 +1408,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
         }
       }
       const detailed = await storage.getAssetAssignment(req.params.id);
-      if (detailed) {
+      if (detailed?.employeeId) {
         const addedBy = await getAddedBy(req);
         const event: InsertEmployeeEvent = {
           employeeId: detailed.employeeId,
@@ -1434,14 +1434,14 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
   employeesRouter.delete("/api/asset-assignments/:id", async (req, res, next) => {
     try {
       const existing = await storage.getAssetAssignment(req.params.id);
-      const deleted = await storage.deleteAssetAssignment(req.params.id);
+      const deleted = await assetService.deleteAssignment(req.params.id);
       if (!deleted) {
         return next(new HttpError(404, "Asset assignment not found"));
       }
       if (existing?.assetId) {
         await storage.updateAsset(existing.assetId, { status: "available" });
       }
-      if (existing) {
+      if (existing?.employeeId) {
         const addedBy = await getAddedBy(req);
         const event: InsertEmployeeEvent = {
           employeeId: existing.employeeId,
@@ -1492,7 +1492,15 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
         }
         if (assignmentUpdates.status) {
           await storage.updateAssetAssignment(activeAssignment.id, assignmentUpdates);
+          assetService.invalidateAssignmentCache();
         }
+      } else if (status === "maintenance" && previousStatus !== "maintenance") {
+        const today = new Date().toISOString().split("T")[0];
+        await assetService.createAssignment({
+          assetId: req.params.id,
+          assignedDate: today,
+          status: "maintenance",
+        });
       }
       res.json(updated);
     } catch (error) {
