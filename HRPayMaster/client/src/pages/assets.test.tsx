@@ -364,6 +364,128 @@ describe('Assets page', () => {
     confirmSpy.mockRestore();
   });
 
+  it('moves maintenance assignments to history with updated notes when returned', async () => {
+    const assets = [
+      {
+        id: 'asset-3',
+        name: '3D Printer',
+        type: 'Equipment',
+        status: 'maintenance',
+        currentAssignment: {
+          id: 'assign-3',
+          assetId: 'asset-3',
+          employeeId: 'emp-3',
+          status: 'maintenance',
+          returnDate: null,
+          employee: { firstName: 'Alex', lastName: 'Johnson' },
+        },
+      },
+    ];
+    const assignments = [
+      {
+        id: 'assign-3',
+        assetId: 'asset-3',
+        employeeId: 'emp-3',
+        assignedDate: '2024-02-01',
+        returnDate: null,
+        status: 'maintenance',
+        notes: 'Awaiting spare part',
+        asset: { name: '3D Printer', type: 'Equipment' },
+        employee: { firstName: 'Alex', lastName: 'Johnson' },
+      },
+    ];
+
+    queryClient.setQueryData(['/api/assets'], assets);
+    queryClient.setQueryData(['/api/asset-assignments'], assignments);
+    queryClient.setQueryData(['/api/employees'], []);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Assets />
+      </QueryClientProvider>
+    );
+
+    fireEvent.click(screen.getAllByText('Maintenance')[0]);
+
+    const [openDialogButton] = await screen.findAllByRole('button', {
+      name: 'Return to Service',
+    });
+    fireEvent.click(openDialogButton);
+
+    const descriptionField = await screen.findByPlaceholderText('What was repaired?');
+    fireEvent.change(descriptionField, { target: { value: 'Final calibration performed' } });
+
+    const notesField = screen.getByPlaceholderText('Update assignment notes...');
+    fireEvent.change(notesField, { target: { value: '  Ready for deployment  ' } });
+
+    const allReturnButtons = await screen.findAllByRole('button', {
+      name: 'Return to Service',
+    });
+    const submitButton = allReturnButtons[allReturnButtons.length - 1];
+
+    await act(async () => {
+      fireEvent.click(submitButton);
+    });
+
+    const today = new Date().toISOString().split('T')[0];
+
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith({ title: 'Asset returned successfully' })
+    );
+
+    const assignmentMutation = mutationMocks.find(
+      mock => mock.variables?.assignmentId === 'assign-3'
+    );
+    expect(assignmentMutation).toBeDefined();
+    expect(assignmentMutation?.variables).toMatchObject({
+      assignmentId: 'assign-3',
+      assetId: 'asset-3',
+      status: 'completed',
+      assetStatus: 'available',
+      notes: 'Ready for deployment',
+    });
+    expect(assignmentMutation?.variables.returnDate).toBe(today);
+
+    const assetStatusUpdate = mutationMocks.find(
+      mock =>
+        mock.variables?.assetId === 'asset-3' &&
+        mock.variables?.status === 'available' &&
+        mock.variables?.toastMessage === 'Asset returned successfully'
+    );
+    expect(assetStatusUpdate).toBeDefined();
+
+    await act(async () => {
+      queryClient.setQueryData(
+        ['/api/assets'],
+        assets.map(asset =>
+          asset.id === 'asset-3'
+            ? { ...asset, status: 'available', currentAssignment: null }
+            : asset
+        ),
+      );
+      queryClient.setQueryData(
+        ['/api/asset-assignments'],
+        assignments.map(assignment =>
+          assignment.id === 'assign-3'
+            ? {
+                ...assignment,
+                status: 'completed',
+                returnDate: today,
+                notes: 'Ready for deployment',
+              }
+            : assignment
+        ),
+      );
+    });
+
+    fireEvent.click(screen.getAllByText('Assignment History')[0]);
+
+    await waitFor(() =>
+      expect(screen.getByText('Ready for deployment')).toBeInTheDocument()
+    );
+    expect(screen.queryByText('Awaiting spare part')).not.toBeInTheDocument();
+  });
+
   it('renders assignment history for completed asset assignments', async () => {
     const assets = [
       {

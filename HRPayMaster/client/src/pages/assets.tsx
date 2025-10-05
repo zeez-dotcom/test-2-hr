@@ -226,15 +226,22 @@ export default function Assets() {
         setReturnRepairForm(createAssetRepairForm());
       }
       if (variables.assetId && (variables.status || variables.assetStatus)) {
-        const assetStatus = variables.assetStatus ?? variables.status;
-        if (assetStatus) {
+        let nextAssetStatus = variables.assetStatus ?? undefined;
+        if (!nextAssetStatus) {
+          if (variables.status === "maintenance") {
+            nextAssetStatus = "maintenance";
+          } else if (variables.status === "completed") {
+            nextAssetStatus = "available";
+          }
+        }
+        if (nextAssetStatus) {
           const toastMessage =
-            variables.status === "completed" && assetStatus === "available"
+            variables.status === "completed" && nextAssetStatus === "available"
               ? t('assets.returnSuccess', 'Asset returned successfully')
               : undefined;
           assetStatusMutation.mutate({
             assetId: variables.assetId,
-            status: assetStatus,
+            status: nextAssetStatus,
             toastMessage,
           });
         }
@@ -384,15 +391,21 @@ export default function Assets() {
   const handleReturnAssetToService = async () => {
     if (!returnAssetDialog) return;
     const { asset, assignment, notes } = returnAssetDialog;
+    const matchingAssignment =
+      assignments.find((item) => item.id === assignment?.id) ??
+      assignments.find(
+        (item) => item.assetId === asset.id && item.status === "maintenance"
+      ) ??
+      null;
     try {
       await returnAssetRepairMutation.mutateAsync({
         assetId: asset.id,
         form: returnRepairForm,
       });
-      if (assignment?.id) {
+      if (matchingAssignment?.id) {
         const today = new Date().toISOString().split("T")[0];
         await updateAssetAssignmentStatus.mutateAsync({
-          assignmentId: assignment.id,
+          assignmentId: matchingAssignment.id,
           assetId: asset.id,
           status: "completed",
           returnDate: today,
