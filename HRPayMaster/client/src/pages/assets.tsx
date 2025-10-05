@@ -887,6 +887,10 @@ export default function Assets() {
                           ? `${assignment.employee.firstName ?? ""} ${assignment.employee.lastName ?? ""}`.trim()
                           : "";
                         const employeePhone = assignment.employee?.phone?.trim();
+                        const isMaintenanceAssignment = assignment.status === "maintenance";
+                        const employeeDisplayName = isMaintenanceAssignment
+                          ? t("assets.historyMaintenance", "Maintenance")
+                          : employeeName || t("assets.historyUnknownEmployee", "Unknown employee");
                         const assignedDate = formatDate(assignment.assignedDate);
                         const returnDate = assignment.returnDate
                           ? formatDate(assignment.returnDate)
@@ -905,9 +909,9 @@ export default function Assets() {
                             </TableCell>
                             <TableCell>
                               <div className="font-medium">
-                                {employeeName || t('assets.historyUnknownEmployee', 'Unknown employee')}
+                                {employeeDisplayName}
                               </div>
-                              {employeePhone && (
+                              {!isMaintenanceAssignment && employeePhone && (
                                 <div className="text-sm text-muted-foreground">{employeePhone}</div>
                               )}
                             </TableCell>

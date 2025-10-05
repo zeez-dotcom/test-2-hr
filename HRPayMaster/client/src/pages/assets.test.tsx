@@ -486,6 +486,60 @@ describe('Assets page', () => {
     expect(screen.queryByText('Awaiting spare part')).not.toBeInTheDocument();
   });
 
+  it('shows the maintenance label in history for maintenance assignments', async () => {
+    const assets = [
+      {
+        id: 'asset-4',
+        name: 'Laser Cutter',
+        type: 'Equipment',
+        status: 'maintenance',
+        currentAssignment: null,
+      },
+    ];
+    const assignments = [
+      {
+        id: 'history-maintenance',
+        assetId: 'asset-4',
+        employeeId: 'emp-4',
+        assignedDate: '2024-03-01',
+        returnDate: null,
+        status: 'maintenance',
+        notes: null,
+        asset: { name: 'Laser Cutter', type: 'Equipment' },
+        employee: { firstName: 'Taylor', lastName: 'Smith', phone: '555-1234' },
+      },
+    ];
+
+    queryClient.setQueryData(['/api/assets'], assets);
+    queryClient.setQueryData(['/api/asset-assignments'], assignments);
+    queryClient.setQueryData(['/api/employees'], []);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Assets />
+      </QueryClientProvider>
+    );
+
+    fireEvent.click(screen.getAllByText('Assignment History')[0]);
+
+    const assignedDate = new Date('2024-03-01').toLocaleDateString();
+    const periodText = `${assignedDate} – Present`;
+
+    await waitFor(() => expect(screen.getByText(periodText)).toBeInTheDocument());
+
+    const tableHeader = screen.getByText('Assignment Period');
+    const historyTable = tableHeader.closest('table');
+    expect(historyTable).not.toBeNull();
+
+    const rows = within(historyTable as HTMLTableElement).getAllByRole('row');
+    expect(rows).toHaveLength(2);
+
+    const historyRow = rows[1];
+    expect(within(historyRow).getByText('Maintenance')).toBeInTheDocument();
+    expect(within(historyRow).queryByText('Taylor Smith')).not.toBeInTheDocument();
+    expect(within(historyRow).queryByText('555-1234')).not.toBeInTheDocument();
+  });
+
   it('renders assignment history for completed asset assignments', async () => {
     const assets = [
       {

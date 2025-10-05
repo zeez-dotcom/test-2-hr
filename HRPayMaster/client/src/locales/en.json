@@ -82,6 +82,7 @@
     "historyPresent": "Present",
     "historyUnknownAsset": "Unknown asset",
     "historyUnknownEmployee": "Unknown employee",
+    "historyMaintenance": "Maintenance",
     "historyNoNotes": "No notes recorded.",
     "historyEmpty": "No past assignments found.",
     "historyEmptyHint": "Completed assignments will appear here once available."
