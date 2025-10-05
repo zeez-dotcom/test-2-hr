@@ -461,12 +461,16 @@ describe('Assets page', () => {
       </QueryClientProvider>
     );
 
-    const returnButton = screen.getByRole('button', { name: 'Back to Service' });
+    const [returnButton] = screen.getAllByRole('button', { name: 'Return to Service' });
     fireEvent.click(returnButton);
 
     expect(screen.getByText('Return Asset to Service')).toBeInTheDocument();
 
-    const submitButton = screen.getByRole('button', { name: 'Return to Service' });
+    const notesField = screen.getByLabelText('Maintenance Notes');
+    expect(notesField).toBeInTheDocument();
+
+    const submitButtons = screen.getAllByRole('button', { name: 'Return to Service' });
+    const submitButton = submitButtons[submitButtons.length - 1] as HTMLButtonElement;
     expect(submitButton).toBeDisabled();
 
     const descriptionField = screen.getByPlaceholderText('What was repaired?');
@@ -494,5 +498,112 @@ describe('Assets page', () => {
     );
     expect(statusCall).toBeDefined();
     expect(statusCall?.variables).toMatchObject({ assetId: 'asset-1', status: 'available' });
+  });
+
+  it('updates maintenance assignment notes when returning an asset to service', async () => {
+    const today = new Date().toISOString().split('T')[0];
+
+    const assets = [
+      {
+        id: 'asset-1',
+        name: '3D Printer',
+        type: 'Equipment',
+        status: 'maintenance',
+        currentAssignment: {
+          id: 'assignment-1',
+          assetId: 'asset-1',
+          employeeId: 'employee-1',
+          status: 'maintenance',
+          assignedDate: '2024-01-01',
+          returnDate: null,
+          notes: 'Needs calibration',
+          employee: { id: 'employee-1', firstName: 'Jamie', lastName: 'Lee' },
+        },
+      },
+    ];
+
+    const assignments = [
+      {
+        id: 'assignment-1',
+        assetId: 'asset-1',
+        employeeId: 'employee-1',
+        status: 'maintenance',
+        assignedDate: '2024-01-01',
+        returnDate: null,
+        notes: 'Needs calibration',
+        asset: { id: 'asset-1', name: '3D Printer', type: 'Equipment' },
+        employee: { id: 'employee-1', firstName: 'Jamie', lastName: 'Lee' },
+      },
+    ];
+
+    queryClient.setQueryData(['/api/assets'], assets);
+    queryClient.setQueryData(['/api/asset-assignments'], assignments);
+    queryClient.setQueryData(['/api/employees'], [
+      { id: 'employee-1', firstName: 'Jamie', lastName: 'Lee' },
+    ]);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Assets />
+      </QueryClientProvider>
+    );
+
+    const maintenanceRow = screen
+      .getAllByRole('row')
+      .find(row => within(row).queryByText('3D Printer'));
+    expect(maintenanceRow).toBeTruthy();
+
+    const maintenanceButton = within(maintenanceRow!)
+      .getByRole('button', { name: 'Return to Service' });
+    expect(maintenanceButton).toBeInTheDocument();
+
+    fireEvent.click(maintenanceButton);
+
+    const descriptionField = screen.getByPlaceholderText('What was repaired?');
+    fireEvent.change(descriptionField, { target: { value: 'Completed tune-up' } });
+
+    const notesField = screen.getByLabelText('Maintenance Notes') as HTMLTextAreaElement;
+    expect(notesField.value).toBe('Needs calibration');
+    fireEvent.change(notesField, { target: { value: 'Ready for production' } });
+
+    const submitButtons = screen.getAllByRole('button', { name: 'Return to Service' });
+    const submitButton = submitButtons[submitButtons.length - 1] as HTMLButtonElement;
+    expect(submitButton).not.toBeDisabled();
+
+    fireEvent.click(submitButton);
+
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith({ title: 'Asset returned successfully' })
+    );
+
+    const repairCall = mutationMocks.find(
+      mock =>
+        mock.variables?.assetId === 'asset-1' &&
+        mock.variables?.form?.description === 'Completed tune-up'
+    );
+    expect(repairCall).toBeDefined();
+
+    const assignmentUpdateCall = mutationMocks.find(
+      mock => mock.variables?.assignmentId === 'assignment-1'
+    );
+    expect(assignmentUpdateCall).toBeDefined();
+    expect(assignmentUpdateCall?.variables).toMatchObject({
+      assignmentId: 'assignment-1',
+      assetId: 'asset-1',
+      status: 'completed',
+      assetStatus: 'available',
+      notes: 'Ready for production',
+    });
+    expect(assignmentUpdateCall?.variables.returnDate).toBe(today);
+
+    const statusCall = mutationMocks.find(
+      mock => mock.variables?.toastMessage === 'Asset returned successfully'
+    );
+    expect(statusCall).toBeDefined();
+    expect(statusCall?.variables).toMatchObject({
+      assetId: 'asset-1',
+      status: 'available',
+      toastMessage: 'Asset returned successfully',
+    });
   });
 });
