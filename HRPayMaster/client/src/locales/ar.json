@@ -72,7 +72,19 @@
     "created": "تم إنشاء الأصل",
     "createFailed": "فشل إنشاء الأصل",
     "assigned": "تم تعيين الأصل",
-    "assignFailed": "فشل تعيين الأصل"
+    "assignFailed": "فشل تعيين الأصل",
+    "historyTab": "سجل التخصيصات",
+    "historyDescription": "مراجعة التخصيصات السابقة للأصول وعمليات الإرجاع.",
+    "historyAsset": "الأصل",
+    "historyEmployee": "الموظف",
+    "historyPeriod": "فترة التخصيص",
+    "historyNotes": "ملاحظات",
+    "historyPresent": "حتى الآن",
+    "historyUnknownAsset": "أصل غير معروف",
+    "historyUnknownEmployee": "موظف غير معروف",
+    "historyNoNotes": "لا توجد ملاحظات.",
+    "historyEmpty": "لا توجد تخصيصات سابقة.",
+    "historyEmptyHint": "ستظهر التخصيصات المكتملة هنا عند توفرها."
   }
   ,
   "reports": {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
 import Assets from './assets';
@@ -285,6 +285,82 @@ describe('Assets page', () => {
       expect(screen.getByText(`Assigned: ${formattedAssigned}`)).toBeInTheDocument()
     );
     expect(screen.queryByText('No assets are currently marked for maintenance.')).not.toBeInTheDocument();
+  });
+
+  it('renders assignment history for completed asset assignments', async () => {
+    const assets = [
+      {
+        id: 'asset-2',
+        name: 'High-End Laptop',
+        type: 'Electronics',
+        status: 'available',
+        currentAssignment: null,
+      },
+    ];
+    const assignments = [
+      {
+        id: 'history-1',
+        assetId: 'asset-2',
+        employeeId: 'emp-2',
+        assignedDate: '2024-01-10',
+        returnDate: '2024-02-05',
+        status: 'returned',
+        notes: 'Returned in good condition.',
+        asset: { name: 'High-End Laptop', type: 'Electronics' },
+        employee: { firstName: 'John', lastName: 'Doe' },
+      },
+    ];
+
+    queryClient.setQueryData(['/api/assets'], assets);
+    queryClient.setQueryData(['/api/asset-assignments'], assignments);
+    queryClient.setQueryData(['/api/employees'], []);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Assets />
+      </QueryClientProvider>
+    );
+
+    const assignedDate = new Date('2024-01-10').toLocaleDateString();
+    const returnedDate = new Date('2024-02-05').toLocaleDateString();
+
+    await waitFor(() =>
+      expect(screen.getAllByText('Assignment History').length).toBeGreaterThan(0)
+    );
+
+    const periodCellText = `${assignedDate} – ${returnedDate}`;
+    expect(screen.getByText(periodCellText)).toBeInTheDocument();
+
+    const tableHeader = screen.getByText('Assignment Period');
+    const historyTable = tableHeader.closest('table');
+    expect(historyTable).not.toBeNull();
+
+    const rows = within(historyTable as HTMLTableElement).getAllByRole('row');
+    expect(rows).toHaveLength(2);
+    expect(within(rows[1]).getByText('High-End Laptop')).toBeInTheDocument();
+    expect(within(rows[1]).getByText('John Doe')).toBeInTheDocument();
+    expect(screen.getByText('Returned in good condition.')).toBeInTheDocument();
+  });
+
+  it('shows an empty history state when no completed assignments exist', async () => {
+    queryClient.setQueryData(['/api/assets'], []);
+    queryClient.setQueryData(['/api/asset-assignments'], []);
+    queryClient.setQueryData(['/api/employees'], []);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Assets />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() =>
+      expect(screen.getAllByText('Assignment History').length).toBeGreaterThan(0)
+    );
+
+    expect(screen.getByText('No past assignments found.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Completed assignments will appear here once available.')
+    ).toBeInTheDocument();
   });
 
   it('requires logging a repair before returning an asset to service', async () => {
