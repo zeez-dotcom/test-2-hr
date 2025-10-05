@@ -70,7 +70,18 @@ export default function Assets() {
   type AssetRepairFormState = ReturnType<typeof createAssetRepairForm>;
 
   const [repairForm, setRepairForm] = useState<AssetRepairFormState>(createAssetRepairForm());
-  const [returnAssetDialog, setReturnAssetDialog] = useState<AssetWithAssignment | null>(null);
+  type MaintenanceAssignment =
+    | AssetAssignmentWithDetails
+    | NonNullable<AssetWithAssignment["currentAssignment"]>;
+
+  const [returnAssetDialog, setReturnAssetDialog] = useState<
+    | {
+        asset: AssetWithAssignment;
+        assignment: MaintenanceAssignment | null;
+        notes: string;
+      }
+    | null
+  >(null);
   const [returnRepairForm, setReturnRepairForm] = useState<AssetRepairFormState>(createAssetRepairForm());
 
   const buildAssetRepairPayload = (formValues: AssetRepairFormState) => {
@@ -193,8 +204,8 @@ export default function Assets() {
       if (returnDate) {
         payload.returnDate = returnDate;
       }
-      if (typeof notes === "string" && notes.trim().length > 0) {
-        payload.notes = notes.trim();
+      if (typeof notes === "string") {
+        payload.notes = notes;
       }
       const res = await apiPut(`/api/asset-assignments/${assignmentId}`, payload);
       if (!res.ok) throw res;
@@ -320,13 +331,34 @@ export default function Assets() {
   const onSubmitAsset = (data: any) => createAsset.mutate(data);
   const onSubmitAssignment = (data: any) => assignAsset.mutate(data);
 
+  const getMaintenanceAssignmentForAsset = (
+    asset: AssetWithAssignment
+  ): MaintenanceAssignment | null => {
+    const maintenanceAssignment = assignments.find(
+      (assignment) => assignment.assetId === asset.id && assignment.status === "maintenance"
+    );
+    return (maintenanceAssignment ?? asset.currentAssignment ?? null) as MaintenanceAssignment | null;
+  };
+
+  const openReturnDialog = (
+    asset: AssetWithAssignment,
+    assignmentOverride?: MaintenanceAssignment | null
+  ) => {
+    const assignment = assignmentOverride ?? getMaintenanceAssignmentForAsset(asset);
+    setReturnAssetDialog({
+      asset,
+      assignment,
+      notes: assignment?.notes ?? "",
+    });
+    setReturnRepairForm(createAssetRepairForm());
+  };
+
   const handleAssetStatusChange = (
     asset: AssetWithAssignment,
     status: "available" | "maintenance" | "assigned"
   ) => {
     if (asset.status === "maintenance" && status === "available") {
-      setReturnAssetDialog(asset);
-      setReturnRepairForm(createAssetRepairForm());
+      openReturnDialog(asset);
       return;
     }
 
@@ -351,23 +383,39 @@ export default function Assets() {
 
   const handleReturnAssetToService = async () => {
     if (!returnAssetDialog) return;
+    const { asset, assignment, notes } = returnAssetDialog;
     try {
       await returnAssetRepairMutation.mutateAsync({
-        assetId: returnAssetDialog.id,
+        assetId: asset.id,
         form: returnRepairForm,
       });
-      await assetStatusMutation.mutateAsync({
-        assetId: returnAssetDialog.id,
-        status: "available",
-      });
-      setReturnAssetDialog(null);
-      setReturnRepairForm(createAssetRepairForm());
+      if (assignment?.id) {
+        const today = new Date().toISOString().split("T")[0];
+        await updateAssetAssignmentStatus.mutateAsync({
+          assignmentId: assignment.id,
+          assetId: asset.id,
+          status: "completed",
+          returnDate: today,
+          notes: (notes ?? "").trim(),
+          assetStatus: "available",
+        });
+      } else {
+        await assetStatusMutation.mutateAsync({
+          assetId: asset.id,
+          status: "available",
+        });
+        setReturnAssetDialog(null);
+        setReturnRepairForm(createAssetRepairForm());
+      }
     } catch (err) {
       // Errors are handled by the respective mutations
     }
   };
 
-  const isReturningAsset = returnAssetRepairMutation.isPending || assetStatusMutation.isPending;
+  const isReturningAsset =
+    returnAssetRepairMutation.isPending ||
+    assetStatusMutation.isPending ||
+    updateAssetAssignmentStatus.isPending;
 
   const handleReturnAsset = (assignmentId: string) => {
     const assignment = assignments.find((item) => item.id === assignmentId);
@@ -634,7 +682,8 @@ export default function Assets() {
                         (assetStatusMutation.isPending &&
                           assetStatusMutation.variables?.assetId === asset.id) ||
                         (updateAssetAssignmentStatus.isPending &&
-                          updateAssetAssignmentStatus.variables?.assetId === asset.id)
+                          updateAssetAssignmentStatus.variables?.assetId === asset.id) ||
+                        (isReturningAsset && returnAssetDialog?.asset.id === asset.id)
                       }
                       onClick={() =>
                         handleAssetStatusChange(
@@ -643,7 +692,7 @@ export default function Assets() {
                         )
                       }
                     >
-                      {asset.status === "maintenance" ? "Back to Service" : "Mark as Maintenance"}
+                      {asset.status === "maintenance" ? "Return to Service" : "Mark as Maintenance"}
                     </Button>
                   </div>
                 </div>
@@ -722,6 +771,7 @@ export default function Assets() {
                       <TableHead>Assignment</TableHead>
                       <TableHead>Dates</TableHead>
                       <TableHead>Notes</TableHead>
+                      <TableHead className="text-right">{t('assets.actions', 'Actions')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -766,6 +816,20 @@ export default function Assets() {
                             ) : (
                               <span className="text-sm text-muted-foreground">No notes recorded.</span>
                             )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={
+                                (isReturningAsset && returnAssetDialog?.asset.id === asset.id) ||
+                                (updateAssetAssignmentStatus.isPending &&
+                                  updateAssetAssignmentStatus.variables?.assetId === asset.id)
+                              }
+                              onClick={() => openReturnDialog(asset, maintenanceRecord ?? null)}
+                            >
+                              {t('assets.returnToService', 'Return to Service')}
+                            </Button>
                           </TableCell>
                         </TableRow>
                       );
@@ -880,7 +944,7 @@ export default function Assets() {
           <DialogHeader>
             <DialogTitle>Return Asset to Service</DialogTitle>
             <DialogDescription>
-              {`Record the maintenance details before returning ${returnAssetDialog?.name ?? 'this asset'} to service.`}
+              {`Record the maintenance details before returning ${returnAssetDialog?.asset.name ?? 'this asset'} to service.`}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -920,6 +984,19 @@ export default function Assets() {
                   onChange={(e) => setReturnRepairForm((s) => ({ ...s, vendor: e.target.value }))}
                 />
               </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="asset-return-maintenance-notes">Maintenance Notes</label>
+              <Textarea
+                id="asset-return-maintenance-notes"
+                placeholder="Update assignment notes..."
+                value={returnAssetDialog?.notes ?? ""}
+                onChange={(e) =>
+                  setReturnAssetDialog((state) =>
+                    state ? { ...state, notes: e.target.value } : state,
+                  )
+                }
+              />
             </div>
           </div>
           <DialogFooter>
