@@ -1359,6 +1359,23 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
   employeesRouter.post("/api/asset-assignments", async (req, res, next) => {
     try {
       const assignment = insertAssetAssignmentSchema.parse(req.body);
+      if (assignment.assignedDate) {
+        const date = new Date(assignment.assignedDate);
+        const vacations = await storage.getVacationRequests(date, date);
+        const conflict = vacations.find(
+          (vacation) =>
+            vacation.employeeId === assignment.employeeId &&
+            (vacation.status === "approved" || vacation.status === "pending"),
+        );
+        if (conflict) {
+          return next(
+            new HttpError(
+              409,
+              `Employee has ${conflict.status} vacation overlapping ${assignment.assignedDate}`,
+            ),
+          );
+        }
+      }
       const newAssignment = await assetService.createAssignment(assignment);
       // ensure the asset reflects its new assignment
       if (newAssignment?.assetId) {

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
-import Assets from './assets';
+import Assets, { hasVacationConflict } from './assets';
 import '@testing-library/jest-dom';
 import React from 'react';
 
@@ -183,6 +183,14 @@ describe('Assets page', () => {
           headers: { get: () => null },
         } as any;
       }
+      if (typeof url === 'string' && url.startsWith('/api/vacations') && (!init || init.method === undefined || init.method === 'GET')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => queryClient.getQueryData(['/api/vacations']) ?? [],
+          headers: { get: () => null },
+        } as any;
+      }
       return {
         ok: true,
         status: 200,
@@ -285,6 +293,56 @@ describe('Assets page', () => {
       expect(screen.getByText(`Assigned: ${formattedAssigned}`)).toBeInTheDocument()
     );
     expect(screen.queryByText('No assets are currently marked for maintenance.')).not.toBeInTheDocument();
+  });
+
+  describe('hasVacationConflict', () => {
+    it('detects overlapping pending or approved vacations', () => {
+      const today = new Date('2024-01-08');
+      const vacations = [
+        {
+          id: 'vac-1',
+          employeeId: 'emp-1',
+          status: 'approved',
+          startDate: '2024-01-05',
+          endDate: '2024-01-10',
+        },
+        {
+          id: 'vac-2',
+          employeeId: 'emp-2',
+          status: 'pending',
+          startDate: '2024-02-01',
+          endDate: '2024-02-05',
+        },
+      ];
+
+      const result = hasVacationConflict(
+        vacations as any,
+        'emp-1',
+        today.toISOString().split('T')[0]
+      );
+
+      expect(result).toBe(true);
+    });
+
+    it('ignores vacations for other employees or outside the assignment date', () => {
+      const vacations = [
+        {
+          id: 'vac-1',
+          employeeId: 'emp-2',
+          status: 'approved',
+          startDate: '2024-01-01',
+          endDate: '2024-01-31',
+        },
+      ];
+
+      const result = hasVacationConflict(
+        vacations as any,
+        'emp-1',
+        '2024-01-15'
+      );
+
+      expect(result).toBe(false);
+    });
   });
 
   it('allows returning an asset from the active assignments table', async () => {
