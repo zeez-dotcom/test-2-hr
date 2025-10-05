@@ -151,7 +151,11 @@ export default function Assets() {
     onError: (err) => toastApiError(err as any, t('assets.createFailed','Failed to create asset')),
   });
 
-  const assetStatusMutation = useMutation<any, unknown, { assetId: string; status: string }>({
+  const assetStatusMutation = useMutation<
+    any,
+    unknown,
+    { assetId: string; status: string; toastMessage?: string }
+  >({
     mutationFn: async ({ assetId, status }: { assetId: string; status: string }) => {
       const res = await apiPost(`/api/assets/${assetId}/status`, { status });
       if (!res.ok) throw res;
@@ -162,12 +166,12 @@ export default function Assets() {
       if (variables.assetId) {
         queryClient.invalidateQueries({ queryKey: ["/api/assets", variables.assetId] });
       }
-      toast({
-        title:
-          variables.status === "maintenance"
-            ? t('assets.markedMaintenance', 'Asset marked for maintenance')
-            : t('assets.backInService', 'Asset returned to service'),
-      });
+      const message =
+        variables.toastMessage ??
+        (variables.status === "maintenance"
+          ? t('assets.markedMaintenance', 'Asset marked for maintenance')
+          : t('assets.backInService', 'Asset returned to service'));
+      toast({ title: message });
     },
     onError: (err) => toastApiError(err as any, t('assets.statusUpdateFailed', 'Failed to update asset status')),
   });
@@ -175,12 +179,22 @@ export default function Assets() {
   const updateAssetAssignmentStatus = useMutation<
     any,
     unknown,
-    { assignmentId: string; status: string; assetId: string; returnDate?: string }
+    {
+      assignmentId: string;
+      status: string;
+      assetId: string;
+      returnDate?: string;
+      notes?: string | null;
+      assetStatus?: string;
+    }
   >({
-    mutationFn: async ({ assignmentId, status, returnDate }) => {
+    mutationFn: async ({ assignmentId, status, returnDate, notes }) => {
       const payload: Record<string, string> = { status };
       if (returnDate) {
         payload.returnDate = returnDate;
+      }
+      if (typeof notes === "string" && notes.trim().length > 0) {
+        payload.notes = notes.trim();
       }
       const res = await apiPut(`/api/asset-assignments/${assignmentId}`, payload);
       if (!res.ok) throw res;
@@ -195,8 +209,26 @@ export default function Assets() {
       if (variables.assetId) {
         queryClient.invalidateQueries({ queryKey: ["/api/asset-assignments", variables.assetId] });
       }
-      if (variables.assetId && variables.status) {
-        assetStatusMutation.mutate({ assetId: variables.assetId, status: variables.status });
+      if (variables.status === "completed") {
+        setReturnAssetDialog(null);
+        setRepairsAsset(null);
+        setReturnRepairForm(createAssetRepairForm());
+      }
+      if (variables.assetId && (variables.status || variables.assetStatus)) {
+        const assetStatus = variables.assetStatus ?? variables.status;
+        if (assetStatus) {
+          const toastMessage =
+            variables.status === "completed" && assetStatus === "available"
+              ? t('assets.returnSuccess', 'Asset returned successfully')
+              : undefined;
+          assetStatusMutation.mutate({
+            assetId: variables.assetId,
+            status: assetStatus,
+            toastMessage,
+          });
+        }
+      } else if (variables.status === "completed") {
+        toast({ title: t('assets.returnSuccess', 'Asset returned successfully') });
       }
     },
     onError: (err) => toastApiError(err as any, t('assets.statusUpdateFailed', 'Failed to update asset status')),
@@ -336,6 +368,28 @@ export default function Assets() {
   };
 
   const isReturningAsset = returnAssetRepairMutation.isPending || assetStatusMutation.isPending;
+
+  const handleReturnAsset = (assignmentId: string) => {
+    const assignment = assignments.find((item) => item.id === assignmentId);
+    if (!assignment) return;
+
+    const confirmed = window.confirm(
+      t('assets.confirmReturn', 'Are you sure you want to mark this asset as returned?')
+    );
+    if (!confirmed) return;
+
+    const today = new Date().toISOString().split("T")[0];
+    const existingNotes = assignment.notes?.trim();
+
+    updateAssetAssignmentStatus.mutate({
+      assignmentId: assignment.id,
+      assetId: assignment.assetId,
+      status: "completed",
+      returnDate: today,
+      ...(existingNotes ? { notes: existingNotes } : {}),
+      assetStatus: "available",
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -614,6 +668,7 @@ export default function Assets() {
                       <TableHead>Assignment Date</TableHead>
                       <TableHead>Expected Return</TableHead>
                       <TableHead>Notes</TableHead>
+                      <TableHead className="text-right">{t('assets.actions', 'Actions')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -628,6 +683,19 @@ export default function Assets() {
                         <TableCell>{formatDate(assignment.assignedDate)}</TableCell>
                         <TableCell>{formatDate(assignment.returnDate)}</TableCell>
                         <TableCell className="max-w-xs whitespace-pre-wrap">{assignment.notes?.trim() || "—"}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={
+                              updateAssetAssignmentStatus.isPending &&
+                              updateAssetAssignmentStatus.variables?.assignmentId === assignment.id
+                            }
+                            onClick={() => handleReturnAsset(assignment.id)}
+                          >
+                            {t('assets.returnAsset', 'Return Asset')}
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

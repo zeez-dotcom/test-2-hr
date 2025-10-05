@@ -287,6 +287,83 @@ describe('Assets page', () => {
     expect(screen.queryByText('No assets are currently marked for maintenance.')).not.toBeInTheDocument();
   });
 
+  it('allows returning an asset from the active assignments table', async () => {
+    const assets = [
+      {
+        id: 'asset-1',
+        name: 'Projector',
+        type: 'Equipment',
+        status: 'assigned',
+        currentAssignment: {
+          id: 'assign-1',
+          assetId: 'asset-1',
+          employeeId: 'emp-1',
+          status: 'active',
+          returnDate: null,
+          employee: { firstName: 'Sam', lastName: 'Carter' },
+        },
+      },
+    ];
+    const assignments = [
+      {
+        id: 'assign-1',
+        assetId: 'asset-1',
+        employeeId: 'emp-1',
+        assignedDate: '2024-01-01',
+        returnDate: null,
+        status: 'active',
+        notes: 'Handle with care',
+        asset: { name: 'Projector' },
+        employee: { firstName: 'Sam', lastName: 'Carter' },
+      },
+    ];
+
+    queryClient.setQueryData(['/api/assets'], assets);
+    queryClient.setQueryData(['/api/asset-assignments'], assignments);
+    queryClient.setQueryData(['/api/employees'], []);
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Assets />
+      </QueryClientProvider>
+    );
+
+    fireEvent.click(screen.getAllByText('Active Assignments')[0]);
+
+    const returnButton = screen.getByRole('button', { name: 'Return Asset' });
+    const today = new Date().toISOString().split('T')[0];
+
+    fireEvent.click(returnButton);
+
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith({ title: 'Asset returned successfully' })
+    );
+
+    const assignmentMutation = mutationMocks.find(
+      mock => mock.variables?.assignmentId === 'assign-1'
+    );
+    expect(assignmentMutation).toBeDefined();
+    expect(assignmentMutation?.variables).toMatchObject({
+      assignmentId: 'assign-1',
+      assetId: 'asset-1',
+      status: 'completed',
+      assetStatus: 'available',
+    });
+    expect(assignmentMutation?.variables.returnDate).toBe(today);
+    expect(assignmentMutation?.variables.notes).toBe('Handle with care');
+
+    const statusMutation = mutationMocks.find(
+      mock => mock.variables?.assetId === 'asset-1' && mock.variables?.status === 'available'
+    );
+    expect(statusMutation).toBeDefined();
+    expect(statusMutation?.variables.toastMessage).toBe('Asset returned successfully');
+
+    expect(confirmSpy).toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
   it('renders assignment history for completed asset assignments', async () => {
     const assets = [
       {
