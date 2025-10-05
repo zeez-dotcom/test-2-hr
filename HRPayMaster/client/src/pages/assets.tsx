@@ -93,6 +93,7 @@ export default function Assets() {
     description: '',
     cost: '',
     vendor: '',
+    document: null as File | null,
   });
 
   type AssetRepairFormState = ReturnType<typeof createAssetRepairForm>;
@@ -112,7 +113,7 @@ export default function Assets() {
   >(null);
   const [returnRepairForm, setReturnRepairForm] = useState<AssetRepairFormState>(createAssetRepairForm());
 
-  const buildAssetRepairPayload = (formValues: AssetRepairFormState) => {
+  const buildAssetRepairPayload = async (formValues: AssetRepairFormState) => {
     const payload: Record<string, string | number> = {
       repairDate: formValues.repairDate,
       description: formValues.description,
@@ -126,11 +127,20 @@ export default function Assets() {
     if (formValues.vendor) {
       payload.vendor = formValues.vendor;
     }
+    if (formValues.document instanceof File) {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("Failed to read repair document"));
+        reader.readAsDataURL(formValues.document as File);
+      });
+      payload.documentUrl = dataUrl;
+    }
     return payload;
   };
 
   const submitAssetRepair = async (assetId: string, formValues: AssetRepairFormState) => {
-    const payload = buildAssetRepairPayload(formValues);
+    const payload = await buildAssetRepairPayload(formValues);
     const res = await apiPost(`/api/assets/${assetId}/repairs`, payload);
     if (!res.ok) throw res;
   };
@@ -1261,6 +1271,19 @@ export default function Assets() {
               </div>
             </div>
             <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="asset-return-repair-document">Repair Document (optional)</label>
+              <Input
+                id="asset-return-repair-document"
+                type="file"
+                onChange={(e) =>
+                  setReturnRepairForm((s) => ({
+                    ...s,
+                    document: e.target.files?.[0] ?? null,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor="asset-return-maintenance-notes">Maintenance Notes</label>
               <Textarea
                 id="asset-return-maintenance-notes"
@@ -1324,6 +1347,19 @@ export default function Assets() {
                 <Input placeholder="Vendor" value={repairForm.vendor} onChange={e=> setRepairForm(s=> ({...s, vendor: e.target.value}))} />
                 <Input className="col-span-2" placeholder="Description" value={repairForm.description} onChange={e=> setRepairForm(s=> ({...s, description: e.target.value}))} />
                 <Input placeholder="Cost" value={repairForm.cost} onChange={e=> setRepairForm(s=> ({...s, cost: e.target.value}))} />
+                <div className="col-span-2 space-y-2">
+                  <label className="text-sm font-medium" htmlFor="asset-repair-document">Repair Document (optional)</label>
+                  <Input
+                    id="asset-repair-document"
+                    type="file"
+                    onChange={e =>
+                      setRepairForm((s) => ({
+                        ...s,
+                        document: e.target.files?.[0] ?? null,
+                      }))
+                    }
+                  />
+                </div>
                 <div className="flex justify-end col-span-2"><Button size="sm" onClick={()=> addRepair.mutate()} disabled={addRepair.isPending || !repairForm.description}>Save</Button></div>
               </div>
             </div>

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import type { Mock } from 'vitest';
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
@@ -8,6 +9,27 @@ import React from 'react';
 
 const { toast } = vi.hoisted(() => ({ toast: vi.fn() }));
 const mutationMocks: any[] = [];
+
+const originalFileReader = (globalThis as any).FileReader;
+let nextFileReaderResult: string | null = null;
+let fileReaderShouldError = false;
+
+class MockFileReader {
+  result: string | ArrayBuffer | null = null;
+  onload: ((event: any) => void) | null = null;
+  onerror: ((event: any) => void) | null = null;
+
+  readAsDataURL(_file: Blob) {
+    setTimeout(() => {
+      if (fileReaderShouldError) {
+        this.onerror?.({ target: this } as any);
+        return;
+      }
+      this.result = nextFileReaderResult ?? "data:;base64,";
+      this.onload?.({ target: this } as any);
+    }, 0);
+  }
+}
 
 vi.mock('@tanstack/react-query', async () => {
   const actual: any = await vi.importActual('@tanstack/react-query');
@@ -21,16 +43,32 @@ vi.mock('@tanstack/react-query', async () => {
         const mutateImpl = async (vars: any) => {
           mock.variables = vars;
           mock.isPending = true;
-          if (mock.shouldError) {
-            await optionsRef.current.onError?.('error', vars, null);
-          } else {
-            await optionsRef.current.onSuccess?.('success', vars, null);
+          try {
+            if (mock.shouldError) {
+              throw mock.errorInstance ?? new Error('error');
+            }
+            const result = await optionsRef.current.mutationFn?.(vars);
+            mock.result = result;
+            mock.isPending = false;
+            await optionsRef.current.onSuccess?.(result, vars, undefined);
+            await optionsRef.current.onSettled?.(result, null, vars, undefined);
+            return result;
+          } catch (error) {
+            mock.errorInstance = error;
+            mock.isPending = false;
+            await optionsRef.current.onError?.(error, vars, undefined);
+            await optionsRef.current.onSettled?.(undefined, error, vars, undefined);
+            if (!mock.suppressErrorThrow) {
+              throw error;
+            }
+            return undefined;
           }
-          mock.isPending = false;
-          return 'success';
         };
         const mock: any = {
           shouldError: false,
+          suppressErrorThrow: false,
+          errorInstance: null as any,
+          result: undefined,
           isPending: false,
           variables: undefined as any,
           mutate: mutateImpl,
@@ -157,8 +195,23 @@ describe('Assets page', () => {
     queryClient.clear();
     toast.mockReset();
     mutationMocks.length = 0;
+    nextFileReaderResult = null;
+    fileReaderShouldError = false;
+    (globalThis as any).FileReader = MockFileReader as any;
     // @ts-ignore
     global.fetch = vi.fn().mockImplementation(async (url: any, init?: any) => {
+      if (
+        typeof url === 'string' &&
+        /\/api\/assets\/[^/]+\/repairs/.test(url) &&
+        (!init || init.method === undefined || init.method === 'GET')
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [],
+          headers: { get: () => null },
+        } as any;
+      }
       if (typeof url === 'string' && url.startsWith('/api/assets') && (!init || init.method === undefined || init.method === 'GET')) {
         return {
           ok: true,
@@ -203,6 +256,9 @@ describe('Assets page', () => {
   afterEach(() => {
     // @ts-ignore
     global.fetch = originalFetch;
+    (globalThis as any).FileReader = originalFileReader;
+    nextFileReaderResult = null;
+    fileReaderShouldError = false;
   });
 
   it('removes the asset from active assignments when marked for maintenance', async () => {
@@ -293,6 +349,64 @@ describe('Assets page', () => {
       expect(screen.getByText(`Assigned: ${formattedAssigned}`)).toBeInTheDocument()
     );
     expect(screen.queryByText('No assets are currently marked for maintenance.')).not.toBeInTheDocument();
+  });
+
+  it('sends documentUrl when saving a repair with an attached file', async () => {
+    const assets = [
+      {
+        id: 'asset-1',
+        name: 'Laptop',
+        type: 'Hardware',
+        status: 'available',
+        currentAssignment: null,
+      },
+    ];
+
+    queryClient.setQueryData(['/api/assets'], assets);
+    queryClient.setQueryData(['/api/asset-assignments'], []);
+    queryClient.setQueryData(['/api/employees'], []);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Assets />
+      </QueryClientProvider>
+    );
+
+    fireEvent.click(screen.getByText('Repairs'));
+
+    const repairsContainer = screen.getByText('Add Repair').parentElement as HTMLElement | null;
+    expect(repairsContainer).not.toBeNull();
+
+    const descriptionInput = within(repairsContainer!).getByPlaceholderText('Description');
+    fireEvent.change(descriptionInput, { target: { value: 'Replaced fan' } });
+
+    const dataUrl = 'data:text/plain;base64,ZGF0YQ==';
+    nextFileReaderResult = dataUrl;
+    const fileInput = within(repairsContainer!).getByLabelText('Repair Document (optional)') as HTMLInputElement;
+    const repairFile = new File(['demo'], 'repair.txt', { type: 'text/plain' });
+    await act(async () => {
+      fireEvent.change(fileInput, { target: { files: [repairFile] } });
+    });
+
+    const saveButton = within(repairsContainer!).getByText('Save');
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      const fetchMock = global.fetch as unknown as Mock;
+      const repairCall = fetchMock.mock.calls.find((call) => {
+        const [url, init] = call as [any, RequestInit];
+        return (
+          typeof url === 'string' &&
+          url.includes('/api/assets/asset-1/repairs') &&
+          init?.method === 'POST'
+        );
+      });
+      expect(repairCall).toBeDefined();
+      const [, init] = repairCall as [any, RequestInit];
+      expect(init?.body).toBeTruthy();
+      const parsed = JSON.parse(init!.body as string);
+      expect(parsed.documentUrl).toBe(dataUrl);
+    });
   });
 
   it('allows editing an asset and saving changes', async () => {
