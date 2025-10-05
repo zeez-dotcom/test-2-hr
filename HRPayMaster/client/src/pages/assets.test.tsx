@@ -295,6 +295,104 @@ describe('Assets page', () => {
     expect(screen.queryByText('No assets are currently marked for maintenance.')).not.toBeInTheDocument();
   });
 
+  it('allows editing an asset and saving changes', async () => {
+    const assets = [
+      {
+        id: 'asset-1',
+        name: 'Laptop',
+        type: 'Hardware',
+        status: 'available',
+        details: 'Spare unit',
+        currentAssignment: null,
+      },
+    ];
+
+    queryClient.setQueryData(['/api/assets'], assets);
+    queryClient.setQueryData(['/api/asset-assignments'], []);
+    queryClient.setQueryData(['/api/employees'], []);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Assets />
+      </QueryClientProvider>
+    );
+
+    const editButton = screen.getByRole('button', { name: 'Edit' });
+    fireEvent.click(editButton);
+
+    const nameField = await screen.findByDisplayValue('Laptop');
+    fireEvent.change(nameField, { target: { value: 'Updated Laptop' } });
+
+    const detailsField = screen.getByDisplayValue('Spare unit');
+    fireEvent.change(detailsField, { target: { value: 'Ready for deployment' } });
+
+    const saveButton = screen.getByRole('button', { name: 'Save Changes' });
+    const form = saveButton.closest('form') as HTMLElement | null;
+    expect(form).not.toBeNull();
+
+    const maintenanceOption = within(form!)
+      .getAllByText('Maintenance')
+      .find(
+        element =>
+          element instanceof HTMLElement &&
+          element.tagName === 'DIV' &&
+          element.getAttribute('data-value') === 'maintenance'
+      ) as HTMLElement | undefined;
+    expect(maintenanceOption).toBeDefined();
+    fireEvent.click(maintenanceOption!);
+    fireEvent.click(saveButton);
+
+    await waitFor(() => expect(toast).toHaveBeenCalledWith({ title: 'Asset updated' }));
+
+    const updateMutation = mutationMocks.find(mock => mock.variables?.id === 'asset-1');
+    expect(updateMutation).toBeDefined();
+    expect(updateMutation?.variables.data).toMatchObject({
+      name: 'Updated Laptop',
+      type: 'Hardware',
+      details: 'Ready for deployment',
+    });
+    expect(updateMutation?.variables.data.status).toBeDefined();
+
+    await waitFor(() => expect(screen.queryByDisplayValue('Updated Laptop')).not.toBeInTheDocument());
+  });
+
+  it('confirms before deleting an asset', async () => {
+    const assets = [
+      {
+        id: 'asset-1',
+        name: 'Printer',
+        type: 'Equipment',
+        status: 'available',
+        details: 'Color printer',
+        currentAssignment: null,
+      },
+    ];
+
+    queryClient.setQueryData(['/api/assets'], assets);
+    queryClient.setQueryData(['/api/asset-assignments'], []);
+    queryClient.setQueryData(['/api/employees'], []);
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Assets />
+      </QueryClientProvider>
+    );
+
+    const deleteButton = screen.getByRole('button', { name: 'Delete' });
+    fireEvent.click(deleteButton);
+
+    expect(confirmSpy).toHaveBeenCalled();
+
+    await waitFor(() => expect(toast).toHaveBeenCalledWith({ title: 'Asset deleted' }));
+
+    const deleteMutation = mutationMocks.find(mock => mock.variables === 'asset-1');
+    expect(deleteMutation).toBeDefined();
+
+    confirmSpy.mockRestore();
+  });
+
   describe('hasVacationConflict', () => {
     it('detects overlapping pending or approved vacations', () => {
       const today = new Date('2024-01-08');
