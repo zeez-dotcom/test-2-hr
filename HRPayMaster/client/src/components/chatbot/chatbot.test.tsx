@@ -53,27 +53,44 @@ vi.mock('@/components/ui/select', () => ({
 
 const apiGet = vi.spyOn(http, 'apiGet');
 
+const employeesFixture = [
+  { id: '1', firstName: 'Alice', lastName: 'Smith' },
+];
+
+const createSuccessResponse = <T>(data: T) => ({
+  ok: true as const,
+  status: 200,
+  data,
+  headers: new Headers(),
+});
+
+const collectionEndpoints = new Set([
+  '/api/assets',
+  '/api/asset-assignments',
+  '/api/vacations',
+  '/api/cars',
+  '/api/car-assignments',
+]);
+
 describe('Chatbot monthly summary', () => {
   beforeEach(() => {
     queryClient.clear();
     vi.clearAllMocks();
-    queryClient.setQueryData(['/api/employees'], [
-      { id: '1', firstName: 'Alice', lastName: 'Smith' },
-    ]);
+    queryClient.setQueryData(['/api/employees'], employeesFixture);
+    apiGet.mockImplementation(async (url: string) => {
+      if (url === '/api/employees') {
+        return createSuccessResponse(employeesFixture);
+      }
+
+      if (collectionEndpoints.has(url)) {
+        return createSuccessResponse<any[]>([]);
+      }
+
+      throw new Error(`Unhandled apiGet request for ${url}`);
+    });
   });
 
   it('renders monthly summary when selected', async () => {
-    apiGet.mockResolvedValue({
-      ok: true,
-      status: 200,
-      data: {
-        payroll: { gross: 1000, net: 900 },
-        loanBalance: 100,
-        events: [],
-      },
-      headers: new Headers(),
-    });
-
     render(
       <QueryClientProvider client={queryClient}>
         <Chatbot />
@@ -82,6 +99,15 @@ describe('Chatbot monthly summary', () => {
 
     fireEvent.click(screen.getByText('Alice Smith'));
     fireEvent.click(screen.getByText('Monthly summary'));
+
+    apiGet.mockResolvedValueOnce(
+      createSuccessResponse({
+        payroll: { gross: 1000, net: 900 },
+        loanBalance: 100,
+        events: [],
+      }),
+    );
+
     fireEvent.click(screen.getByText('Send'));
 
     expect(
@@ -92,17 +118,6 @@ describe('Chatbot monthly summary', () => {
   });
 
   it('handles no data response', async () => {
-    apiGet.mockResolvedValue({
-      ok: true,
-      status: 200,
-      data: {
-        payroll: { gross: 0, net: 0 },
-        loanBalance: 0,
-        events: [],
-      },
-      headers: new Headers(),
-    });
-
     render(
       <QueryClientProvider client={queryClient}>
         <Chatbot />
@@ -111,6 +126,15 @@ describe('Chatbot monthly summary', () => {
 
     fireEvent.click(screen.getByText('Alice Smith'));
     fireEvent.click(screen.getByText('Monthly summary'));
+
+    apiGet.mockResolvedValueOnce(
+      createSuccessResponse({
+        payroll: { gross: 0, net: 0 },
+        loanBalance: 0,
+        events: [],
+      }),
+    );
+
     fireEvent.click(screen.getByText('Send'));
 
     expect(
@@ -121,12 +145,6 @@ describe('Chatbot monthly summary', () => {
   });
 
   it('shows localized error when unauthorized', async () => {
-    apiGet.mockResolvedValue({
-      ok: false,
-      status: 403,
-      error: { error: { code: 'monthlySummaryForbidden' } },
-    } as any);
-
     render(
       <QueryClientProvider client={queryClient}>
         <Chatbot />
@@ -135,6 +153,14 @@ describe('Chatbot monthly summary', () => {
 
     fireEvent.click(screen.getByText('Alice Smith'));
     fireEvent.click(screen.getByText('Monthly summary'));
+
+    apiGet.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      error: { error: { code: 'monthlySummaryForbidden' } },
+      headers: new Headers(),
+    } as any);
+
     fireEvent.click(screen.getByText('Send'));
 
     expect(
