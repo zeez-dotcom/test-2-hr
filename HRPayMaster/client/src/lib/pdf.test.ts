@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import pdfMake from 'pdfmake/build/pdfmake';
-import { pdfBuffer, sanitizeString, buildEmployeeReport, buildEmployeeHistoryReport, buildBilingualActionReceipt } from './pdf';
+import {
+  pdfBuffer,
+  sanitizeString,
+  buildEmployeeReport,
+  buildEmployeeHistoryReport,
+  buildBilingualActionReceipt,
+  buildEmployeeFileReport,
+} from './pdf';
 
 const hasImage = (node: any): boolean => {
   if (!node) return false;
@@ -80,6 +87,32 @@ describe('pdf utility', () => {
       events: [],
     });
     expect(hasImage(def.content)).toBe(true);
+  });
+
+  it('renders uploaded documents in the employee file report', () => {
+    const def = buildEmployeeFileReport({
+      employee: {
+        firstName: 'Dana',
+        lastName: 'Jones',
+        id: 'emp-1',
+        position: 'Engineer',
+        profileImage: 'data:image/png;base64,AAAA',
+      },
+      events: [],
+      loans: [],
+      documents: [
+        { title: 'Visa Document', url: 'data:image/png;base64,BBBB' },
+        { title: 'Passport Document', url: 'data:application/pdf;base64,CCCC' },
+      ],
+    });
+
+    const serialized = JSON.stringify(def.content);
+    expect(serialized).toContain('data:image/png;base64,BBBB');
+
+    const texts = collectTexts(def.content);
+    expect(texts).toContain('Passport Document');
+    expect(texts).toContain('Open PDF attachment');
+    expect(texts).toContain('Preview unavailable for PDF attachments.');
   });
 
   it('adds employee code row and profile image to action receipt', () => {

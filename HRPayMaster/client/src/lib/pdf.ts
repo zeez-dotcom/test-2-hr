@@ -535,6 +535,8 @@ export function buildEmployeeFileReport(params: {
     color?: string;
     alignment?: 'left' | 'right' | 'center';
     lineHeight?: number;
+    decoration?: 'underline' | 'lineThrough';
+    link?: string;
   };
 
   const createText = (value: string, lang: 'en' | 'ar', style?: TextStyle): Content => {
@@ -728,6 +730,60 @@ export function buildEmployeeFileReport(params: {
     ]),
   ];
 
+  const attachments: Content[] = [];
+  const pdfLinkLabel: DualLabel = { en: 'Open PDF attachment', ar: 'افتح مرفق PDF' };
+  const pdfNoteLabel: DualLabel = { en: 'Preview unavailable for PDF attachments.', ar: 'المعاينة غير متاحة لمرفقات PDF.' };
+  const linkLabel: DualLabel = { en: 'Open attachment', ar: 'افتح المرفق' };
+
+  documents.forEach((doc, index) => {
+    if (!doc.url) return;
+    const sanitizedUrl = sanitizeImageSrc(doc.url);
+    if (!sanitizedUrl) return;
+
+    const fallbackTitle = `${selectLabel(l => l.tables.documents.title).en} ${index + 1}`;
+    const title = sanitizeString(doc.title || fallbackTitle) || fallbackTitle;
+    const headingTexts = createBilingualTexts(
+      { en: title, ar: title },
+      { fontSize: 10, bold: true, color: titleColor },
+      { fontSize: 10, color: '#475569' }
+    );
+    const stackItems: Content[] = [
+      { stack: headingTexts, margin: [0, attachments.length === 0 ? 12 : 16, 0, 6] },
+    ];
+
+    const isImage = /^data:image\//i.test(sanitizedUrl);
+    const isPdf = /^data:application\/pdf/i.test(sanitizedUrl) || sanitizedUrl.toLowerCase().endsWith('.pdf');
+
+    if (isImage) {
+      stackItems.push({ image: sanitizedUrl, fit: [440, 520], margin: [0, 0, 0, 12] });
+    } else if (isPdf) {
+      stackItems.push(
+        createStack(pdfLinkLabel, {
+          primaryStyle: { fontSize: 10, color: '#1D4ED8', decoration: 'underline', link: sanitizedUrl },
+          secondaryStyle: { fontSize: 10, color: '#1D4ED8', decoration: 'underline', link: sanitizedUrl },
+          margin: [0, 0, 0, 4],
+        })
+      );
+      stackItems.push(
+        createStack(pdfNoteLabel, {
+          primaryStyle: { fontSize: 9, color: '#64748B' },
+          secondaryStyle: { fontSize: 9, color: '#64748B' },
+          margin: [0, 0, 0, 12],
+        })
+      );
+    } else {
+      stackItems.push(
+        createStack(linkLabel, {
+          primaryStyle: { fontSize: 10, color: '#1D4ED8', decoration: 'underline', link: sanitizedUrl },
+          secondaryStyle: { fontSize: 10, color: '#1D4ED8', decoration: 'underline', link: sanitizedUrl },
+          margin: [0, 0, 0, 12],
+        })
+      );
+    }
+
+    attachments.push({ stack: stackItems });
+  });
+
   const assetsBody: any[] = [
     [
       headerCell(selectLabel(l => l.tables.assets.asset)),
@@ -792,15 +848,30 @@ export function buildEmployeeFileReport(params: {
     }
   }
 
+  const noDocumentsLabel: DualLabel = { en: 'No documents available.', ar: 'لا توجد وثائق متاحة.' };
+
   content.push(sectionHeader(l => l.sections.documents, { margin: [0, 16, 0, 6] }));
-  content.push({
-    table: {
-      headerRows: 1,
-      widths: ['*', 'auto'],
-      body: documentsBody,
-    },
-    layout: tableLayout,
-  });
+  if (documents.length > 0) {
+    content.push({
+      table: {
+        headerRows: 1,
+        widths: ['*', 'auto'],
+        body: documentsBody,
+      },
+      layout: tableLayout,
+    });
+  } else {
+    content.push(
+      createStack(noDocumentsLabel, {
+        primaryStyle: { fontSize: 9, color: '#64748B' },
+        secondaryStyle: { fontSize: 9, color: '#64748B' },
+      })
+    );
+  }
+
+  if (attachments.length > 0) {
+    content.push(...attachments);
+  }
 
   return {
     info: { title: `${fullName || employeeId} ${labels.en.title}`.trim() },

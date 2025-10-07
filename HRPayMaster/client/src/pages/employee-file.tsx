@@ -67,13 +67,36 @@ export default function EmployeeFile() {
           const bDate = parseDateInput(b.eventDate)?.getTime() ?? 0;
           return aDate - bDate;
         });
-        const docs = evs
+        const eventDocuments = evs
           .filter((e) => e.documentUrl)
           .map((e) => ({
             title: String(e.title ?? ''),
             createdAt: String(e.eventDate ?? ''),
             url: String(e.documentUrl ?? ''),
           }));
+
+        const employeeDocumentFields = [
+          { title: 'Visa Document', url: employee?.visaImage },
+          { title: 'Civil ID Document', url: employee?.civilIdImage },
+          { title: 'Passport Document', url: employee?.passportImage },
+          { title: 'Driving License Document', url: employee?.drivingLicenseImage },
+          { title: 'Additional Documents', url: employee?.additionalDocs },
+          { title: 'Other Documents', url: employee?.otherDocs },
+        ];
+
+        const directDocuments = employeeDocumentFields
+          .map((doc) => ({
+            title: doc.title,
+            url: typeof doc.url === 'string' ? doc.url.trim() : '',
+          }))
+          .filter((doc) => doc.url.length > 0)
+          .map((doc) => ({
+            title: doc.title,
+            createdAt: undefined,
+            url: doc.url,
+          }));
+
+        const docs = [...eventDocuments, ...directDocuments];
         const lns = (loans || [])
           .filter((l: any) => l.employeeId === id)
           .map((l: any) => ({
