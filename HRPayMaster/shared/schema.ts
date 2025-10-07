@@ -383,6 +383,8 @@ export const employeeEvents = pgTable(
     status: text("status").notNull().default("active"), // active, cancelled, processed
     addedBy: varchar("added_by").references(() => employees.id),
     createdAt: timestamp("created_at").defaultNow(),
+    recurrenceType: text("recurrence_type").notNull().default("none"),
+    recurrenceEndDate: date("recurrence_end_date"),
   },
   (t) => ({
     employeeEventsEmployeeIdx: index("employee_events_employee_id_idx").on(t.employeeId),
@@ -738,6 +740,10 @@ export const insertEmployeeEventSchema = baseInsertEmployeeEventSchema.extend({
     "asset_removal",
   ]),
   amount: baseInsertEmployeeEventSchema.shape.amount.optional().default("0"),
+  recurrenceType: z.enum(["none", "monthly"]).optional().default("none"),
+  recurrenceEndDate: baseInsertEmployeeEventSchema.shape.recurrenceEndDate
+    .nullable()
+    .optional(),
 });
 
 export const insertSickLeaveTrackingSchema = createInsertSchema(sickLeaveTracking).omit({

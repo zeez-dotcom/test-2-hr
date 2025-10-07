@@ -555,6 +555,7 @@ export function Chatbot() {
               eventDate: pending.data.date!,
               affectsPayroll: true,
               status: "active",
+              recurrenceType: "none",
             };
             try {
               const res = await apiPost("/api/employee-events", eventData);

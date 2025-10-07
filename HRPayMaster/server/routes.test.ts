@@ -806,14 +806,22 @@ describe('employee routes', () => {
       addedBy: 'hr-user-1',
     };
 
-    const stored = { id: 'evt-1', createdAt: '2024-10-01T00:00:00.000Z', ...payload };
+    const stored = {
+      id: 'evt-1',
+      createdAt: '2024-10-01T00:00:00.000Z',
+      recurrenceType: 'none',
+      ...payload,
+    };
     (storage.createEmployeeEvent as any).mockResolvedValue(stored);
 
     const res = await request(app).post('/api/employee-events').send(payload);
 
     expect(res.status).toBe(201);
     expect(res.body).toEqual(stored);
-    expect(storage.createEmployeeEvent).toHaveBeenCalledWith(payload);
+    expect(storage.createEmployeeEvent).toHaveBeenCalledWith({
+      ...payload,
+      recurrenceType: 'none',
+    });
   });
 
   it('POST /api/employees/import returns headers when no mapping provided', async () => {
