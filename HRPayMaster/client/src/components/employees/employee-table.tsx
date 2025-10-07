@@ -210,25 +210,35 @@ export default function EmployeeTable({
     }
   };
 
-  const renderDocument = (value: string, alt: string) => {
+  const renderDocument = (
+    value: string | null | undefined,
+    label: string,
+    key?: string,
+  ) => {
+    if (!value) return null;
     const isPDF = value.startsWith("data:application/pdf");
-    return isPDF ? (
-      <object
-        data={value}
-        type="application/pdf"
-        className="mt-4 max-w-xs w-full h-64"
-      >
-        <a
-          href={value}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-blue-600 underline"
-        >
-          View PDF
-        </a>
-      </object>
-    ) : (
-      <img src={value} alt={alt} className="mt-4 max-w-xs" />
+    return (
+      <div key={key} className="mt-6">
+        <h3 className="text-sm font-semibold text-muted-foreground">{label}</h3>
+        {isPDF ? (
+          <object
+            data={value}
+            type="application/pdf"
+            className="mt-2 max-w-xs w-full h-64"
+          >
+            <a
+              href={value}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 underline"
+            >
+              View PDF
+            </a>
+          </object>
+        ) : (
+          <img src={value} alt={label} className="mt-2 max-w-xs w-full" />
+        )}
+      </div>
     );
   };
 
@@ -592,12 +602,22 @@ export default function EmployeeTable({
               <span>{viewEmployee.professionCategory || "-"}</span>
             </div>
           )}
-          {viewEmployee?.drivingLicenseImage &&
-            renderDocument(viewEmployee.drivingLicenseImage, "Driving License")}
-          {viewEmployee?.additionalDocs &&
-            renderDocument(viewEmployee.additionalDocs, "Additional Documents")}
-          {viewEmployee?.otherDocs &&
-            renderDocument(viewEmployee.otherDocs, "Other Documents")}
+          {viewEmployee &&
+            [
+              { key: "profileImage", label: "Profile Image" },
+              { key: "drivingLicenseImage", label: "Driving License" },
+              { key: "visaImage", label: "Visa Document" },
+              { key: "civilIdImage", label: "Civil ID" },
+              { key: "passportImage", label: "Passport" },
+              { key: "additionalDocs", label: "Additional Documents" },
+              { key: "otherDocs", label: "Other Documents" },
+            ].map(({ key, label }) =>
+              renderDocument(
+                viewEmployee[key as keyof EmployeeWithDepartment] as string | null | undefined,
+                label,
+                key,
+              ),
+            )}
         </DialogContent>
       </Dialog>
 
