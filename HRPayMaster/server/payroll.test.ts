@@ -256,6 +256,84 @@ describe('payroll generate', () => {
     ]);
   });
 
+  it('includes recurring allowances that began before the payroll period', async () => {
+    vi.mocked(db.query.payrollRuns.findFirst).mockResolvedValue(null);
+    vi.mocked(storage.getEmployees).mockResolvedValue([
+      { id: 'emp-1', salary: '1000', status: 'active' },
+    ] as any);
+    vi.mocked(storage.getLoans).mockResolvedValue([] as any);
+    vi.mocked(storage.getVacationRequests).mockResolvedValue([] as any);
+    vi.mocked(storage.getEmployeeEvents).mockResolvedValue([
+      {
+        id: 'evt-allowance',
+        employeeId: 'emp-1',
+        eventDate: '2023-12-15',
+        eventType: 'allowance',
+        affectsPayroll: true,
+        status: 'active',
+        amount: '150',
+        recurrenceType: 'monthly',
+        recurrenceEndDate: null,
+      },
+    ] as any);
+
+    const insertedEntries: any[] = [];
+    const insert = vi.fn().mockImplementation(table => {
+      if (table === payrollRuns) {
+        return {
+          values: (vals: any) => ({
+            returning: vi.fn().mockResolvedValue([{ id: 'run-allowance', ...vals }]),
+          }),
+        };
+      }
+      if (table === payrollEntriesTable) {
+        return {
+          values: vi.fn().mockImplementation(async (vals: any) => {
+            insertedEntries.push(vals);
+          }),
+        };
+      }
+      if (table === loanPaymentsTable) {
+        return {
+          values: vi.fn().mockResolvedValue(undefined),
+        };
+      }
+      throw new Error('Unexpected insert table');
+    });
+
+    const update = vi.fn().mockImplementation(table => {
+      if (table !== loansTable) {
+        throw new Error('Unexpected update table');
+      }
+      return {
+        set: () => ({ where: vi.fn().mockResolvedValue(undefined) }),
+      };
+    });
+
+    const tx = { insert, update, rollback: vi.fn() } as any;
+    vi.mocked(db.transaction).mockImplementation(async cb => cb(tx));
+
+    const res = await request(app)
+      .post('/api/payroll/generate')
+      .send({ period: 'Jan 2024', startDate: '2024-01-01', endDate: '2024-01-31' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.grossAmount).toBe('1150');
+    expect(res.body.netAmount).toBe('1150');
+    expect(insertedEntries).toHaveLength(1);
+    expect(insertedEntries[0]).toMatchObject({
+      employeeId: 'emp-1',
+      bonusAmount: '150',
+      grossPay: '1150',
+      netPay: '1150',
+    });
+    expect(storage.getEmployeeEvents).toHaveBeenCalledWith(
+      new Date('2024-01-01'),
+      new Date('2024-01-31'),
+    );
+    expect(storage.createNotification).not.toHaveBeenCalled();
+  });
+
   it('rolls back transaction on failure', async () => {
     vi.mocked(db.query.payrollRuns.findFirst).mockResolvedValue(null);
     vi.mocked(storage.getEmployees).mockResolvedValue([
