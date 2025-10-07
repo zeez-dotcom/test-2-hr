@@ -216,18 +216,21 @@ export default function EmployeeTable({
     key?: string,
   ) => {
     if (!value) return null;
-    const isPDF = value.startsWith("data:application/pdf");
+    const trimmedValue = value.trim();
+    const isPDF =
+      /^data:application\/pdf/i.test(trimmedValue) ||
+      trimmedValue.toLowerCase().endsWith(".pdf");
     return (
       <div key={key} className="mt-6">
         <h3 className="text-sm font-semibold text-muted-foreground">{label}</h3>
         {isPDF ? (
           <object
-            data={value}
+            data={trimmedValue}
             type="application/pdf"
             className="mt-2 max-w-xs w-full h-64"
           >
             <a
-              href={value}
+              href={trimmedValue}
               target="_blank"
               rel="noopener noreferrer"
               className="text-blue-600 underline"
