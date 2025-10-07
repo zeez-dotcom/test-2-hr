@@ -772,6 +772,7 @@ export type PayrollRun = typeof payrollRuns.$inferSelect;
 export type InsertPayrollRun = z.infer<typeof insertPayrollRunSchema>;
 
 type BasePayrollEntry = typeof payrollEntries.$inferSelect;
+export type AllowanceBreakdown = Record<string, number>;
 export type PayrollEntryEmployee = Partial<Employee> & {
   id: Employee["id"];
   firstName: Employee["firstName"];
@@ -780,6 +781,7 @@ export type PayrollEntryEmployee = Partial<Employee> & {
 };
 export type PayrollEntry = BasePayrollEntry & {
   employee?: PayrollEntryEmployee;
+  allowances?: AllowanceBreakdown;
 };
 export type InsertPayrollEntry = z.infer<typeof insertPayrollEntrySchema>;
 
@@ -891,6 +893,7 @@ export type EmployeeWithDepartment = Employee & {
 
 export type PayrollRunWithEntries = PayrollRun & {
   entries?: PayrollEntry[];
+  allowanceKeys?: string[];
 };
 
 export type VacationRequestWithEmployee = VacationRequest & {

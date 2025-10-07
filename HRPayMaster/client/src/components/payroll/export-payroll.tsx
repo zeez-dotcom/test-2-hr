@@ -104,9 +104,9 @@ export function ExportPayroll({ payrollRun, isOpen, onClose }: ExportPayrollProp
     
     // Create CSV content
     const headers = [
-      "Employee ID", "Employee Name", "Position", "Work Location", 
-      "Base Salary", "Bonus", "Gross Pay", "Working Days", "Actual Working Days", "Working Days Adjustment", "Vacation Days",
-      "Tax Deduction", "Social Security", "Health Insurance", "Loan Deduction", "Other Deductions", 
+      "Employee ID", "Employee Name", "Position", "Work Location",
+      "Base Salary", "Housing Allowance", "Food Allowance", "Bonus", "Gross Pay", "Working Days", "Actual Working Days", "Working Days Adjustment", "Vacation Days",
+      "Tax Deduction", "Social Security", "Health Insurance", "Loan Deduction", "Other Deductions",
       "Total Deductions", "Net Pay", "Adjustment Reason"
     ];
 
@@ -121,6 +121,18 @@ export function ExportPayroll({ payrollRun, isOpen, onClose }: ExportPayrollProp
       );
       const netPay = grossPay - totalDeductions;
       const workingDaysAdjustment = calculateWorkingDaysAdjustment(entry);
+      const allowances = entry.allowances ?? {};
+      const getAllowanceValue = (keys: string[]) => {
+        for (const key of keys) {
+          const value = allowances[key as keyof typeof allowances];
+          if (typeof value === "number") {
+            return value;
+          }
+        }
+        return 0;
+      };
+      const housingAllowance = getAllowanceValue(["housing", "housing_allowance"]);
+      const foodAllowance = getAllowanceValue(["food", "food_allowance"]);
 
       return [
         entry.employeeId,
@@ -128,6 +140,8 @@ export function ExportPayroll({ payrollRun, isOpen, onClose }: ExportPayrollProp
         entry.employee?.position || 'N/A',
         entry.employee?.workLocation || 'Office',
         entry.baseSalary,
+        housingAllowance,
+        foodAllowance,
         entry.bonusAmount || 0,
         grossPay,
         entry.workingDays,
