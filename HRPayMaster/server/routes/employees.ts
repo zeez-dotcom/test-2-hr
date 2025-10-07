@@ -906,6 +906,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
+          recurrenceType: "none",
           ...(addedBy ? { addedBy } : {}),
         });
       } catch (e) {
@@ -996,6 +997,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
+          recurrenceType: "none",
           ...(addedBy ? { addedBy } : {}),
         };
         await storage.createEmployeeEvent(event);
@@ -1184,6 +1186,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
             amount: '0',
             eventDate: new Date().toISOString().split('T')[0],
             affectsPayroll: true,
+            recurrenceType: 'none',
           };
           await storage.createEmployeeEvent(event);
         }
@@ -1396,6 +1399,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
+          recurrenceType: "none",
           ...(addedBy ? { addedBy } : {}),
         };
         await storage.createEmployeeEvent(event);
@@ -1435,6 +1439,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
+          recurrenceType: "none",
           ...(addedBy ? { addedBy } : {}),
         };
         await storage.createEmployeeEvent(event);
@@ -1468,6 +1473,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
+          recurrenceType: "none",
           ...(addedBy ? { addedBy } : {}),
         };
         await storage.createEmployeeEvent(event);
@@ -1767,6 +1773,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
+          recurrenceType: "none",
           ...(addedBy ? { addedBy } : {}),
         };
         await storage.createEmployeeEvent(event);
@@ -1806,6 +1813,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
+          recurrenceType: "none",
           ...(addedBy ? { addedBy } : {}),
         };
         await storage.createEmployeeEvent(event);
@@ -1839,6 +1847,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
           amount: "0",
           eventDate: new Date().toISOString().split("T")[0],
           affectsPayroll: false,
+          recurrenceType: "none",
           ...(addedBy ? { addedBy } : {}),
         };
         await storage.createEmployeeEvent(event);
@@ -1941,6 +1950,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
           amount: '0',
           eventDate: new Date().toISOString().split('T')[0],
           affectsPayroll: false,
+          recurrenceType: 'none',
         });
       } catch {}
       res.json({ message: 'Approved' });
@@ -1965,6 +1975,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
           amount: '0',
           eventDate: new Date().toISOString().split('T')[0],
           affectsPayroll: false,
+          recurrenceType: 'none',
         });
       } catch {}
       res.json({ message: 'Rejected' });
@@ -1989,6 +2000,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
         eventDate: created.toISOString().split('T')[0],
         affectsPayroll: false,
         documentUrl: pdfDataUrl,
+        recurrenceType: 'none',
       };
       const newEvent = await storage.createEmployeeEvent(event);
       // If non-admin, create approval notification for admins (generic implementation)
@@ -2471,7 +2483,53 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
   // Employee events routes
   employeesRouter.get("/api/employee-events", async (req, res, next) => {
     try {
-      const events = await storage.getEmployeeEvents();
+      const { employeeId: employeeIdParam } = req.query;
+      const startDateParam = typeof req.query.startDate === "string" ? req.query.startDate : undefined;
+      const endDateParam = typeof req.query.endDate === "string" ? req.query.endDate : undefined;
+      const eventTypeParam = typeof req.query.eventType === "string" ? req.query.eventType : undefined;
+
+      const parseDate = (value?: string) => {
+        if (!value) return undefined;
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) {
+          return undefined;
+        }
+        return parsed;
+      };
+
+      const startDate = parseDate(startDateParam);
+      if (startDateParam && !startDate) {
+        return next(new HttpError(400, "Invalid startDate"));
+      }
+
+      const endDate = parseDate(endDateParam);
+      if (endDateParam && !endDate) {
+        return next(new HttpError(400, "Invalid endDate"));
+      }
+
+      const trimmedEmployeeId =
+        typeof employeeIdParam === "string" && employeeIdParam.trim() !== ""
+          ? employeeIdParam.trim()
+          : undefined;
+
+      let eventType: InsertEmployeeEvent["eventType"] | undefined;
+      if (eventTypeParam) {
+        const parsedType = insertEmployeeEventSchema.shape.eventType.safeParse(eventTypeParam);
+        if (!parsedType.success) {
+          return next(new HttpError(400, "Invalid eventType"));
+        }
+        eventType = parsedType.data;
+      }
+
+      if (!eventType && trimmedEmployeeId) {
+        eventType = "allowance";
+      }
+
+      const events = await storage.getEmployeeEvents(startDate, endDate, {
+        employeeId: trimmedEmployeeId,
+        eventType,
+      });
+
       res.json(events);
     } catch (error) {
       next(new HttpError(500, "Failed to fetch employee events"));
@@ -2516,6 +2574,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
           amount: '0',
           eventDate: created.date as any,
           affectsPayroll: true,
+          recurrenceType: 'none',
         });
       } catch {}
       res.status(201).json(created);
@@ -2555,6 +2614,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
             amount: '0',
             eventDate: new Date().toISOString().split('T')[0],
             affectsPayroll: true,
+            recurrenceType: 'none',
           });
         }
       } catch {}

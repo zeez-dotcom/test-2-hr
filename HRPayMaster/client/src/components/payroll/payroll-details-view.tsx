@@ -297,6 +297,12 @@ export default function PayrollDetailsView({ payrollId, onRegisterPrint }: Payro
                       Vacation Days
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Housing Allowance
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Food Allowance
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Bonuses
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -317,6 +323,18 @@ export default function PayrollDetailsView({ payrollId, onRegisterPrint }: Payro
                           ? "text-green-600"
                           : "text-gray-900";
                     const { englishName, arabicName } = getEmployeeNames(entry);
+                    const allowances = entry.allowances ?? {};
+                    const getAllowanceValue = (keys: string[]) => {
+                      for (const key of keys) {
+                        const value = allowances[key as keyof typeof allowances];
+                        if (typeof value === "number") {
+                          return value;
+                        }
+                      }
+                      return 0;
+                    };
+                    const housingAllowance = getAllowanceValue(["housing", "housing_allowance"]);
+                    const foodAllowance = getAllowanceValue(["food", "food_allowance"]);
 
                     return (
                       <tr key={entry.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
@@ -342,6 +360,12 @@ export default function PayrollDetailsView({ payrollId, onRegisterPrint }: Payro
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {entry.vacationDays || 0}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
+                          +{formatCurrency(housingAllowance)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
+                          +{formatCurrency(foodAllowance)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
                           +{formatCurrency(parseFloat(entry.bonusAmount) || 0)}

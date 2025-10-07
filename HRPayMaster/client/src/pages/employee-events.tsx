@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +23,8 @@ import type { EmployeeEvent, Employee, InsertEmployeeEvent } from "@shared/schem
 import { insertEmployeeEventSchema } from "@shared/schema";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
 import { generateEventReceipt } from "@/lib/event-receipts";
+import { allowanceRecursInRange, getMonthBounds, parseDateInput } from "@/lib/employee-events";
+import AllowanceRecurringFields from "@/components/employees/allowance-recurring-fields";
 
 const financialEventTypes = ["bonus", "commission", "deduction", "allowance", "overtime", "penalty"] as const;
 
@@ -48,16 +50,36 @@ export default function EmployeeEvents() {
   const typeSet = new Set((typesParam || '').split(',').map(s => s.trim()).filter(Boolean));
   const viewEvents = (events || []).filter(ev => {
     const typeOk = typeSet.size ? typeSet.has(ev.eventType) : true;
-    if (!monthParam) return typeOk;
-    const [y, m] = monthParam.split('-').map(Number);
-    const d = new Date(ev.eventDate);
-    const ok = d.getFullYear() === y && (d.getMonth()+1) === m;
-    return typeOk && ok;
+    if (!typeOk) return false;
+    if (!monthParam) return true;
+    const [yearRaw, monthRaw] = monthParam.split('-').map(Number);
+    if (!Number.isFinite(yearRaw) || !Number.isFinite(monthRaw)) {
+      return true;
+    }
+    const { start: monthStart, end: monthEnd } = getMonthBounds(yearRaw, monthRaw);
+    if (allowanceRecursInRange(ev, monthStart, monthEnd)) {
+      return true;
+    }
+    const eventDate = parseDateInput(ev.eventDate);
+    if (!eventDate) return false;
+    return eventDate >= monthStart && eventDate <= monthEnd;
   });
 
   const { data: employees, error: employeesError } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
   });
+
+  const createDefaultValues = useCallback(
+    (): Partial<InsertEmployeeEvent> => ({
+      eventType: "bonus",
+      affectsPayroll: true,
+      status: "active",
+      eventDate: format(new Date(), 'yyyy-MM-dd'),
+      recurrenceType: "none",
+      recurrenceEndDate: null,
+    }),
+    [],
+  );
 
   const form = useForm<InsertEmployeeEvent>({
     resolver: zodResolver(insertEmployeeEventSchema.extend({
@@ -65,21 +87,25 @@ export default function EmployeeEvents() {
         typeof val === 'string' ? val : format(val, 'yyyy-MM-dd')
       ),
     })),
-    defaultValues: {
-      eventType: "bonus",
-      affectsPayroll: true,
-      status: "active",
-      eventDate: format(new Date(), 'yyyy-MM-dd'),
-    },
+    defaultValues: createDefaultValues(),
   });
 
   const selectedEventType = form.watch("eventType");
+  const recurrenceType = form.watch("recurrenceType");
+  const eventDateValue = form.watch("eventDate");
+  const recurrenceStartDate = parseDateInput(eventDateValue);
 
   useEffect(() => {
     if (!financialEventTypes.includes(selectedEventType as any)) {
       form.setValue("amount", "0");
     }
   }, [selectedEventType, form]);
+
+  useEffect(() => {
+    if (recurrenceType !== "monthly") {
+      form.setValue("recurrenceEndDate", null);
+    }
+  }, [recurrenceType, form]);
 
   const createEventMutation = useMutation<EmployeeEvent, Error, InsertEmployeeEvent>({
     mutationFn: async (data: InsertEmployeeEvent) => {
@@ -89,7 +115,7 @@ export default function EmployeeEvents() {
     },
     onSuccess: async (createdEvent) => {
       setIsDialogOpen(false);
-      form.reset();
+      form.reset(createDefaultValues());
 
       let receiptError: unknown = null;
       const employee = employees?.find((e) => e.id === createdEvent.employeeId);
@@ -158,7 +184,7 @@ export default function EmployeeEvents() {
       queryClient.invalidateQueries({ queryKey: ["/api/employee-events"] });
       setIsDialogOpen(false);
       setEventToEdit(null);
-      form.reset();
+      form.reset(createDefaultValues());
       toast({
         title: "Success",
         description: "Employee event updated successfully",
@@ -272,6 +298,10 @@ export default function EmployeeEvents() {
       documentUrl: event.documentUrl ?? '',
       affectsPayroll: event.affectsPayroll,
       status: event.status as any,
+      recurrenceType: (event.recurrenceType ?? "none") as InsertEmployeeEvent["recurrenceType"],
+      recurrenceEndDate: event.recurrenceEndDate
+        ? format(new Date(event.recurrenceEndDate), 'yyyy-MM-dd')
+        : null,
     });
     setIsDialogOpen(true);
   };
@@ -280,7 +310,7 @@ export default function EmployeeEvents() {
     setIsDialogOpen(open);
     if (!open) {
       setEventToEdit(null);
-      form.reset();
+      form.reset(createDefaultValues());
     }
   };
 
@@ -337,7 +367,7 @@ export default function EmployeeEvents() {
         </div>
         <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
           <DialogTrigger asChild>
-            <Button onClick={() => { setEventToEdit(null); form.reset(); }}>
+            <Button onClick={() => { setEventToEdit(null); form.reset(createDefaultValues()); }}>
               <Plus className="mr-2" size={16} />
               Add Event
             </Button>
@@ -502,6 +532,10 @@ export default function EmployeeEvents() {
                   />
                 </div>
 
+                {selectedEventType === "allowance" && (
+                  <AllowanceRecurringFields form={form} recurrenceStartDate={recurrenceStartDate ?? null} />
+                )}
+
                 <FormField
                   control={form.control}
                   name="documentUrl"
@@ -618,6 +652,11 @@ export default function EmployeeEvents() {
                           <Badge className={getEventTypeColor(event.eventType)}>
                             {event.eventType}
                           </Badge>
+                          {event.eventType === 'allowance' && event.recurrenceType === 'monthly' && (
+                            <Badge className="border border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100" variant="outline">
+                              Monthly{event.recurrenceEndDate ? ` • Ends ${formatDate(event.recurrenceEndDate)}` : ' • Ongoing'}
+                            </Badge>
+                          )}
                           {!event.affectsPayroll && (
                             <Badge variant="outline">Non-payroll</Badge>
                           )}

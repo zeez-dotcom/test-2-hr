@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "@/lib/http";
 import { buildEmployeeFileReport, openPdf } from "@/lib/pdf";
 import { getQueryFn } from "@/lib/queryClient";
+import { expandEventsWithRecurringAllowances, parseDateInput } from "@/lib/employee-events";
+import type { EmployeeEvent } from "@shared/schema";
 
 export default function EmployeeFile() {
   const search = useSearch();
@@ -16,7 +18,7 @@ export default function EmployeeFile() {
     enabled: !!id,
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
-  const { data: events } = useQuery<any[]>({
+  const { data: events } = useQuery<EmployeeEvent[]>({
     queryKey: ["/api/employee-events"],
     enabled: !!id,
     queryFn: getQueryFn({ on401: "returnNull" }),
@@ -55,10 +57,19 @@ export default function EmployeeFile() {
         const searchParams = new URLSearchParams(window.location.search);
         const sectionsParam = searchParams.get('sections') || '';
         const sections = new Set((sectionsParam || '').split(',').filter(Boolean));
-        const evs = (events || []).filter((e: any) => e.employeeId === id);
+        const evs = (events || []).filter((e) => e.employeeId === id);
+        const expandedEvents = expandEventsWithRecurringAllowances(evs, {
+          rangeStart: startDate || undefined,
+          rangeEnd: endDate || undefined,
+        });
+        const sortedExpandedEvents = [...expandedEvents].sort((a, b) => {
+          const aDate = parseDateInput(a.eventDate)?.getTime() ?? 0;
+          const bDate = parseDateInput(b.eventDate)?.getTime() ?? 0;
+          return aDate - bDate;
+        });
         const docs = evs
-          .filter((e: any) => e.documentUrl)
-          .map((e: any) => ({
+          .filter((e) => e.documentUrl)
+          .map((e) => ({
             title: String(e.title ?? ''),
             createdAt: String(e.eventDate ?? ''),
             url: String(e.documentUrl ?? ''),
@@ -109,7 +120,7 @@ export default function EmployeeFile() {
             position: employee.position,
             profileImage: employee.profileImage,
           },
-          events: evs.map((e: any) => ({
+          events: sortedExpandedEvents.map((e) => ({
             title: String(e.title ?? ''),
             eventDate: String(e.eventDate ?? ''),
             amount: String(e.amount ?? ''),
@@ -122,7 +133,7 @@ export default function EmployeeFile() {
         // Optional breakdown and narrative
         if (sections.has('breakdown')) {
           const byYear: Record<string, { bonus: number; commission: number; allowance: number; overtime: number; deduction: number; penalty: number }> = {};
-          for (const e of (events || []).filter((ev: any) => ev.employeeId === id && ev.affectsPayroll)) {
+          for (const e of sortedExpandedEvents.filter((ev) => ev.employeeId === id && ev.affectsPayroll)) {
             const y = new Date(e.eventDate).getFullYear().toString();
             byYear[y] ??= { bonus: 0, commission: 0, allowance: 0, overtime: 0, deduction: 0, penalty: 0 };
             const amt = parseFloat(e.amount || '0') || 0;

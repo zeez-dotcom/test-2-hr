@@ -86,6 +86,9 @@ export function buildEventNarrative(event: EmployeeEvent, employeeLine: Bilingua
   const affectsPayrollEn = event.affectsPayroll ? tEn("eventReceipts.yes") : tEn("eventReceipts.no");
   const affectsPayrollAr = event.affectsPayroll ? tAr("eventReceipts.yes") : tAr("eventReceipts.no");
 
+  let recurrenceDetailEn: string | null = null;
+  let recurrenceDetailAr: string | null = null;
+
   const bodyEnParts: string[] = [
     tEn("eventReceipts.body.intro", {
       employee: employeeLine.en,
@@ -125,6 +128,24 @@ export function buildEventNarrative(event: EmployeeEvent, employeeLine: Bilingua
     );
   }
 
+  if (event.eventType === "allowance" && event.recurrenceType === "monthly") {
+    const recurrenceEnd = event.recurrenceEndDate ? formatDate(event.recurrenceEndDate) : null;
+    recurrenceDetailEn = recurrenceEnd
+      ? tEn("eventReceipts.details.recurrenceUntil", { date: recurrenceEnd })
+      : tEn("eventReceipts.details.recurrence");
+    recurrenceDetailAr = recurrenceEnd
+      ? tAr("eventReceipts.details.recurrenceUntil", { date: recurrenceEnd })
+      : tAr("eventReceipts.details.recurrence");
+    const recurrenceSentenceEn = recurrenceDetailEn.endsWith(".")
+      ? recurrenceDetailEn
+      : `${recurrenceDetailEn}.`;
+    const recurrenceSentenceAr = recurrenceDetailAr.endsWith(".")
+      ? recurrenceDetailAr
+      : `${recurrenceDetailAr}.`;
+    bodyEnParts.push(recurrenceSentenceEn);
+    bodyArParts.push(recurrenceSentenceAr);
+  }
+
   const detailsEn: string[] = [
     tEn("eventReceipts.details.title", { title: baseTitle }),
     tEn("eventReceipts.details.type", { type: typeLabel }),
@@ -146,6 +167,11 @@ export function buildEventNarrative(event: EmployeeEvent, employeeLine: Bilingua
   if (description) {
     detailsEn.push(tEn("eventReceipts.details.description", { description }));
     detailsAr.push(tAr("eventReceipts.details.description", { description }));
+  }
+
+  if (recurrenceDetailEn && recurrenceDetailAr) {
+    detailsEn.push(recurrenceDetailEn);
+    detailsAr.push(recurrenceDetailAr);
   }
 
   return {

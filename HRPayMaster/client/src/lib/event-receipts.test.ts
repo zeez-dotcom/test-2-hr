@@ -19,6 +19,8 @@ describe("buildEventNarrative", () => {
       status: "active",
       addedBy: null,
       createdAt: new Date("2024-05-02"),
+      recurrenceType: "none",
+      recurrenceEndDate: null,
     } satisfies EmployeeEvent;
 
     const narrative = buildEventNarrative(event, {

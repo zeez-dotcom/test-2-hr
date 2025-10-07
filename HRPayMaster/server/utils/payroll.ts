@@ -31,6 +31,9 @@ export interface EmployeeEvent {
   affectsPayroll: boolean;
   status: string;
   amount: string;
+  title?: string;
+  recurrenceType?: "none" | "monthly" | null;
+  recurrenceEndDate?: string | null;
 }
 
 export interface EmployeePayroll {
@@ -38,6 +41,7 @@ export interface EmployeePayroll {
   grossPay: number;
   baseSalary: number;
   bonusAmount: number;
+  allowances: Record<string, number>;
   workingDays: number;
   actualWorkingDays: number;
   vacationDays: number;
@@ -115,18 +119,79 @@ export function calculateEmployeePayroll({
       }, 0)
     : 0;
 
-  const employeeEventsInPeriod = employeeEvents.filter(event =>
+  const toDateOrUndefined = (value: string | null | undefined) => {
+    if (!value) return undefined;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? undefined : date;
+  };
+
+  const isWithinRange = (value: string | null | undefined) => {
+    const date = toDateOrUndefined(value ?? undefined);
+    if (!date) return false;
+    return date >= start && date <= end;
+  };
+
+  const overlapsRange = (event: EmployeeEvent) => {
+    const recurrenceStart = toDateOrUndefined(event.eventDate);
+    if (!recurrenceStart) return false;
+    if (recurrenceStart > end) return false;
+    const recurrenceEnd = toDateOrUndefined(event.recurrenceEndDate ?? undefined);
+    if (!recurrenceEnd) return true;
+    return recurrenceEnd >= start;
+  };
+
+  const employeeEventsForEmployee = employeeEvents.filter(event =>
     event.employeeId === employee.id &&
     event.affectsPayroll &&
     event.status === "active" &&
-    new Date(event.eventDate) >= start &&
-    new Date(event.eventDate) <= end &&
     event.eventType !== "vacation"
   );
 
+  const employeeEventsInPeriod = employeeEventsForEmployee.filter(event =>
+    isWithinRange(event.eventDate)
+  );
+
+  const allowances = new Map<string, number>();
+
+  const addAllowance = (title: string | undefined, amount: number, shouldInclude: boolean) => {
+    if (!shouldInclude) {
+      return;
+    }
+    const normalizedTitle = normalizeAllowanceTitle(title);
+    const current = allowances.get(normalizedTitle) ?? 0;
+    allowances.set(normalizedTitle, current + amount);
+  };
+
+  for (const event of employeeEventsInPeriod) {
+    if (event.eventType !== "allowance") {
+      continue;
+    }
+    const amount = parseFloat(event.amount);
+    if (!Number.isFinite(amount)) continue;
+    addAllowance((event as any).title as string | undefined, amount, true);
+  }
+
+  employeeEventsForEmployee
+    .filter(
+      event =>
+        event.eventType === "allowance" &&
+        event.recurrenceType === "monthly" &&
+        overlapsRange(event),
+    )
+    .forEach(event => {
+      const amount = parseFloat(event.amount);
+      if (!Number.isFinite(amount)) {
+        return;
+      }
+      const withinRange = isWithinRange(event.eventDate);
+      addAllowance((event as any).title as string | undefined, amount, !withinRange);
+    });
+
+  const allowanceTotal = Array.from(allowances.values()).reduce((sum, value) => sum + value, 0);
+
   const bonusAmount = employeeEventsInPeriod
-    .filter(event => ["bonus", "commission", "allowance", "overtime"].includes(event.eventType))
-    .reduce((total, event) => total + parseFloat(event.amount), 0);
+    .filter(event => ["bonus", "commission", "overtime"].includes(event.eventType))
+    .reduce((total, event) => total + parseFloat(event.amount), 0) + allowanceTotal;
 
   const eventDeductions = employeeEventsInPeriod
     .filter(event => ["deduction", "penalty"].includes(event.eventType))
@@ -161,6 +226,7 @@ export function calculateEmployeePayroll({
     grossPay,
     baseSalary,
     bonusAmount,
+    allowances: Object.fromEntries(allowances.entries()),
     workingDays,
     actualWorkingDays,
     vacationDays,
@@ -172,6 +238,21 @@ export function calculateEmployeePayroll({
     netPay,
     adjustmentReason: adjustmentReason.trim() || null,
   };
+}
+
+export function normalizeAllowanceTitle(title: string | undefined): string {
+  if (!title) {
+    return "allowance";
+  }
+  const cleaned = title
+    .toLowerCase()
+    .replace(/allowance/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  if (!cleaned) {
+    return "allowance";
+  }
+  return cleaned.replace(/\s+/g, "_");
 }
 
 /**

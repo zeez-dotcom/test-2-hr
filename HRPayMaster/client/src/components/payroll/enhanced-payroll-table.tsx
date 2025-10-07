@@ -289,6 +289,12 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
                 </div>
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Housing Allowance
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Food Allowance
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <div className="flex items-center space-x-1">
                   <DollarSign className="h-4 w-4 text-red-600" />
                   <span>Deductions</span>
@@ -315,6 +321,18 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
                     : "text-gray-900";
 
               const { englishName, arabicName, code } = getEmployeeDisplayDetails(entry);
+              const allowances = entry.allowances ?? {};
+              const getAllowanceValue = (keys: string[]) => {
+                for (const key of keys) {
+                  const value = allowances[key as keyof typeof allowances];
+                  if (typeof value === "number") {
+                    return value;
+                  }
+                }
+                return 0;
+              };
+              const housingAllowance = getAllowanceValue(["housing", "housing_allowance"]);
+              const foodAllowance = getAllowanceValue(["food", "food_allowance"]);
 
               return (
                 <tr key={entry.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
@@ -355,17 +373,23 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
                     />
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    <EditableCell 
-                      entryId={entry.id} 
-                      field="vacationDays" 
-                      value={entry.vacationDays || 0} 
+                    <EditableCell
+                      entryId={entry.id}
+                      field="vacationDays"
+                      value={entry.vacationDays || 0}
                     />
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
+                    +{formatCurrency(housingAllowance)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
+                    +{formatCurrency(foodAllowance)}
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    <EditableCell 
-                      entryId={entry.id} 
-                      field="otherDeductions" 
-                      value={entry.otherDeductions || 0} 
+                    <EditableCell
+                      entryId={entry.id}
+                      field="otherDeductions"
+                      value={entry.otherDeductions || 0}
                     />
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">

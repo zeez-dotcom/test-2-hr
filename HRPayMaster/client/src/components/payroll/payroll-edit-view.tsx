@@ -292,6 +292,12 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
                       Vacation Days
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Housing Allowance
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Food Allowance
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Bonuses
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -308,6 +314,18 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
                 <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
                   {payrollRun.entries.map((entry) => {
                     const { englishName, arabicName, code } = getEmployeeDisplayDetails(entry);
+                    const allowances = entry.allowances ?? {};
+                    const getAllowanceValue = (keys: string[]) => {
+                      for (const key of keys) {
+                        const value = allowances[key as keyof typeof allowances];
+                        if (typeof value === "number") {
+                          return value;
+                        }
+                      }
+                      return 0;
+                    };
+                    const housingAllowance = getAllowanceValue(["housing", "housing_allowance"]);
+                    const foodAllowance = getAllowanceValue(["food", "food_allowance"]);
 
                     return (
                       <tr key={entry.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
@@ -346,6 +364,12 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
                             value={entry.vacationDays || 0}
                             type="number"
                           />
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-green-600">
+                          +{formatCurrency(housingAllowance)}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-green-600">
+                          +{formatCurrency(foodAllowance)}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-green-600">
                           <div
