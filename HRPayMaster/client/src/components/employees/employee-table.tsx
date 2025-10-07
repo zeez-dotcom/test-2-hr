@@ -218,27 +218,45 @@ export default function EmployeeTable({
     if (!value) return null;
     const isPDF = value.startsWith("data:application/pdf");
     return (
-      <div key={key} className="mt-6">
-        <h3 className="text-sm font-semibold text-muted-foreground">{label}</h3>
-        {isPDF ? (
-          <object
-            data={value}
-            type="application/pdf"
-            className="mt-2 max-w-xs w-full h-64"
-          >
+      <article
+        key={key}
+        className="flex h-full flex-col overflow-hidden rounded-lg border bg-background text-sm shadow-sm transition hover:shadow-md"
+      >
+        <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
+          {isPDF ? (
+            <object data={value} type="application/pdf" className="h-full w-full">
+              <div className="flex h-full w-full flex-col items-center justify-center gap-1 p-4 text-xs text-muted-foreground">
+                <span>PDF preview unavailable.</span>
+                <span>Use the link below to open the document.</span>
+              </div>
+            </object>
+          ) : (
+            <img
+              src={value}
+              alt={label}
+              className="h-full w-full object-cover"
+            />
+          )}
+        </div>
+        <div className="flex flex-1 flex-col gap-2 p-4">
+          <div>
+            <h4 className="font-medium text-foreground">{label}</h4>
+            <p className="text-xs text-muted-foreground">
+              Preview of the uploaded document.
+            </p>
+          </div>
+          <div className="mt-auto pt-2">
             <a
               href={value}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-600 underline"
+              className="text-sm font-medium text-primary hover:underline"
             >
-              View PDF
+              Open document
             </a>
-          </object>
-        ) : (
-          <img src={value} alt={label} className="mt-2 max-w-xs w-full" />
-        )}
-      </div>
+          </div>
+        </div>
+      </article>
     );
   };
 
@@ -572,52 +590,140 @@ export default function EmployeeTable({
             </DialogTitle>
           </DialogHeader>
           {viewEmployee && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-              <span className="font-medium">Nationality</span>
-              <span>{viewEmployee.nationality || "-"}</span>
-              
-              <span className="font-medium">Payment Method</span>
-              <span>{viewEmployee.paymentMethod || "-"}</span>
-              <span className="font-medium">Transferable</span>
-              <span>{viewEmployee.transferable ? "Yes" : "No"}</span>
-              <span className="font-medium">Driving License Number</span>
-              <span>{viewEmployee.drivingLicenseNumber || "-"}</span>
-              <span className="font-medium">Driving License Issue Date</span>
-              <span>{viewEmployee.drivingLicenseIssueDate ? formatDate(viewEmployee.drivingLicenseIssueDate) : "-"}</span>
-              <span className="font-medium">Driving License Expiry Date</span>
-              <span>{viewEmployee.drivingLicenseExpiryDate ? formatDate(viewEmployee.drivingLicenseExpiryDate) : "-"}</span>
-              <span className="font-medium">Bank IBAN</span>
-              <span>{viewEmployee.bankIban || "-"}</span>
-              <span className="font-medium">SWIFT Code</span>
-              <span>{viewEmployee.swiftCode || "-"}</span>
-              <span className="font-medium">Residency On Company</span>
-              <span>{viewEmployee.residencyOnCompany ? "Yes" : "No"}</span>
-              {!viewEmployee.residencyOnCompany && (
-                <>
-                  <span className="font-medium">Residency Name</span>
-                  <span>{viewEmployee.residencyName || "-"}</span>
-                </>
-              )}
-              <span className="font-medium">Profession Category</span>
-              <span>{viewEmployee.professionCategory || "-"}</span>
+            <div className="space-y-8">
+              <div className="rounded-xl bg-muted/40 p-6 shadow-sm">
+                {[
+                  {
+                    title: "Identity",
+                    fields: [
+                      { label: "Nationality", value: viewEmployee.nationality },
+                      {
+                        label: "Profession Category",
+                        value: viewEmployee.professionCategory,
+                      },
+                    ],
+                  },
+                  {
+                    title: "Employment",
+                    fields: [
+                      { label: "Payment Method", value: viewEmployee.paymentMethod },
+                      {
+                        label: "Transferable",
+                        value: viewEmployee.transferable ? "Yes" : "No",
+                      },
+                    ],
+                  },
+                  {
+                    title: "Licensing",
+                    fields: [
+                      {
+                        label: "Driving License Number",
+                        value: viewEmployee.drivingLicenseNumber,
+                      },
+                      {
+                        label: "Issue Date",
+                        value: viewEmployee.drivingLicenseIssueDate
+                          ? formatDate(viewEmployee.drivingLicenseIssueDate)
+                          : null,
+                      },
+                      {
+                        label: "Expiry Date",
+                        value: viewEmployee.drivingLicenseExpiryDate
+                          ? formatDate(viewEmployee.drivingLicenseExpiryDate)
+                          : null,
+                      },
+                    ],
+                  },
+                  {
+                    title: "Banking",
+                    fields: [
+                      { label: "Bank IBAN", value: viewEmployee.bankIban },
+                      { label: "SWIFT Code", value: viewEmployee.swiftCode },
+                    ],
+                  },
+                  {
+                    title: "Residency",
+                    fields: [
+                      {
+                        label: "Residency On Company",
+                        value: viewEmployee.residencyOnCompany ? "Yes" : "No",
+                      },
+                      !viewEmployee.residencyOnCompany
+                        ? {
+                            label: "Residency Name",
+                            value: viewEmployee.residencyName,
+                          }
+                        : null,
+                    ].filter(Boolean) as { label: string; value: string | null | undefined }[],
+                  },
+                ]
+                  .filter((section) =>
+                    section.fields.some((field) => field.value && field.value !== ""),
+                  )
+                  .map((section) => (
+                    <section key={section.title} className="space-y-4">
+                      <div className="flex items-center gap-4">
+                        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          {section.title}
+                        </h3>
+                        <div className="h-px flex-1 bg-border" />
+                      </div>
+                      <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+                        {section.fields.map((field) => (
+                          <div key={field.label} className="space-y-1">
+                            <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                              {field.label}
+                            </dt>
+                            <dd className="text-sm text-foreground">
+                              {field.value && field.value !== "" ? field.value : "-"}
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </section>
+                  ))}
+              </div>
+
+              {(() => {
+                const documents = [
+                  { key: "profileImage", label: "Profile Image" },
+                  { key: "drivingLicenseImage", label: "Driving License" },
+                  { key: "visaImage", label: "Visa Document" },
+                  { key: "civilIdImage", label: "Civil ID" },
+                  { key: "passportImage", label: "Passport" },
+                  { key: "additionalDocs", label: "Additional Documents" },
+                  { key: "otherDocs", label: "Other Documents" },
+                ]
+                  .map(({ key, label }) => ({
+                    key,
+                    label,
+                    value: viewEmployee[key as keyof EmployeeWithDepartment] as
+                      | string
+                      | null
+                      | undefined,
+                  }))
+                  .filter((doc) => !!doc.value);
+
+                if (!documents.length) return null;
+
+                return (
+                  <section className="space-y-4">
+                    <div className="flex items-center gap-4">
+                      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Documents
+                      </h3>
+                      <div className="h-px flex-1 bg-border" />
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {documents.map((doc) =>
+                        renderDocument(doc.value, doc.label, doc.key),
+                      )}
+                    </div>
+                  </section>
+                );
+              })()}
             </div>
           )}
-          {viewEmployee &&
-            [
-              { key: "profileImage", label: "Profile Image" },
-              { key: "drivingLicenseImage", label: "Driving License" },
-              { key: "visaImage", label: "Visa Document" },
-              { key: "civilIdImage", label: "Civil ID" },
-              { key: "passportImage", label: "Passport" },
-              { key: "additionalDocs", label: "Additional Documents" },
-              { key: "otherDocs", label: "Other Documents" },
-            ].map(({ key, label }) =>
-              renderDocument(
-                viewEmployee[key as keyof EmployeeWithDepartment] as string | null | undefined,
-                label,
-                key,
-              ),
-            )}
         </DialogContent>
       </Dialog>
 
