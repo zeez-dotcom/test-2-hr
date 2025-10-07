@@ -2483,7 +2483,53 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
   // Employee events routes
   employeesRouter.get("/api/employee-events", async (req, res, next) => {
     try {
-      const events = await storage.getEmployeeEvents();
+      const { employeeId: employeeIdParam } = req.query;
+      const startDateParam = typeof req.query.startDate === "string" ? req.query.startDate : undefined;
+      const endDateParam = typeof req.query.endDate === "string" ? req.query.endDate : undefined;
+      const eventTypeParam = typeof req.query.eventType === "string" ? req.query.eventType : undefined;
+
+      const parseDate = (value?: string) => {
+        if (!value) return undefined;
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) {
+          return undefined;
+        }
+        return parsed;
+      };
+
+      const startDate = parseDate(startDateParam);
+      if (startDateParam && !startDate) {
+        return next(new HttpError(400, "Invalid startDate"));
+      }
+
+      const endDate = parseDate(endDateParam);
+      if (endDateParam && !endDate) {
+        return next(new HttpError(400, "Invalid endDate"));
+      }
+
+      const trimmedEmployeeId =
+        typeof employeeIdParam === "string" && employeeIdParam.trim() !== ""
+          ? employeeIdParam.trim()
+          : undefined;
+
+      let eventType: InsertEmployeeEvent["eventType"] | undefined;
+      if (eventTypeParam) {
+        const parsedType = insertEmployeeEventSchema.shape.eventType.safeParse(eventTypeParam);
+        if (!parsedType.success) {
+          return next(new HttpError(400, "Invalid eventType"));
+        }
+        eventType = parsedType.data;
+      }
+
+      if (!eventType && trimmedEmployeeId) {
+        eventType = "allowance";
+      }
+
+      const events = await storage.getEmployeeEvents(startDate, endDate, {
+        employeeId: trimmedEmployeeId,
+        eventType,
+      });
+
       res.json(events);
     } catch (error) {
       next(new HttpError(500, "Failed to fetch employee events"));

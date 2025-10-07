@@ -1,22 +1,26 @@
 import { useForm, type SubmitHandler } from "react-hook-form";
-import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertEmployeeSchema } from "@shared/schema";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import ImageUpload from "@/components/ui/image-upload";
 import { CommandDialog, CommandInput, CommandList, CommandItem, CommandEmpty } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { queryClient } from "@/lib/queryClient";
-import { apiPost } from "@/lib/http";
+import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/http";
 import { useToast } from "@/hooks/use-toast";
 import { toastApiError } from "@/lib/toastError";
-import type { Company, Department, InsertEmployee } from "@shared/schema";
+import type { Company, Department, InsertEmployee, InsertEmployeeEvent, EmployeeEvent } from "@shared/schema";
 import { z } from "zod";
+import AllowanceRecurringFields from "@/components/employees/allowance-recurring-fields";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { formatCurrency, formatDate } from "@/lib/utils";
+import { Plus, Edit, Trash2 } from "lucide-react";
+import ConfirmDialog from "@/components/ui/confirm-dialog";
 
 const formSchema = insertEmployeeSchema.extend({
   firstName: z.string().trim().min(1, "First name is required"),
@@ -35,7 +39,20 @@ const formSchema = insertEmployeeSchema.extend({
   employeeCode: z.string().trim().min(1, "Employee code is required"),
 });
 
+const allowanceFormSchema = z.object({
+  title: z.string().trim().min(1, "Title is required"),
+  amount: z
+    .string()
+    .trim()
+    .min(1, "Amount is required")
+    .refine((value) => !Number.isNaN(Number(value)), "Amount must be a valid number")
+    .refine((value) => Number(value) >= 0, "Amount must be zero or positive"),
+  recurrenceType: z.enum(["none", "monthly"]),
+  recurrenceEndDate: z.string().nullable().optional(),
+});
+
 type FormData = z.infer<typeof formSchema>;
+type AllowanceFormValues = z.infer<typeof allowanceFormSchema>;
 
 interface EmployeeFormProps {
   departments: Department[];
@@ -43,6 +60,7 @@ interface EmployeeFormProps {
   onSubmit: (employee: InsertEmployee) => void;
   isSubmitting: boolean;
   initialData?: Partial<InsertEmployee>;
+  employeeId?: string;
 }
 
 export default function EmployeeForm({
@@ -50,7 +68,8 @@ export default function EmployeeForm({
   companies = [],
   onSubmit,
   isSubmitting,
-  initialData
+  initialData,
+  employeeId,
 }: EmployeeFormProps) {
   const { toast } = useToast();
   const [companyOpen, setCompanyOpen] = useState(false);
@@ -148,6 +167,192 @@ export default function EmployeeForm({
     onError: (err) => {
       toastApiError(err as any, "Failed to add department");
     },
+  });
+
+  const employeeStartDateValue = form.watch("startDate");
+
+  const [isAllowanceDialogOpen, setIsAllowanceDialogOpen] = useState(false);
+  const [allowanceToEdit, setAllowanceToEdit] = useState<EmployeeEvent | null>(null);
+  const [isAllowanceConfirmOpen, setIsAllowanceConfirmOpen] = useState(false);
+  const [allowanceToDelete, setAllowanceToDelete] = useState<string | null>(null);
+
+  const allowanceForm = useForm<AllowanceFormValues>({
+    resolver: zodResolver(allowanceFormSchema),
+    defaultValues: {
+      title: "",
+      amount: "",
+      recurrenceType: "none",
+      recurrenceEndDate: null,
+    },
+  });
+
+  const allowanceRecurrenceType = allowanceForm.watch("recurrenceType");
+
+  useEffect(() => {
+    if (allowanceRecurrenceType !== "monthly") {
+      allowanceForm.setValue("recurrenceEndDate", null);
+    }
+  }, [allowanceRecurrenceType, allowanceForm]);
+
+  const {
+    data: allowanceEvents = [],
+    isLoading: allowancesLoading,
+    error: allowanceError,
+  } = useQuery<EmployeeEvent[]>({
+    queryKey: ["/api/employee-events", employeeId ?? ""],
+    enabled: !!employeeId,
+    queryFn: async () => {
+      if (!employeeId) return [];
+      const params = new URLSearchParams({ employeeId, eventType: "allowance" });
+      const res = await apiGet(`/api/employee-events?${params.toString()}`);
+      if (!res.ok) {
+        throw new Error(res.error || "Failed to load allowances");
+      }
+      return res.data as EmployeeEvent[];
+    },
+  });
+
+  const allowanceRecurrenceStartDate = (() => {
+    const base = allowanceToEdit?.eventDate ?? employeeStartDateValue;
+    if (!base) return null;
+    const parsed = new Date(base);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  })();
+
+  const resetAllowanceForm = () => {
+    allowanceForm.reset({
+      title: "",
+      amount: "",
+      recurrenceType: "none",
+      recurrenceEndDate: null,
+    });
+  };
+
+  const resolveAllowanceEventDate = (existingDate?: string | null) => {
+    const base = existingDate || form.getValues("startDate") || initialData?.startDate;
+    if (base) {
+      const parsed = new Date(base);
+      if (!Number.isNaN(parsed.getTime())) {
+        return base;
+      }
+    }
+    return new Date().toISOString().split("T")[0];
+  };
+
+  const handleOpenAllowanceDialog = (event?: EmployeeEvent) => {
+    if (event) {
+      setAllowanceToEdit(event);
+      allowanceForm.reset({
+        title: event.title ?? "",
+        amount: String(event.amount ?? ""),
+        recurrenceType: (event.recurrenceType as AllowanceFormValues["recurrenceType"]) ?? "none",
+        recurrenceEndDate: event.recurrenceEndDate ?? null,
+      });
+    } else {
+      setAllowanceToEdit(null);
+      resetAllowanceForm();
+    }
+    setIsAllowanceDialogOpen(true);
+  };
+
+  const createAllowanceMutation = useMutation<EmployeeEvent, any, AllowanceFormValues>({
+    mutationFn: async (values: AllowanceFormValues) => {
+      if (!employeeId) {
+        throw new Error("Missing employee ID");
+      }
+      const payload: InsertEmployeeEvent = {
+        employeeId,
+        eventType: "allowance",
+        title: values.title,
+        description: values.title,
+        amount: Number(values.amount).toString(),
+        eventDate: resolveAllowanceEventDate(),
+        affectsPayroll: true,
+        status: "active",
+        recurrenceType: values.recurrenceType,
+        recurrenceEndDate: values.recurrenceType === "monthly" ? values.recurrenceEndDate ?? null : null,
+      };
+      const res = await apiPost("/api/employee-events", payload);
+      if (!res.ok) throw res;
+      return res.data as EmployeeEvent;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/employee-events"] });
+      setIsAllowanceDialogOpen(false);
+      setAllowanceToEdit(null);
+      resetAllowanceForm();
+      toast({ title: "Allowance saved" });
+    },
+    onError: (error) => {
+      toastApiError(error as any, "Failed to create allowance");
+    },
+  });
+
+  const updateAllowanceMutation = useMutation<
+    EmployeeEvent,
+    any,
+    { id: string; values: AllowanceFormValues; eventDate?: string | null }
+  >({
+    mutationFn: async ({ id, values, eventDate }) => {
+      if (!employeeId) {
+        throw new Error("Missing employee ID");
+      }
+      const payload: Partial<InsertEmployeeEvent> = {
+        employeeId,
+        eventType: "allowance",
+        title: values.title,
+        description: values.title,
+        amount: Number(values.amount).toString(),
+        eventDate: resolveAllowanceEventDate(eventDate),
+        affectsPayroll: true,
+        status: "active",
+        recurrenceType: values.recurrenceType,
+        recurrenceEndDate: values.recurrenceType === "monthly" ? values.recurrenceEndDate ?? null : null,
+      };
+      const res = await apiPut(`/api/employee-events/${id}`, payload);
+      if (!res.ok) throw res;
+      return res.data as EmployeeEvent;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/employee-events"] });
+      setIsAllowanceDialogOpen(false);
+      setAllowanceToEdit(null);
+      resetAllowanceForm();
+      toast({ title: "Allowance updated" });
+    },
+    onError: (error) => {
+      toastApiError(error as any, "Failed to update allowance");
+    },
+  });
+
+  const deleteAllowanceMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiDelete(`/api/employee-events/${id}`);
+      if (!res.ok) throw res;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/employee-events"] });
+      setIsAllowanceConfirmOpen(false);
+      setAllowanceToDelete(null);
+      toast({ title: "Allowance deleted" });
+    },
+    onError: (error) => {
+      toastApiError(error as any, "Failed to delete allowance");
+    },
+  });
+
+  const isSavingAllowance = createAllowanceMutation.isPending || updateAllowanceMutation.isPending;
+
+  const handleAllowanceSubmit = allowanceForm.handleSubmit((values) => {
+    if (allowanceToEdit) {
+      updateAllowanceMutation.mutate({
+        id: allowanceToEdit.id,
+        values,
+        eventDate: allowanceToEdit.eventDate,
+      });
+    } else {
+      createAllowanceMutation.mutate(values);
+    }
   });
 
   const handleSubmit: SubmitHandler<FormData> = ({
@@ -761,6 +966,96 @@ export default function EmployeeForm({
           />
         </div>
 
+        {employeeId && (
+          <div className="space-y-4 rounded-lg bg-gray-50 p-6">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Allowances</h3>
+                <p className="text-sm text-muted-foreground">
+                  Manage recurring allowances that are applied to this employee's payroll.
+                </p>
+              </div>
+              <Button
+                type="button"
+                className="bg-primary text-white hover:bg-blue-700"
+                onClick={() => handleOpenAllowanceDialog()}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add allowance
+              </Button>
+            </div>
+
+            {allowancesLoading ? (
+              <p className="text-sm text-muted-foreground">Loading allowances...</p>
+            ) : allowanceError ? (
+              <p className="text-sm text-red-500">
+                {allowanceError instanceof Error
+                  ? allowanceError.message
+                  : "Failed to load allowances."}
+              </p>
+            ) : allowanceEvents.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No allowances recorded for this employee.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Recurrence</TableHead>
+                    <TableHead>Start Date</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {allowanceEvents.map((event) => (
+                    <TableRow key={event.id}>
+                      <TableCell className="font-medium">{event.title}</TableCell>
+                      <TableCell>{formatCurrency(event.amount ?? 0)}</TableCell>
+                      <TableCell>
+                        {event.recurrenceType === "monthly"
+                          ? event.recurrenceEndDate
+                            ? `Monthly until ${formatDate(event.recurrenceEndDate)}`
+                            : "Monthly (no end date)"
+                          : "One-time"}
+                      </TableCell>
+                      <TableCell>
+                        {event.eventDate ? formatDate(event.eventDate) : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleOpenAllowanceDialog(event)}
+                            disabled={isSavingAllowance}
+                            aria-label="Edit allowance"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setAllowanceToDelete(event.id);
+                              setIsAllowanceConfirmOpen(true);
+                            }}
+                            disabled={deleteAllowanceMutation.isPending}
+                            aria-label="Delete allowance"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        )}
+
         {/* Profile Image Section */}
         <div className="space-y-4 p-6 bg-blue-50 rounded-lg">
           <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2">Profile Information</h3>
@@ -1153,6 +1448,103 @@ export default function EmployeeForm({
           </Button>
         </div>
       </form>
+      {employeeId && (
+        <>
+          <Dialog
+            open={isAllowanceDialogOpen}
+            onOpenChange={(open) => {
+              setIsAllowanceDialogOpen(open);
+              if (!open) {
+                setAllowanceToEdit(null);
+                resetAllowanceForm();
+              }
+            }}
+          >
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>{allowanceToEdit ? "Edit allowance" : "Add allowance"}</DialogTitle>
+              </DialogHeader>
+              <Form {...allowanceForm}>
+                <form onSubmit={handleAllowanceSubmit} className="space-y-4">
+                  <FormField
+                    control={allowanceForm.control}
+                    name="title"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Title</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Housing allowance" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={allowanceForm.control}
+                    name="amount"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Amount (KWD)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            step="0.001"
+                            placeholder="0.000"
+                            value={field.value ?? ""}
+                            onChange={(event) => field.onChange(event.target.value)}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <AllowanceRecurringFields
+                    form={allowanceForm}
+                    recurrenceStartDate={allowanceRecurrenceStartDate}
+                  />
+                  <div className="flex justify-end gap-2 pt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setIsAllowanceDialogOpen(false);
+                        setAllowanceToEdit(null);
+                        resetAllowanceForm();
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={isSavingAllowance}>
+                      {isSavingAllowance
+                        ? "Saving..."
+                        : allowanceToEdit
+                          ? "Update allowance"
+                          : "Add allowance"}
+                    </Button>
+                  </div>
+                </form>
+              </Form>
+            </DialogContent>
+          </Dialog>
+          <ConfirmDialog
+            open={isAllowanceConfirmOpen}
+            onOpenChange={(open) => {
+              setIsAllowanceConfirmOpen(open);
+              if (!open) {
+                setAllowanceToDelete(null);
+              }
+            }}
+            title="Delete allowance"
+            description="This allowance will be removed from the employee profile."
+            confirmText="Delete"
+            onConfirm={() => {
+              if (allowanceToDelete && !deleteAllowanceMutation.isPending) {
+                deleteAllowanceMutation.mutate(allowanceToDelete);
+              }
+            }}
+          />
+        </>
+      )}
     </Form>
   );
 }
