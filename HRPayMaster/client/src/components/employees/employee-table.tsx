@@ -124,6 +124,8 @@ export default function EmployeeTable({
       {
         title: "Identity",
         fields: [
+          { label: "First Name", value: formatFieldValue(viewEmployee.firstName) },
+          { label: "Last Name", value: formatFieldValue(viewEmployee.lastName) },
           { label: "Employee Code", value: formatFieldValue(viewEmployee.employeeCode) },
           { label: "Arabic Name", value: formatFieldValue(viewEmployee.arabicName) },
           { label: "Nickname", value: formatFieldValue(viewEmployee.nickname) },
@@ -145,10 +147,11 @@ export default function EmployeeTable({
         title: "Employment",
         fields: [
           { label: "Position", value: formatFieldValue(viewEmployee.position) },
+          { label: "Role", value: formatFieldValue(viewEmployee.role) },
           { label: "Department", value: formatFieldValue(viewEmployee.department?.name) },
           { label: "Company", value: formatFieldValue(viewEmployee.company?.name) },
           { label: "Start Date", value: formatFieldValue(viewEmployee.startDate, { type: "date" }) },
-          { label: "Status", value: formatFieldValue(viewEmployee.status) },
+          { label: "Status", value: formatFieldValue(getStatusLabel(viewEmployee.status)) },
           { label: "Work Location", value: formatFieldValue(viewEmployee.workLocation) },
           {
             label: "Standard Working Days",
@@ -160,14 +163,24 @@ export default function EmployeeTable({
           },
           { label: "Salary", value: formatFieldValue(viewEmployee.salary, { type: "currency" }) },
           { label: "Payment Method", value: formatFieldValue(viewEmployee.paymentMethod) },
-          { label: "Transferable", value: viewEmployee.transferable === undefined ? null : viewEmployee.transferable ? "Yes" : "No" },
+          { label: "Profession", value: formatFieldValue(viewEmployee.profession) },
+          { label: "Profession Category", value: formatFieldValue(viewEmployee.professionCategory) },
+          { label: "Bank IBAN", value: formatFieldValue(viewEmployee.bankIban) },
+          {
+            label: "Transferable",
+            value:
+              viewEmployee.transferable === undefined
+                ? null
+                : viewEmployee.transferable
+                  ? "Yes"
+                  : "No",
+          },
         ],
       },
       {
         title: "Banking",
         fields: [
           { label: "Bank Name", value: formatFieldValue(viewEmployee.bankName) },
-          { label: "Bank IBAN", value: formatFieldValue(viewEmployee.bankIban) },
           { label: "SWIFT Code", value: formatFieldValue(viewEmployee.swiftCode) },
         ],
       },
