@@ -11,9 +11,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Eye, Edit, UserX, User, ArrowUpDown, ChevronDown, ChevronUp } from "lucide-react";
+import { Eye, Edit, UserX, User, ArrowUpDown, ChevronDown, ChevronUp, Printer } from "lucide-react";
 import type { EmployeeWithDepartment, Department } from "@shared/schema";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { apiGet } from "@/lib/http";
@@ -532,11 +538,22 @@ export default function EmployeeTable({
           </DialogHeader>
 
           {viewEmployee && (
-            <div className="space-y-8">
-              <div className="rounded-xl bg-muted/40 p-6 shadow-sm">
-                {[
-                  {
-                    title: "Identity",
+            <>
+              <DialogFooter className="justify-start">
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => printEmployeeFile(viewEmployee.id)}
+                >
+                  <Printer className="h-4 w-4" aria-hidden="true" />
+                  Print
+                </Button>
+              </DialogFooter>
+              <div className="space-y-8">
+                <div className="rounded-xl bg-muted/40 p-6 shadow-sm">
+                  {[
+                    {
+                      title: "Identity",
                     fields: [
                       { label: "Nationality", value: viewEmployee.nationality },
                       { label: "Profession Category", value: viewEmployee.professionCategory },
@@ -605,8 +622,8 @@ export default function EmployeeTable({
                   ))}
               </div>
 
-              {(() => {
-                const documents = [
+                  {(() => {
+                    const documents = [
                   { key: "profileImage", label: "Profile Image" },
                   { key: "drivingLicenseImage", label: "Driving License" },
                   { key: "visaImage", label: "Visa Document" },
