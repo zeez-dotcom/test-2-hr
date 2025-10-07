@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
 import { Plus, Calendar as CalendarIcon, TrendingUp, TrendingDown, Award, AlertTriangle, Clock, Trash2, Edit, User, FileText, Car, Info, Printer } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -23,6 +24,7 @@ import type { EmployeeEvent, Employee, InsertEmployeeEvent } from "@shared/schem
 import { insertEmployeeEventSchema } from "@shared/schema";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
 import { generateEventReceipt } from "@/lib/event-receipts";
+import { allowanceRecursInRange, getMonthBounds, parseDateInput } from "@/lib/employee-events";
 
 const financialEventTypes = ["bonus", "commission", "deduction", "allowance", "overtime", "penalty"] as const;
 
@@ -48,16 +50,36 @@ export default function EmployeeEvents() {
   const typeSet = new Set((typesParam || '').split(',').map(s => s.trim()).filter(Boolean));
   const viewEvents = (events || []).filter(ev => {
     const typeOk = typeSet.size ? typeSet.has(ev.eventType) : true;
-    if (!monthParam) return typeOk;
-    const [y, m] = monthParam.split('-').map(Number);
-    const d = new Date(ev.eventDate);
-    const ok = d.getFullYear() === y && (d.getMonth()+1) === m;
-    return typeOk && ok;
+    if (!typeOk) return false;
+    if (!monthParam) return true;
+    const [yearRaw, monthRaw] = monthParam.split('-').map(Number);
+    if (!Number.isFinite(yearRaw) || !Number.isFinite(monthRaw)) {
+      return true;
+    }
+    const { start: monthStart, end: monthEnd } = getMonthBounds(yearRaw, monthRaw);
+    if (allowanceRecursInRange(ev, monthStart, monthEnd)) {
+      return true;
+    }
+    const eventDate = parseDateInput(ev.eventDate);
+    if (!eventDate) return false;
+    return eventDate >= monthStart && eventDate <= monthEnd;
   });
 
   const { data: employees, error: employeesError } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
   });
+
+  const createDefaultValues = useCallback(
+    (): Partial<InsertEmployeeEvent> => ({
+      eventType: "bonus",
+      affectsPayroll: true,
+      status: "active",
+      eventDate: format(new Date(), 'yyyy-MM-dd'),
+      recurrenceType: "none",
+      recurrenceEndDate: null,
+    }),
+    [],
+  );
 
   const form = useForm<InsertEmployeeEvent>({
     resolver: zodResolver(insertEmployeeEventSchema.extend({
@@ -65,22 +87,25 @@ export default function EmployeeEvents() {
         typeof val === 'string' ? val : format(val, 'yyyy-MM-dd')
       ),
     })),
-    defaultValues: {
-      eventType: "bonus",
-      affectsPayroll: true,
-      status: "active",
-      eventDate: format(new Date(), 'yyyy-MM-dd'),
-      recurrenceType: "none",
-    },
+    defaultValues: createDefaultValues(),
   });
 
   const selectedEventType = form.watch("eventType");
+  const recurrenceType = form.watch("recurrenceType");
+  const eventDateValue = form.watch("eventDate");
+  const recurrenceStartDate = parseDateInput(eventDateValue);
 
   useEffect(() => {
     if (!financialEventTypes.includes(selectedEventType as any)) {
       form.setValue("amount", "0");
     }
   }, [selectedEventType, form]);
+
+  useEffect(() => {
+    if (recurrenceType !== "monthly") {
+      form.setValue("recurrenceEndDate", null);
+    }
+  }, [recurrenceType, form]);
 
   const createEventMutation = useMutation<EmployeeEvent, Error, InsertEmployeeEvent>({
     mutationFn: async (data: InsertEmployeeEvent) => {
@@ -90,7 +115,7 @@ export default function EmployeeEvents() {
     },
     onSuccess: async (createdEvent) => {
       setIsDialogOpen(false);
-      form.reset();
+      form.reset(createDefaultValues());
 
       let receiptError: unknown = null;
       const employee = employees?.find((e) => e.id === createdEvent.employeeId);
@@ -159,7 +184,7 @@ export default function EmployeeEvents() {
       queryClient.invalidateQueries({ queryKey: ["/api/employee-events"] });
       setIsDialogOpen(false);
       setEventToEdit(null);
-      form.reset();
+      form.reset(createDefaultValues());
       toast({
         title: "Success",
         description: "Employee event updated successfully",
@@ -273,6 +298,10 @@ export default function EmployeeEvents() {
       documentUrl: event.documentUrl ?? '',
       affectsPayroll: event.affectsPayroll,
       status: event.status as any,
+      recurrenceType: (event.recurrenceType ?? "none") as InsertEmployeeEvent["recurrenceType"],
+      recurrenceEndDate: event.recurrenceEndDate
+        ? format(new Date(event.recurrenceEndDate), 'yyyy-MM-dd')
+        : null,
     });
     setIsDialogOpen(true);
   };
@@ -281,7 +310,7 @@ export default function EmployeeEvents() {
     setIsDialogOpen(open);
     if (!open) {
       setEventToEdit(null);
-      form.reset();
+      form.reset(createDefaultValues());
     }
   };
 
@@ -338,7 +367,7 @@ export default function EmployeeEvents() {
         </div>
         <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
           <DialogTrigger asChild>
-            <Button onClick={() => { setEventToEdit(null); form.reset(); }}>
+            <Button onClick={() => { setEventToEdit(null); form.reset(createDefaultValues()); }}>
               <Plus className="mr-2" size={16} />
               Add Event
             </Button>
@@ -503,6 +532,94 @@ export default function EmployeeEvents() {
                   />
                 </div>
 
+                {selectedEventType === "allowance" && (
+                  <div className="space-y-3 rounded-md border border-dashed border-blue-200 bg-blue-50/40 p-4 dark:border-blue-900/40 dark:bg-blue-950/20">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-blue-900 dark:text-blue-100">Monthly allowance</p>
+                        <p className="text-xs text-blue-800/80 dark:text-blue-200/80">
+                          Apply this allowance automatically each month. Set an optional end date to stop it.
+                        </p>
+                      </div>
+                      <FormField
+                        control={form.control}
+                        name="recurrenceType"
+                        render={({ field }) => (
+                          <FormItem className="flex items-center gap-2">
+                            <FormLabel htmlFor="monthly-allowance" className="text-xs font-medium text-muted-foreground">
+                              Recurring monthly
+                            </FormLabel>
+                            <FormControl>
+                              <Switch
+                                id="monthly-allowance"
+                                checked={field.value === "monthly"}
+                                onCheckedChange={(checked) => field.onChange(checked ? "monthly" : "none")}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    {recurrenceType === "monthly" && (
+                      <FormField
+                        control={form.control}
+                        name="recurrenceEndDate"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>End date (optional)</FormLabel>
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <FormControl>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      className={cn(
+                                        "w-full justify-start",
+                                        !field.value && "text-muted-foreground",
+                                      )}
+                                    >
+                                      {field.value ? (
+                                        format(new Date(field.value), "PPP")
+                                      ) : (
+                                        <span>Select end date</span>
+                                      )}
+                                      <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                    </Button>
+                                  </FormControl>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                  <Calendar
+                                    mode="single"
+                                    selected={field.value ? new Date(field.value) : undefined}
+                                    onSelect={(date) => field.onChange(date ? format(date, 'yyyy-MM-dd') : null)}
+                                    disabled={(date) =>
+                                      recurrenceStartDate ? date < recurrenceStartDate : false
+                                    }
+                                    initialFocus
+                                  />
+                                </PopoverContent>
+                              </Popover>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => field.onChange(null)}
+                                disabled={!field.value}
+                              >
+                                Clear
+                              </Button>
+                            </div>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    )}
+                  </div>
+                )}
+
                 <FormField
                   control={form.control}
                   name="documentUrl"
@@ -619,6 +736,11 @@ export default function EmployeeEvents() {
                           <Badge className={getEventTypeColor(event.eventType)}>
                             {event.eventType}
                           </Badge>
+                          {event.eventType === 'allowance' && event.recurrenceType === 'monthly' && (
+                            <Badge className="border border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100" variant="outline">
+                              Monthly{event.recurrenceEndDate ? ` • Ends ${formatDate(event.recurrenceEndDate)}` : ' • Ongoing'}
+                            </Badge>
+                          )}
                           {!event.affectsPayroll && (
                             <Badge variant="outline">Non-payroll</Badge>
                           )}

@@ -223,7 +223,9 @@
       "status": "الحالة: {{status}}",
       "affectsPayroll": "يؤثر على كشوف الرواتب: {{value}}",
       "amount": "المبلغ: {{amount}}",
-      "description": "الوصف: {{description}}"
+      "description": "الوصف: {{description}}",
+      "recurrence": "يتكرر شهريًا",
+      "recurrenceUntil": "يتكرر شهريًا حتى {{date}}"
     },
     "employeeLine": {
       "phone": "الهاتف: {{value}}",

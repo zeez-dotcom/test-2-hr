@@ -223,7 +223,9 @@
       "status": "Status: {{status}}",
       "affectsPayroll": "Affects payroll: {{value}}",
       "amount": "Amount: {{amount}}",
-      "description": "Description: {{description}}"
+      "description": "Description: {{description}}",
+      "recurrence": "Recurs monthly",
+      "recurrenceUntil": "Recurs monthly until {{date}}"
     },
     "employeeLine": {
       "phone": "Phone: {{value}}",
