@@ -26,6 +26,7 @@ describe('calculateEmployeePayroll', () => {
     expect(entry.loanDeduction).toBe(100);
     expect(entry.vacationDays).toBe(2);
     expect(entry.netPay).toBe(2700);
+    expect(entry.allowances).toEqual({});
   });
 
   it('uses configurable standard deductions', () => {
@@ -40,6 +41,44 @@ describe('calculateEmployeePayroll', () => {
     });
     expect(entry.taxDeduction).toBe(50);
     expect(entry.netPay).toBe(950);
+    expect(entry.allowances).toEqual({});
+  });
+
+  it('aggregates allowance events by normalized title', () => {
+    const employee = { id: 'e1', salary: '1000', status: 'active' };
+    const entry = calculateEmployeePayroll({
+      employee,
+      loans: [],
+      vacationRequests: [],
+      employeeEvents: [
+        {
+          employeeId: 'e1',
+          eventDate: '2024-01-10',
+          eventType: 'allowance',
+          affectsPayroll: true,
+          status: 'active',
+          amount: '75',
+          title: 'Housing Allowance',
+          recurrenceType: 'none',
+          recurrenceEndDate: null,
+        } as any,
+        {
+          employeeId: 'e1',
+          eventDate: '2023-12-01',
+          eventType: 'allowance',
+          affectsPayroll: true,
+          status: 'active',
+          amount: '50',
+          title: 'Food Allowance',
+          recurrenceType: 'monthly',
+          recurrenceEndDate: null,
+        } as any,
+      ],
+      ...baseDates,
+    });
+
+    expect(entry.allowances).toEqual({ housing: 75, food: 50 });
+    expect(entry.bonusAmount).toBeCloseTo(125);
   });
 });
 
@@ -51,6 +90,7 @@ describe('calculateTotals', () => {
         grossPay: 2800,
         baseSalary: 2800,
         bonusAmount: 0,
+        allowances: {},
         workingDays: 30,
         actualWorkingDays: 28,
         vacationDays: 2,

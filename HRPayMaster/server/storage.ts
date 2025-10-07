@@ -15,6 +15,7 @@ import {
   type SQL,
 } from "drizzle-orm";
 import { db } from "./db";
+import { normalizeAllowanceTitle } from "./utils/payroll";
 
 type TransactionClient = Parameters<Parameters<typeof db.transaction>[0]>[0];
 import {
@@ -28,6 +29,7 @@ import {
   type PayrollEntry,
   type InsertPayrollEntry,
   type PayrollRunWithEntries,
+  type AllowanceBreakdown,
   type VacationRequest,
   type InsertVacationRequest,
   type VacationRequestWithEmployee,
@@ -276,7 +278,7 @@ export interface IStorage {
   deleteEmployeeCustomValue(id: string): Promise<boolean>;
 
   // Payroll methods
-  getPayrollRuns(): Promise<PayrollRun[]>;
+  getPayrollRuns(): Promise<PayrollRunWithEntries[]>;
   getPayrollRun(id: string): Promise<PayrollRunWithEntries | undefined>;
   createPayrollRun(payrollRun: InsertPayrollRun): Promise<PayrollRun>;
   updatePayrollRun(id: string, payrollRun: Partial<InsertPayrollRun>): Promise<PayrollRun | undefined>;
@@ -1380,23 +1382,29 @@ export class DatabaseStorage implements IStorage {
 
   // Payroll methods
 
-  async getPayrollRuns(): Promise<PayrollRun[]> {
-
-    return await db.select().from(payrollRuns).orderBy(desc(payrollRuns.createdAt));
-
+  async getPayrollRuns(): Promise<PayrollRunWithEntries[]> {
+    const runs = await db.select().from(payrollRuns).orderBy(desc(payrollRuns.createdAt));
+    const enriched = await Promise.all(runs.map(run => this.hydratePayrollRunWithEntries(run)));
+    return enriched;
   }
 
 
 
   async getPayrollRun(id: string): Promise<PayrollRunWithEntries | undefined> {
-
     const [payrollRun] = await db.select().from(payrollRuns).where(eq(payrollRuns.id, id));
 
-    
+
 
     if (!payrollRun) return undefined;
 
 
+
+    return this.hydratePayrollRunWithEntries(payrollRun);
+  }
+
+
+
+  private async hydratePayrollRunWithEntries(run: PayrollRun): Promise<PayrollRunWithEntries> {
 
     const entries = await db.select({
 
@@ -1458,7 +1466,7 @@ export class DatabaseStorage implements IStorage {
 
     .leftJoin(employees, eq(payrollEntries.employeeId, employees.id))
 
-    .where(eq(payrollEntries.payrollRunId, id));
+    .where(eq(payrollEntries.payrollRunId, run.id));
 
 
 
@@ -1472,13 +1480,133 @@ export class DatabaseStorage implements IStorage {
 
 
 
+    const { breakdownByEmployee, allowanceKeys } = await this.buildAllowanceBreakdownForRun(
+
+      normalizedEntries,
+
+      run.startDate,
+
+      run.endDate,
+
+    );
+
+
+
+    const entriesWithAllowances = normalizedEntries.map((entry) => {
+
+      const allowances = breakdownByEmployee.get(entry.employeeId);
+
+      if (!allowances || Object.keys(allowances).length === 0) {
+
+        return { ...entry, allowances: undefined };
+
+      }
+
+      return { ...entry, allowances: { ...allowances } };
+
+    });
+
+
+
     return {
 
-      ...payrollRun,
+      ...run,
 
-      entries: normalizedEntries
+      entries: entriesWithAllowances,
+
+      allowanceKeys,
 
     };
+
+  }
+
+
+
+  private async buildAllowanceBreakdownForRun(
+
+    entries: Array<{ employeeId: string }>,
+
+    startDate: string | Date,
+
+    endDate: string | Date,
+
+  ): Promise<{ breakdownByEmployee: Map<string, AllowanceBreakdown>; allowanceKeys: string[] }> {
+
+    const employeeIds = Array.from(new Set(entries.map((entry) => entry.employeeId))).filter(Boolean);
+
+    if (employeeIds.length === 0) {
+
+      return { breakdownByEmployee: new Map(), allowanceKeys: [] };
+
+    }
+
+
+
+    const start = new Date(startDate);
+
+    const end = new Date(endDate);
+
+
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+
+      return { breakdownByEmployee: new Map(), allowanceKeys: [] };
+
+    }
+
+
+
+    const allowanceEvents = await this.getEmployeeEvents(start, end, { eventType: "allowance" });
+
+
+
+    const breakdownByEmployee = new Map<string, AllowanceBreakdown>();
+
+    const allowanceKeySet = new Set<string>();
+
+    const employeeSet = new Set(employeeIds);
+
+
+
+    for (const event of allowanceEvents) {
+
+      if (!employeeSet.has(event.employeeId)) continue;
+
+      if ((event as any).status && (event as any).status !== "active") continue;
+
+      if ((event as any).affectsPayroll === false) continue;
+
+
+
+      const amount = Number.parseFloat(String((event as any).amount ?? 0));
+
+      if (!Number.isFinite(amount)) continue;
+
+
+
+      const normalizedKey = normalizeAllowanceTitle((event as any).title as string | undefined);
+
+      allowanceKeySet.add(normalizedKey);
+
+
+
+      const existing = breakdownByEmployee.get(event.employeeId) ?? {};
+
+      const current = existing[normalizedKey] ?? 0;
+
+      existing[normalizedKey] = Number((current + amount).toFixed(3));
+
+      breakdownByEmployee.set(event.employeeId, existing);
+
+    }
+
+
+
+    const allowanceKeys = Array.from(allowanceKeySet).sort();
+
+
+
+    return { breakdownByEmployee, allowanceKeys };
 
   }
 

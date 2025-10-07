@@ -31,6 +31,7 @@ export interface EmployeeEvent {
   affectsPayroll: boolean;
   status: string;
   amount: string;
+  title?: string;
   recurrenceType?: "none" | "monthly" | null;
   recurrenceEndDate?: string | null;
 }
@@ -40,6 +41,7 @@ export interface EmployeePayroll {
   grossPay: number;
   baseSalary: number;
   bonusAmount: number;
+  allowances: Record<string, number>;
   workingDays: number;
   actualWorkingDays: number;
   vacationDays: number;
@@ -149,24 +151,47 @@ export function calculateEmployeePayroll({
     isWithinRange(event.eventDate)
   );
 
-  const recurringAllowanceTotal = employeeEventsForEmployee
+  const allowances = new Map<string, number>();
+
+  const addAllowance = (title: string | undefined, amount: number, shouldInclude: boolean) => {
+    if (!shouldInclude) {
+      return;
+    }
+    const normalizedTitle = normalizeAllowanceTitle(title);
+    const current = allowances.get(normalizedTitle) ?? 0;
+    allowances.set(normalizedTitle, current + amount);
+  };
+
+  for (const event of employeeEventsInPeriod) {
+    if (event.eventType !== "allowance") {
+      continue;
+    }
+    const amount = parseFloat(event.amount);
+    if (!Number.isFinite(amount)) continue;
+    addAllowance((event as any).title as string | undefined, amount, true);
+  }
+
+  employeeEventsForEmployee
     .filter(
       event =>
         event.eventType === "allowance" &&
         event.recurrenceType === "monthly" &&
         overlapsRange(event),
     )
-    .reduce((total, event) => {
-      if (isWithinRange(event.eventDate)) {
-        return total;
+    .forEach(event => {
+      const amount = parseFloat(event.amount);
+      if (!Number.isFinite(amount)) {
+        return;
       }
-      return total + parseFloat(event.amount);
-    }, 0);
+      const withinRange = isWithinRange(event.eventDate);
+      addAllowance((event as any).title as string | undefined, amount, !withinRange);
+    });
+
+  const allowanceTotal = Array.from(allowances.values()).reduce((sum, value) => sum + value, 0);
 
   const bonusAmount = employeeEventsInPeriod
-    .filter(event => ["bonus", "commission", "allowance", "overtime"].includes(event.eventType))
-    .reduce((total, event) => total + parseFloat(event.amount), 0) +
-    recurringAllowanceTotal;
+    .filter(event => ["bonus", "commission", "overtime"].includes(event.eventType))
+    .reduce((total, event) => total + parseFloat(event.amount), 0) + allowanceTotal;
 
   const eventDeductions = employeeEventsInPeriod
     .filter(event => ["deduction", "penalty"].includes(event.eventType))
@@ -201,6 +226,7 @@ export function calculateEmployeePayroll({
     grossPay,
     baseSalary,
     bonusAmount,
+    allowances: Object.fromEntries(allowances.entries()),
     workingDays,
     actualWorkingDays,
     vacationDays,
@@ -212,6 +238,21 @@ export function calculateEmployeePayroll({
     netPay,
     adjustmentReason: adjustmentReason.trim() || null,
   };
+}
+
+export function normalizeAllowanceTitle(title: string | undefined): string {
+  if (!title) {
+    return "allowance";
+  }
+  const cleaned = title
+    .toLowerCase()
+    .replace(/allowance/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  if (!cleaned) {
+    return "allowance";
+  }
+  return cleaned.replace(/\s+/g, "_");
 }
 
 /**

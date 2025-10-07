@@ -117,4 +117,90 @@ describe('DatabaseStorage recurring allowance expansion', () => {
       },
     ]);
   });
+
+  it('includes allowance breakdown on payroll runs', async () => {
+    const runRow = {
+      id: 'run-allowance',
+      period: 'Jan 2024',
+      startDate: '2024-01-01',
+      endDate: '2024-01-31',
+      grossAmount: '1500',
+      totalDeductions: '0',
+      netAmount: '1500',
+      status: 'completed',
+      createdAt: new Date('2024-02-01'),
+      updatedAt: new Date('2024-02-01'),
+    } as any;
+
+    const entryRow = {
+      id: 'entry-1',
+      createdAt: new Date('2024-02-01'),
+      payrollRunId: 'run-allowance',
+      employeeId: 'emp-1',
+      grossPay: '1500',
+      baseSalary: '1000',
+      bonusAmount: '500',
+      workingDays: 30,
+      actualWorkingDays: 30,
+      vacationDays: 0,
+      taxDeduction: '0',
+      socialSecurityDeduction: '0',
+      healthInsuranceDeduction: '0',
+      loanDeduction: '0',
+      otherDeductions: '0',
+      netPay: '1500',
+      adjustmentReason: null,
+      employee: {
+        id: 'emp-1',
+        employeeCode: 'E-001',
+        firstName: 'Jane',
+        lastName: 'Doe',
+        arabicName: null,
+        nickname: null,
+        salary: '1000',
+      },
+    } as any;
+
+    selectMock
+      .mockReturnValueOnce({
+        from: () => ({ where: async () => [runRow] }),
+      })
+      .mockReturnValueOnce({
+        from: () => ({
+          leftJoin: () => ({ where: async () => [entryRow] }),
+        }),
+      });
+
+    const getEmployeeEventsSpy = vi
+      .spyOn(storage, 'getEmployeeEvents')
+      .mockResolvedValue([
+        {
+          employeeId: 'emp-1',
+          eventDate: '2024-01-15',
+          eventType: 'allowance',
+          affectsPayroll: true,
+          status: 'active',
+          amount: '100',
+          title: 'Housing Allowance',
+        } as any,
+        {
+          employeeId: 'emp-1',
+          eventDate: '2023-12-20',
+          eventType: 'allowance',
+          affectsPayroll: true,
+          status: 'active',
+          amount: '50',
+          title: 'Food Allowance',
+          recurrenceType: 'monthly',
+          recurrenceEndDate: null,
+        } as any,
+      ]);
+
+    const run = await storage.getPayrollRun('run-allowance');
+    getEmployeeEventsSpy.mockRestore();
+
+    expect(run?.entries).toHaveLength(1);
+    expect(run?.entries?.[0].allowances).toEqual({ housing: 100, food: 50 });
+    expect(run?.allowanceKeys).toEqual(['food', 'housing']);
+  });
 });
