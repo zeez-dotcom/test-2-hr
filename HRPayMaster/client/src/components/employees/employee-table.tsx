@@ -65,6 +65,180 @@ export default function EmployeeTable({
     language: "en" as "en" | "ar",
   });
 
+  const employeeSections = useMemo(() => {
+    if (!viewEmployee) return [] as { title: string; fields: { label: string; value: string | null }[] }[];
+
+    const formatFieldValue = (
+      value: unknown,
+      options: { type?: "date" | "currency" } = {},
+    ): string | null => {
+      if (value === null || value === undefined) {
+        return null;
+      }
+
+      if (options.type === "date") {
+        if (value instanceof Date) {
+          return formatDate(value);
+        }
+
+        if (typeof value === "string") {
+          const trimmed = value.trim();
+          if (!trimmed) {
+            return null;
+          }
+          return formatDate(trimmed);
+        }
+
+        return null;
+      }
+
+      if (options.type === "currency") {
+        if (typeof value === "number") {
+          return formatCurrency(value);
+        }
+
+        if (typeof value === "string") {
+          const trimmed = value.trim();
+          if (!trimmed) {
+            return null;
+          }
+          const numericValue = Number(trimmed);
+          if (Number.isNaN(numericValue)) {
+            return null;
+          }
+          return formatCurrency(numericValue);
+        }
+
+        return null;
+      }
+
+      if (typeof value === "number") {
+        return value.toString();
+      }
+
+      const stringValue = String(value);
+      return stringValue.trim() === "" ? null : stringValue;
+    };
+
+    return [
+      {
+        title: "Identity",
+        fields: [
+          { label: "Employee Code", value: formatFieldValue(viewEmployee.employeeCode) },
+          { label: "Arabic Name", value: formatFieldValue(viewEmployee.arabicName) },
+          { label: "Nickname", value: formatFieldValue(viewEmployee.nickname) },
+          { label: "Date of Birth", value: formatFieldValue(viewEmployee.dateOfBirth, { type: "date" }) },
+          { label: "Nationality", value: formatFieldValue(viewEmployee.nationality) },
+        ],
+      },
+      {
+        title: "Contact",
+        fields: [
+          { label: "Email", value: formatFieldValue(viewEmployee.email) },
+          { label: "Phone", value: formatFieldValue(viewEmployee.phone) },
+          { label: "Emergency Contact", value: formatFieldValue(viewEmployee.emergencyContact) },
+          { label: "Emergency Phone", value: formatFieldValue(viewEmployee.emergencyPhone) },
+          { label: "Address", value: formatFieldValue(viewEmployee.address) },
+        ],
+      },
+      {
+        title: "Employment",
+        fields: [
+          { label: "Position", value: formatFieldValue(viewEmployee.position) },
+          { label: "Department", value: formatFieldValue(viewEmployee.department?.name) },
+          { label: "Company", value: formatFieldValue(viewEmployee.company?.name) },
+          { label: "Start Date", value: formatFieldValue(viewEmployee.startDate, { type: "date" }) },
+          { label: "Status", value: formatFieldValue(viewEmployee.status) },
+          { label: "Work Location", value: formatFieldValue(viewEmployee.workLocation) },
+          {
+            label: "Standard Working Days",
+            value: formatFieldValue(viewEmployee.standardWorkingDays),
+          },
+          {
+            label: "Additions",
+            value: formatFieldValue(viewEmployee.additions, { type: "currency" }),
+          },
+          { label: "Salary", value: formatFieldValue(viewEmployee.salary, { type: "currency" }) },
+          { label: "Payment Method", value: formatFieldValue(viewEmployee.paymentMethod) },
+          { label: "Transferable", value: viewEmployee.transferable === undefined ? null : viewEmployee.transferable ? "Yes" : "No" },
+        ],
+      },
+      {
+        title: "Banking",
+        fields: [
+          { label: "Bank Name", value: formatFieldValue(viewEmployee.bankName) },
+          { label: "Bank IBAN", value: formatFieldValue(viewEmployee.bankIban) },
+          { label: "SWIFT Code", value: formatFieldValue(viewEmployee.swiftCode) },
+        ],
+      },
+      {
+        title: "Government IDs",
+        fields: [
+          { label: "National ID", value: formatFieldValue(viewEmployee.nationalId) },
+          { label: "Profession Code", value: formatFieldValue(viewEmployee.professionCode) },
+          { label: "Profession Category", value: formatFieldValue(viewEmployee.professionCategory) },
+        ],
+      },
+      {
+        title: "Residency",
+        fields: [
+          {
+            label: "Residency On Company",
+            value:
+              viewEmployee.residencyOnCompany === undefined
+                ? null
+                : viewEmployee.residencyOnCompany
+                  ? "Yes"
+                  : "No",
+          },
+          { label: "Residency Name", value: formatFieldValue(viewEmployee.residencyName) },
+        ],
+      },
+      {
+        title: "Visa Details",
+        fields: [
+          { label: "Visa Number", value: formatFieldValue(viewEmployee.visaNumber) },
+          { label: "Visa Type", value: formatFieldValue(viewEmployee.visaType) },
+          { label: "Visa Issue Date", value: formatFieldValue(viewEmployee.visaIssueDate, { type: "date" }) },
+          { label: "Visa Expiry Date", value: formatFieldValue(viewEmployee.visaExpiryDate, { type: "date" }) },
+          { label: "Visa Alert Days", value: formatFieldValue(viewEmployee.visaAlertDays) },
+        ],
+      },
+      {
+        title: "Civil ID Details",
+        fields: [
+          { label: "Civil ID Number", value: formatFieldValue(viewEmployee.civilId) },
+          { label: "Civil ID Issue Date", value: formatFieldValue(viewEmployee.civilIdIssueDate, { type: "date" }) },
+          { label: "Civil ID Expiry Date", value: formatFieldValue(viewEmployee.civilIdExpiryDate, { type: "date" }) },
+          { label: "Civil ID Alert Days", value: formatFieldValue(viewEmployee.civilIdAlertDays) },
+        ],
+      },
+      {
+        title: "Passport Details",
+        fields: [
+          { label: "Passport Number", value: formatFieldValue(viewEmployee.passportNumber) },
+          { label: "Passport Issue Date", value: formatFieldValue(viewEmployee.passportIssueDate, { type: "date" }) },
+          { label: "Passport Expiry Date", value: formatFieldValue(viewEmployee.passportExpiryDate, { type: "date" }) },
+          { label: "Passport Alert Days", value: formatFieldValue(viewEmployee.passportAlertDays) },
+        ],
+      },
+      {
+        title: "Licensing",
+        fields: [
+          { label: "Driving License Number", value: formatFieldValue(viewEmployee.drivingLicenseNumber) },
+          {
+            label: "Driving License Issue Date",
+            value: formatFieldValue(viewEmployee.drivingLicenseIssueDate, { type: "date" }),
+          },
+          {
+            label: "Driving License Expiry Date",
+            value: formatFieldValue(viewEmployee.drivingLicenseExpiryDate, { type: "date" }),
+          },
+        ],
+      },
+    ];
+  }, [viewEmployee]);
+
   // keep status in sync with prop changes
   useEffect(() => {
     const next = (initialStatusFilter || "all").toLowerCase();
@@ -551,54 +725,7 @@ export default function EmployeeTable({
               </DialogFooter>
               <div className="space-y-8">
                 <div className="rounded-xl bg-muted/40 p-6 shadow-sm">
-                  {[
-                    {
-                      title: "Identity",
-                    fields: [
-                      { label: "Nationality", value: viewEmployee.nationality },
-                      { label: "Profession Category", value: viewEmployee.professionCategory },
-                    ],
-                  },
-                  {
-                    title: "Employment",
-                    fields: [
-                      { label: "Payment Method", value: viewEmployee.paymentMethod },
-                      { label: "Transferable", value: viewEmployee.transferable ? "Yes" : "No" },
-                    ],
-                  },
-                  {
-                    title: "Licensing",
-                    fields: [
-                      { label: "Driving License Number", value: viewEmployee.drivingLicenseNumber },
-                      {
-                        label: "Issue Date",
-                        value: viewEmployee.drivingLicenseIssueDate ? formatDate(viewEmployee.drivingLicenseIssueDate) : null,
-                      },
-                      {
-                        label: "Expiry Date",
-                        value: viewEmployee.drivingLicenseExpiryDate ? formatDate(viewEmployee.drivingLicenseExpiryDate) : null,
-                      },
-                    ],
-                  },
-                  {
-                    title: "Banking",
-                    fields: [
-                      { label: "Bank IBAN", value: viewEmployee.bankIban },
-                      { label: "SWIFT Code", value: viewEmployee.swiftCode },
-                    ],
-                  },
-                  {
-                    title: "Residency",
-                    fields: [
-                      { label: "Residency On Company", value: viewEmployee.residencyOnCompany ? "Yes" : "No" },
-                      !viewEmployee.residencyOnCompany
-                        ? { label: "Residency Name", value: viewEmployee.residencyName }
-                        : null,
-                    ].filter(Boolean) as { label: string; value: string | null | undefined }[],
-                  },
-                ]
-                  .filter((section) => section.fields.some((field) => field.value && field.value !== ""))
-                  .map((section) => (
+                  {employeeSections.map((section) => (
                     <section key={section.title} className="space-y-4">
                       <div className="flex items-center gap-4">
                         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -613,7 +740,7 @@ export default function EmployeeTable({
                               {field.label}
                             </dt>
                             <dd className="text-sm text-foreground">
-                              {field.value && field.value !== "" ? field.value : "-"}
+                              {field.value !== null && field.value !== undefined && field.value !== "" ? field.value : "-"}
                             </dd>
                           </div>
                         ))}
@@ -622,8 +749,8 @@ export default function EmployeeTable({
                   ))}
               </div>
 
-                  {(() => {
-                    const documents = [
+              {(() => {
+                const documents = [
                   { key: "profileImage", label: "Profile Image" },
                   { key: "drivingLicenseImage", label: "Driving License" },
                   { key: "visaImage", label: "Visa Document" },
@@ -647,11 +774,14 @@ export default function EmployeeTable({
                       <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Documents</h3>
                       <div className="h-px flex-1 bg-border" />
                     </div>
-                    <div className="grid gap-4 sm:grid-cols-2">{documents.map((doc) => renderDocument(doc.value, doc.label, doc.key))}</div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {documents.map((doc) => renderDocument(doc.value, doc.label, doc.key))}
+                    </div>
                   </section>
                 );
               })()}
             </div>
+            </>
           )}
         </DialogContent>
       </Dialog>
