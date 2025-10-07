@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,15 +13,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import {
-  Eye,
-  Edit,
-  UserX,
-  User,
-  ArrowUpDown,
-  ChevronDown,
-  ChevronUp,
-} from "lucide-react";
+import { Eye, Edit, UserX, User, ArrowUpDown, ChevronDown, ChevronUp } from "lucide-react";
 import type { EmployeeWithDepartment, Department } from "@shared/schema";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { apiGet } from "@/lib/http";
@@ -32,8 +24,7 @@ interface EmployeesResponse {
 }
 
 interface EmployeeTableProps {
-  // retained for backwards compatibility but unused
-  employees?: EmployeeWithDepartment[];
+  employees?: EmployeeWithDepartment[]; // retained for backwards compatibility but unused
   isLoading?: boolean;
   onTerminateEmployee: (employeeId: string) => void;
   onEditEmployee: (employee: EmployeeWithDepartment) => void;
@@ -55,6 +46,7 @@ export default function EmployeeTable({
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
   const pageSize = 10;
+
   const [viewEmployee, setViewEmployee] = useState<EmployeeWithDepartment | null>(null);
   const [reportEmployee, setReportEmployee] = useState<EmployeeWithDepartment | null>(null);
   const [reportOptions, setReportOptions] = useState({
@@ -62,60 +54,104 @@ export default function EmployeeTable({
     loans: true,
     assets: true,
     breakdown: true,
-    start: '',
-    end: '',
-    language: 'en' as 'en' | 'ar',
+    start: "",
+    end: "",
+    language: "en" as "en" | "ar",
   });
 
+  // keep status in sync with prop changes
   useEffect(() => {
     const next = (initialStatusFilter || "all").toLowerCase();
     setStatusFilter((prev) => (prev === next ? prev : next));
   }, [initialStatusFilter]);
 
-  const today = new Date();
-  const defaultStart = new Date(today.getFullYear(), 0, 1).toISOString().split('T')[0];
-  const defaultEnd = today.toISOString().split('T')[0];
-  if (!reportOptions.start || !reportOptions.end) {
-    // lazy-init to avoid SSR mismatch warnings
-    setTimeout(() => setReportOptions((r) => ({ ...r, start: r.start || defaultStart, end: r.end || defaultEnd })), 0);
-  }
+  // initialize default report date range once (no state updates during render)
+  useEffect(() => {
+    if (!reportOptions.start || !reportOptions.end) {
+      const today = new Date();
+      const defaultStart = new Date(today.getFullYear(), 0, 1).toISOString().split("T")[0];
+      const defaultEnd = today.toISOString().split("T")[0];
+      setReportOptions((r) => ({
+        ...r,
+        start: r.start || defaultStart,
+        end: r.end || defaultEnd,
+      }));
+    }
+  }, [reportOptions.start, reportOptions.end]);
 
   async function exportEmployeeReportCSV(empId: string) {
     const params = new URLSearchParams();
-    if (reportOptions.start) params.set('startDate', reportOptions.start);
-    if (reportOptions.end) params.set('endDate', reportOptions.end);
+    if (reportOptions.start) params.set("startDate", reportOptions.start);
+    if (reportOptions.end) params.set("endDate", reportOptions.end);
     const res = await apiGet(`/api/reports/employees/${empId}?${params.toString()}`);
     if (!res.ok) return;
+
     const periods = res.data as any[];
     const rows: string[] = [];
     const header = [
-      'Period','Gross Pay','Net Pay','Bonuses','Commissions','Allowances','Overtime','Penalties','Deductions','Loan Deduction','Other Deductions','Tax','Social','Health','Working Days','Actual Working Days'
+      "Period",
+      "Gross Pay",
+      "Net Pay",
+      "Bonuses",
+      "Commissions",
+      "Allowances",
+      "Overtime",
+      "Penalties",
+      "Deductions",
+      "Loan Deduction",
+      "Other Deductions",
+      "Tax",
+      "Social",
+      "Health",
+      "Working Days",
+      "Actual Working Days",
     ];
-    rows.push(header.join(','));
+    rows.push(header.join(","));
+
     for (const p of periods) {
-      const gross = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.grossPay||0), 0);
-      const net = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.netPay||0), 0);
-      const tax = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.taxDeduction||0), 0);
-      const social = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.socialSecurityDeduction||0), 0);
-      const health = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.healthInsuranceDeduction||0), 0);
-      const loanDed = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.loanDeduction||0), 0);
-      const other = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.otherDeductions||0), 0);
+      const gross = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.grossPay || 0), 0);
+      const net = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.netPay || 0), 0);
+      const tax = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.taxDeduction || 0), 0);
+      const social = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.socialSecurityDeduction || 0), 0);
+      const health = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.healthInsuranceDeduction || 0), 0);
+      const loanDed = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.loanDeduction || 0), 0);
+      const other = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.otherDeductions || 0), 0);
+
       const evs = (p.employeeEvents || []) as any[];
-      const sumEv = (t: string) => evs.filter(e => e.eventType === t).reduce((s, e)=> s + Number(e.amount||0), 0);
-      const bonuses = sumEv('bonus');
-      const commissions = sumEv('commission');
-      const allowances = sumEv('allowance');
-      const overtime = sumEv('overtime');
-      const penalties = sumEv('penalty');
+      const sumEv = (t: string) => evs.filter((e) => e.eventType === t).reduce((s, e) => s + Number(e.amount || 0), 0);
+      const bonuses = sumEv("bonus");
+      const commissions = sumEv("commission");
+      const allowances = sumEv("allowance");
+      const overtime = sumEv("overtime");
+      const penalties = sumEv("penalty");
+
       const deductions = Number(p.totals?.deductions || 0);
-      const workingDays = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.workingDays||0), 0);
-      const actualWorkingDays = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.actualWorkingDays||0), 0);
-      const vals = [p.period, gross, net, bonuses, commissions, allowances, overtime, penalties, deductions, loanDed, other, tax, social, health, workingDays, actualWorkingDays]
-        .map(v => typeof v === 'number' ? v.toFixed(2) : String(v));
-      rows.push(vals.join(','));
+      const workingDays = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.workingDays || 0), 0);
+      const actualWorkingDays = (p.payrollEntries || []).reduce((s: number, e: any) => s + Number(e.actualWorkingDays || 0), 0);
+
+      const vals = [
+        p.period,
+        gross,
+        net,
+        bonuses,
+        commissions,
+        allowances,
+        overtime,
+        penalties,
+        deductions,
+        loanDed,
+        other,
+        tax,
+        social,
+        health,
+        workingDays,
+        actualWorkingDays,
+      ].map((v) => (typeof v === "number" ? v.toFixed(2) : String(v)));
+      rows.push(vals.join(","));
     }
-    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const a = document.createElement('a');
+
+    const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `employee-report-${empId}.csv`;
     a.click();
@@ -124,13 +160,12 @@ export default function EmployeeTable({
 
   const { data: departments } = useQuery<Department[]>({
     queryKey: ["/api/departments"],
+    // If you don't have a default queryFn set up, uncomment:
+    // queryFn: async () => (await apiGet("/api/departments")).data,
   });
 
   const { data, isLoading, error, refetch } = useQuery<EmployeesResponse>({
-    queryKey: [
-      "/api/employees",
-      { page, nameFilter, departmentFilter, statusFilter, sortBy, sortOrder },
-    ],
+    queryKey: ["/api/employees", { page, nameFilter, departmentFilter, statusFilter, sortBy, sortOrder }],
     placeholderData: keepPreviousData,
     queryFn: async ({ queryKey }): Promise<EmployeesResponse> => {
       const [_key, params] = queryKey as [
@@ -148,16 +183,12 @@ export default function EmployeeTable({
       searchParams.set("page", params.page.toString());
       searchParams.set("limit", pageSize.toString());
       if (params.nameFilter) searchParams.set("name", params.nameFilter);
-      if (params.departmentFilter !== "all")
-        searchParams.set("department", params.departmentFilter);
-      if (params.statusFilter)
-        searchParams.set("status", params.statusFilter);
+      if (params.departmentFilter !== "all") searchParams.set("department", params.departmentFilter);
+      if (params.statusFilter) searchParams.set("status", params.statusFilter);
       if (params.sortBy) searchParams.set("sort", params.sortBy);
       searchParams.set("order", params.sortOrder);
 
-      const res = await apiGet(
-        `/api/employees?${searchParams.toString()}`,
-      );
+      const res = await apiGet(`/api/employees?${searchParams.toString()}`);
       if (!res.ok) throw new Error(res.error || "Failed to load employees");
       const total = Number(res.headers?.get("X-Total-Count")) || 0;
       const employees = res.data;
@@ -177,34 +208,35 @@ export default function EmployeeTable({
   const employees: EmployeeWithDepartment[] = data?.data ?? [];
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / pageSize));
 
-
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'active':
-        return 'bg-success text-white';
-      case 'on_leave':
-        return 'bg-warning text-white';
-      case 'inactive':
-        return 'bg-gray-500 text-white';
-      case 'terminated':
-        return 'bg-destructive text-white';
+      case "active":
+        return "bg-success text-white";
+      case "on_leave":
+        return "bg-warning text-white";
+      case "inactive":
+        return "bg-gray-500 text-white";
+      case "resigned":
+        return "bg-orange-500 text-white";
+      case "terminated":
+        return "bg-destructive text-white";
       default:
-        return 'bg-secondary text-secondary-foreground';
+        return "bg-secondary text-secondary-foreground";
     }
   };
 
   const getStatusLabel = (status: string) => {
     switch (status) {
-      case 'active':
-        return 'Active';
-      case 'on_leave':
-        return 'On Leave';
-      case 'inactive':
-        return 'Inactive';
-      case 'terminated':
-        return 'Terminated';
-      case 'resigned':
-        return 'Resigned';
+      case "active":
+        return "Active";
+      case "on_leave":
+        return "On Leave";
+      case "inactive":
+        return "Inactive";
+      case "terminated":
+        return "Terminated";
+      case "resigned":
+        return "Resigned";
       default:
         return status;
     }
@@ -213,10 +245,14 @@ export default function EmployeeTable({
   const renderDocument = (
     value: string | null | undefined,
     label: string,
-    key?: string,
+    key?: string
   ) => {
     if (!value) return null;
-    const isPDF = value.startsWith("data:application/pdf");
+    const trimmedValue = value.trim();
+    const isPDF =
+      /^data:application\/pdf/i.test(trimmedValue) ||
+      trimmedValue.toLowerCase().endsWith(".pdf");
+
     return (
       <article
         key={key}
@@ -224,30 +260,24 @@ export default function EmployeeTable({
       >
         <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
           {isPDF ? (
-            <object data={value} type="application/pdf" className="h-full w-full">
+            <object data={trimmedValue} type="application/pdf" className="h-full w-full">
               <div className="flex h-full w-full flex-col items-center justify-center gap-1 p-4 text-xs text-muted-foreground">
                 <span>PDF preview unavailable.</span>
                 <span>Use the link below to open the document.</span>
               </div>
             </object>
           ) : (
-            <img
-              src={value}
-              alt={label}
-              className="h-full w-full object-cover"
-            />
+            <img src={trimmedValue} alt={label} className="h-full w-full object-cover" />
           )}
         </div>
         <div className="flex flex-1 flex-col gap-2 p-4">
           <div>
             <h4 className="font-medium text-foreground">{label}</h4>
-            <p className="text-xs text-muted-foreground">
-              Preview of the uploaded document.
-            </p>
+            <p className="text-xs text-muted-foreground">Preview of the uploaded document.</p>
           </div>
           <div className="mt-auto pt-2">
             <a
-              href={value}
+              href={trimmedValue}
               target="_blank"
               rel="noopener noreferrer"
               className="text-sm font-medium text-primary hover:underline"
@@ -261,7 +291,7 @@ export default function EmployeeTable({
   };
 
   const printEmployeeFile = async (employeeId: string) => {
-    window.open(`/employee-file?id=${encodeURIComponent(employeeId)}`, '_blank');
+    window.open(`/employee-file?id=${encodeURIComponent(employeeId)}`, "_blank");
   };
 
   const handleSort = (field: string) => {
@@ -324,9 +354,7 @@ export default function EmployeeTable({
       <div className="text-center py-12">
         <User className="mx-auto h-12 w-12 text-gray-300" />
         <h3 className="mt-2 text-sm font-medium text-gray-900">No employees found</h3>
-        <p className="mt-1 text-sm text-gray-500">
-          No employees match your current search criteria.
-        </p>
+        <p className="mt-1 text-sm text-gray-500">No employees match your current search criteria.</p>
       </div>
     );
   }
@@ -382,104 +410,32 @@ export default function EmployeeTable({
           </SelectContent>
         </Select>
       </div>
+
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50 dark:bg-gray-900">
           <tr>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              <button
-                type="button"
-                onClick={() => handleSort("name")}
-                className="flex items-center"
-              >
-                Employee
-                {sortBy === "name" ? (
-                  sortOrder === "asc" ? (
-                    <ChevronUp className="ml-1 h-4 w-4" />
+            {[
+              { key: "name", label: "Employee" },
+              { key: "position", label: "Position" },
+              { key: "department", label: "Department" },
+              { key: "salary", label: "Salary" },
+              { key: "status", label: "Status" },
+            ].map((col) => (
+              <th key={col.key} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <button type="button" onClick={() => handleSort(col.key)} className="flex items-center">
+                  {col.label}
+                  {sortBy === col.key ? (
+                    sortOrder === "asc" ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />
                   ) : (
-                    <ChevronDown className="ml-1 h-4 w-4" />
-                  )
-                ) : (
-                  <ArrowUpDown className="ml-1 h-4 w-4" />
-                )}
-              </button>
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              <button
-                type="button"
-                onClick={() => handleSort("position")}
-                className="flex items-center"
-              >
-                Position
-                {sortBy === "position" ? (
-                  sortOrder === "asc" ? (
-                    <ChevronUp className="ml-1 h-4 w-4" />
-                  ) : (
-                    <ChevronDown className="ml-1 h-4 w-4" />
-                  )
-                ) : (
-                  <ArrowUpDown className="ml-1 h-4 w-4" />
-                )}
-              </button>
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              <button
-                type="button"
-                onClick={() => handleSort("department")}
-                className="flex items-center"
-              >
-                Department
-                {sortBy === "department" ? (
-                  sortOrder === "asc" ? (
-                    <ChevronUp className="ml-1 h-4 w-4" />
-                  ) : (
-                    <ChevronDown className="ml-1 h-4 w-4" />
-                  )
-                ) : (
-                  <ArrowUpDown className="ml-1 h-4 w-4" />
-                )}
-              </button>
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              <button
-                type="button"
-                onClick={() => handleSort("salary")}
-                className="flex items-center"
-              >
-                Salary
-                {sortBy === "salary" ? (
-                  sortOrder === "asc" ? (
-                    <ChevronUp className="ml-1 h-4 w-4" />
-                  ) : (
-                    <ChevronDown className="ml-1 h-4 w-4" />
-                  )
-                ) : (
-                  <ArrowUpDown className="ml-1 h-4 w-4" />
-                )}
-              </button>
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              <button
-                type="button"
-                onClick={() => handleSort("status")}
-                className="flex items-center"
-              >
-                Status
-                {sortBy === "status" ? (
-                  sortOrder === "asc" ? (
-                    <ChevronUp className="ml-1 h-4 w-4" />
-                  ) : (
-                    <ChevronDown className="ml-1 h-4 w-4" />
-                  )
-                ) : (
-                  <ArrowUpDown className="ml-1 h-4 w-4" />
-                )}
-              </button>
-            </th>
-            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Actions
-            </th>
+                    <ArrowUpDown className="ml-1 h-4 w-4" />
+                  )}
+                </button>
+              </th>
+            ))}
+            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
           </tr>
         </thead>
+
         <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
           {employees.map((employee) => (
             <tr key={employee.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
@@ -493,7 +449,7 @@ export default function EmployeeTable({
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <User className="text-gray-600" size={16} />
+                      <User className="text-gray-600" size={16} aria-hidden="true" />
                     )}
                   </div>
                   <div className="ml-4">
@@ -504,20 +460,16 @@ export default function EmployeeTable({
                   </div>
                 </div>
               </td>
+
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{employee.position}</td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {employee.position}
+                {employee.department?.name || "No Department"}
               </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {employee.department?.name || 'No Department'}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {formatCurrency(employee.salary)}
-              </td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatCurrency(employee.salary)}</td>
               <td className="px-6 py-4 whitespace-nowrap">
-                <Badge className={getStatusColor(employee.status)}>
-                  {getStatusLabel(employee.status)}
-                </Badge>
+                <Badge className={getStatusColor(employee.status)}>{getStatusLabel(employee.status)}</Badge>
               </td>
+
               <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                 <div className="flex justify-end space-x-2">
                   <Button
@@ -560,24 +512,13 @@ export default function EmployeeTable({
           ))}
         </tbody>
       </table>
+
       <div className="flex items-center justify-between py-4">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setPage((p) => Math.max(p - 1, 1))}
-          disabled={page === 1}
-        >
+        <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(p - 1, 1))} disabled={page === 1}>
           Previous
         </Button>
-        <span className="text-sm text-gray-700">
-          Page {page} of {totalPages}
-        </span>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setPage((p) => p + 1)}
-          disabled={page >= totalPages}
-        >
+        <span className="text-sm text-gray-700">Page {page} of {totalPages}</span>
+        <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page >= totalPages}>
           Next
         </Button>
       </div>
@@ -589,6 +530,7 @@ export default function EmployeeTable({
               {viewEmployee?.firstName} {viewEmployee?.lastName}
             </DialogTitle>
           </DialogHeader>
+
           {viewEmployee && (
             <div className="space-y-8">
               <div className="rounded-xl bg-muted/40 p-6 shadow-sm">
@@ -597,40 +539,27 @@ export default function EmployeeTable({
                     title: "Identity",
                     fields: [
                       { label: "Nationality", value: viewEmployee.nationality },
-                      {
-                        label: "Profession Category",
-                        value: viewEmployee.professionCategory,
-                      },
+                      { label: "Profession Category", value: viewEmployee.professionCategory },
                     ],
                   },
                   {
                     title: "Employment",
                     fields: [
                       { label: "Payment Method", value: viewEmployee.paymentMethod },
-                      {
-                        label: "Transferable",
-                        value: viewEmployee.transferable ? "Yes" : "No",
-                      },
+                      { label: "Transferable", value: viewEmployee.transferable ? "Yes" : "No" },
                     ],
                   },
                   {
                     title: "Licensing",
                     fields: [
-                      {
-                        label: "Driving License Number",
-                        value: viewEmployee.drivingLicenseNumber,
-                      },
+                      { label: "Driving License Number", value: viewEmployee.drivingLicenseNumber },
                       {
                         label: "Issue Date",
-                        value: viewEmployee.drivingLicenseIssueDate
-                          ? formatDate(viewEmployee.drivingLicenseIssueDate)
-                          : null,
+                        value: viewEmployee.drivingLicenseIssueDate ? formatDate(viewEmployee.drivingLicenseIssueDate) : null,
                       },
                       {
                         label: "Expiry Date",
-                        value: viewEmployee.drivingLicenseExpiryDate
-                          ? formatDate(viewEmployee.drivingLicenseExpiryDate)
-                          : null,
+                        value: viewEmployee.drivingLicenseExpiryDate ? formatDate(viewEmployee.drivingLicenseExpiryDate) : null,
                       },
                     ],
                   },
@@ -644,22 +573,14 @@ export default function EmployeeTable({
                   {
                     title: "Residency",
                     fields: [
-                      {
-                        label: "Residency On Company",
-                        value: viewEmployee.residencyOnCompany ? "Yes" : "No",
-                      },
+                      { label: "Residency On Company", value: viewEmployee.residencyOnCompany ? "Yes" : "No" },
                       !viewEmployee.residencyOnCompany
-                        ? {
-                            label: "Residency Name",
-                            value: viewEmployee.residencyName,
-                          }
+                        ? { label: "Residency Name", value: viewEmployee.residencyName }
                         : null,
                     ].filter(Boolean) as { label: string; value: string | null | undefined }[],
                   },
                 ]
-                  .filter((section) =>
-                    section.fields.some((field) => field.value && field.value !== ""),
-                  )
+                  .filter((section) => section.fields.some((field) => field.value && field.value !== ""))
                   .map((section) => (
                     <section key={section.title} className="space-y-4">
                       <div className="flex items-center gap-4">
@@ -697,10 +618,7 @@ export default function EmployeeTable({
                   .map(({ key, label }) => ({
                     key,
                     label,
-                    value: viewEmployee[key as keyof EmployeeWithDepartment] as
-                      | string
-                      | null
-                      | undefined,
+                    value: viewEmployee[key as keyof EmployeeWithDepartment] as string | null | undefined,
                   }))
                   .filter((doc) => !!doc.value);
 
@@ -709,16 +627,10 @@ export default function EmployeeTable({
                 return (
                   <section className="space-y-4">
                     <div className="flex items-center gap-4">
-                      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Documents
-                      </h3>
+                      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Documents</h3>
                       <div className="h-px flex-1 bg-border" />
                     </div>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      {documents.map((doc) =>
-                        renderDocument(doc.value, doc.label, doc.key),
-                      )}
-                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">{documents.map((doc) => renderDocument(doc.value, doc.label, doc.key))}</div>
                   </section>
                 );
               })()}
@@ -728,42 +640,81 @@ export default function EmployeeTable({
       </Dialog>
 
       {/* Report Options Dialog */}
-      <Dialog open={!!reportEmployee} onOpenChange={(o)=> !o && setReportEmployee(null)}>
+      <Dialog open={!!reportEmployee} onOpenChange={(o) => !o && setReportEmployee(null)}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Generate Report</DialogTitle>
           </DialogHeader>
+
           <div className="space-y-3 text-sm">
             <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2"><input type="checkbox" checked={reportOptions.documents} onChange={e => setReportOptions(r => ({...r, documents: e.target.checked}))} /> Include Documents</label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={reportOptions.documents}
+                  onChange={(e) => setReportOptions((r) => ({ ...r, documents: e.target.checked }))}
+                />
+                Include Documents
+              </label>
             </div>
             <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2"><input type="checkbox" checked={reportOptions.loans} onChange={e => setReportOptions(r => ({...r, loans: e.target.checked}))} /> Include Loans</label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={reportOptions.loans}
+                  onChange={(e) => setReportOptions((r) => ({ ...r, loans: e.target.checked }))}
+                />
+                Include Loans
+              </label>
             </div>
             <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2"><input type="checkbox" checked={reportOptions.assets} onChange={e => setReportOptions(r => ({...r, assets: e.target.checked}))} /> Include Asset Assignments</label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={reportOptions.assets}
+                  onChange={(e) => setReportOptions((r) => ({ ...r, assets: e.target.checked }))}
+                />
+                Include Asset Assignments
+              </label>
             </div>
             <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2"><input type="checkbox" checked={reportOptions.breakdown} onChange={e => setReportOptions(r => ({...r, breakdown: e.target.checked}))} /> Include Breakdown (bonuses, deductions, commissions)</label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={reportOptions.breakdown}
+                  onChange={(e) => setReportOptions((r) => ({ ...r, breakdown: e.target.checked }))}
+                />
+                Include Breakdown (bonuses, deductions, commissions)
+              </label>
             </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-muted-foreground mb-1">Start</label>
-                <input type="date" className="border rounded px-2 py-1 w-full" value={reportOptions.start} onChange={e => setReportOptions(r => ({...r, start: e.target.value}))} />
+                <input
+                  type="date"
+                  className="border rounded px-2 py-1 w-full"
+                  value={reportOptions.start}
+                  onChange={(e) => setReportOptions((r) => ({ ...r, start: e.target.value }))}
+                />
               </div>
               <div>
                 <label className="block text-muted-foreground mb-1">End</label>
-                <input type="date" className="border rounded px-2 py-1 w-full" value={reportOptions.end} onChange={e => setReportOptions(r => ({...r, end: e.target.value}))} />
+                <input
+                  type="date"
+                  className="border rounded px-2 py-1 w-full"
+                  value={reportOptions.end}
+                  onChange={(e) => setReportOptions((r) => ({ ...r, end: e.target.value }))}
+                />
               </div>
             </div>
+
             <div>
               <label className="block text-muted-foreground mb-1">Language</label>
               <RadioGroup
                 className="flex flex-wrap gap-4"
                 value={reportOptions.language}
-                onValueChange={(value) =>
-                  setReportOptions((r) => ({ ...r, language: value === 'ar' ? 'ar' : 'en' }))
-                }
+                onValueChange={(value) => setReportOptions((r) => ({ ...r, language: value === "ar" ? "ar" : "en" }))}
               >
                 <div className="flex items-center gap-2">
                   <RadioGroupItem id="employee-report-language-en" value="en" />
@@ -780,29 +731,43 @@ export default function EmployeeTable({
               </RadioGroup>
             </div>
           </div>
+
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setReportEmployee(null)}>Cancel</Button>
-            <Button variant="outline" onClick={async () => {
-              if (!reportEmployee) return;
-              await exportEmployeeReportCSV(reportEmployee.id);
-            }}>Export Excel</Button>
-            <Button onClick={() => {
-              if (!reportEmployee) return;
-              const sections = [
-                reportOptions.documents ? 'documents' : null,
-                reportOptions.loans ? 'loans' : null,
-                reportOptions.assets ? 'assets' : null,
-                reportOptions.breakdown ? 'breakdown' : null,
-              ].filter(Boolean).join(',');
-              const qs: string[] = [];
-              if (sections) qs.push(`sections=${encodeURIComponent(sections)}`);
-              if (reportOptions.start) qs.push(`startDate=${encodeURIComponent(reportOptions.start)}`);
-              if (reportOptions.end) qs.push(`endDate=${encodeURIComponent(reportOptions.end)}`);
-              if (reportOptions.language) qs.push(`lang=${encodeURIComponent(reportOptions.language)}`);
-              const url = `/employee-file?id=${encodeURIComponent(reportEmployee.id)}${qs.length ? `&${qs.join('&')}`: ''}`;
-              window.open(url, '_blank');
-              setReportEmployee(null);
-            }}>Generate</Button>
+            <Button variant="outline" onClick={() => setReportEmployee(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                if (!reportEmployee) return;
+                await exportEmployeeReportCSV(reportEmployee.id);
+              }}
+            >
+              Export CSV
+            </Button>
+            <Button
+              onClick={() => {
+                if (!reportEmployee) return;
+                const sections = [
+                  reportOptions.documents ? "documents" : null,
+                  reportOptions.loans ? "loans" : null,
+                  reportOptions.assets ? "assets" : null,
+                  reportOptions.breakdown ? "breakdown" : null,
+                ]
+                  .filter(Boolean)
+                  .join(",");
+                const qs: string[] = [];
+                if (sections) qs.push(`sections=${encodeURIComponent(sections)}`);
+                if (reportOptions.start) qs.push(`startDate=${encodeURIComponent(reportOptions.start)}`);
+                if (reportOptions.end) qs.push(`endDate=${encodeURIComponent(reportOptions.end)}`);
+                if (reportOptions.language) qs.push(`lang=${encodeURIComponent(reportOptions.language)}`);
+                const url = `/employee-file?id=${encodeURIComponent(reportEmployee.id)}${qs.length ? `&${qs.join("&")}` : ""}`;
+                window.open(url, "_blank");
+                setReportEmployee(null);
+              }}
+            >
+              Generate
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
