@@ -46,6 +46,7 @@ loansRouter.post("/", requireRole(["admin", "hr"]), async (req, res, next) => {
         amount: '0',
         eventDate: new Date().toISOString().split('T')[0],
         affectsPayroll: true,
+        recurrenceType: 'none',
       });
     } catch {}
     res.status(201).json(newLoan);
@@ -76,6 +77,7 @@ loansRouter.put("/:id", requireRole(["admin", "hr"]), async (req, res, next) => 
         amount: '0',
         eventDate: new Date().toISOString().split('T')[0],
         affectsPayroll: true,
+        recurrenceType: 'none',
       });
     } catch {}
     res.json(updatedLoan);
@@ -105,6 +107,7 @@ loansRouter.delete("/:id", requireRole(["admin", "hr"]), async (req, res, next) 
           amount: '0',
           eventDate: new Date().toISOString().split('T')[0],
           affectsPayroll: false,
+          recurrenceType: 'none',
         });
       }
     } catch {}

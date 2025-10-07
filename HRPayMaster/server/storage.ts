@@ -6,6 +6,7 @@ import {
   gte,
   ilike,
   inArray,
+  isNull,
   lte,
   ne,
   or,
@@ -512,6 +513,131 @@ export class DatabaseStorage implements IStorage {
     }
 
     return conditions;
+  }
+
+  private normalizeDateInput(value: string | Date | null | undefined): string | undefined {
+    if (!value) return undefined;
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed) return undefined;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+        return trimmed;
+      }
+      const parsed = new Date(trimmed);
+      if (Number.isNaN(parsed.getTime())) return undefined;
+      return parsed.toISOString().split("T")[0];
+    }
+    if (value instanceof Date) {
+      if (Number.isNaN(value.getTime())) return undefined;
+      return value.toISOString().split("T")[0];
+    }
+    return undefined;
+  }
+
+  private addMonths(dateString: string, monthsToAdd: number, referenceDay?: number): string {
+    const [yearStr, monthStr, dayStr] = dateString.split("-");
+    const year = Number(yearStr);
+    const month = Number(monthStr);
+    const day = referenceDay ?? Number(dayStr);
+    if (!Number.isFinite(year) || !Number.isFinite(month)) {
+      return dateString;
+    }
+    const base = new Date(Date.UTC(year, month - 1 + monthsToAdd, 1));
+    const daysInMonth = new Date(
+      Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + 1, 0),
+    ).getUTCDate();
+    const finalDay = Math.min(Math.max(day || 1, 1), daysInMonth);
+    const next = new Date(
+      Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), finalDay),
+    );
+    return next.toISOString().split("T")[0];
+  }
+
+  private expandRecurringEmployeeEvents<
+    T extends {
+      id: string;
+      eventDate: string;
+      eventType: string;
+      recurrenceType?: string | null;
+      recurrenceEndDate?: string | null;
+    },
+  >(events: T[], rangeStart?: string, rangeEnd?: string): T[] {
+    if (!rangeStart || !rangeEnd) {
+      return events.slice();
+    }
+
+    const normalizedStart = rangeStart;
+    const normalizedEnd = rangeEnd;
+    const results: T[] = [];
+    const seen = new Set<string>();
+
+    const addOccurrence = (event: T, occurrenceDate: string) => {
+      if (occurrenceDate < normalizedStart || occurrenceDate > normalizedEnd) {
+        return;
+      }
+      const key = `${event.id}|${occurrenceDate}`;
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      if (event.eventDate === occurrenceDate) {
+        results.push(event);
+      } else {
+        results.push({ ...event, eventDate: occurrenceDate });
+      }
+    };
+
+    for (const event of events) {
+      const normalizedEventDate = this.normalizeDateInput(event.eventDate) ?? event.eventDate;
+      const baseEvent =
+        normalizedEventDate === event.eventDate
+          ? event
+          : ({ ...event, eventDate: normalizedEventDate } as T);
+
+      if (
+        normalizedEventDate >= normalizedStart &&
+        normalizedEventDate <= normalizedEnd
+      ) {
+        addOccurrence(baseEvent, normalizedEventDate);
+      }
+
+      if (baseEvent.eventType !== "allowance" || baseEvent.recurrenceType !== "monthly") {
+        continue;
+      }
+
+      const recurrenceStart = this.normalizeDateInput(baseEvent.eventDate);
+      if (!recurrenceStart || recurrenceStart > normalizedEnd) {
+        continue;
+      }
+
+      const recurrenceEnd = this.normalizeDateInput(
+        baseEvent.recurrenceEndDate ?? undefined,
+      );
+      if (recurrenceEnd && recurrenceEnd < normalizedStart) {
+        continue;
+      }
+
+      const targetEnd =
+        recurrenceEnd && recurrenceEnd < normalizedEnd ? recurrenceEnd : normalizedEnd;
+      const originalDay = parseInt(recurrenceStart.split("-")[2] ?? "1", 10) || 1;
+
+      let occurrence = recurrenceStart;
+      while (occurrence < normalizedStart) {
+        occurrence = this.addMonths(occurrence, 1, originalDay);
+      }
+
+      while (occurrence <= targetEnd) {
+        addOccurrence(baseEvent, occurrence);
+        occurrence = this.addMonths(occurrence, 1, originalDay);
+      }
+    }
+
+    return results.sort((a, b) => {
+      if (a.eventDate === b.eventDate) {
+        return 0;
+      }
+      return a.eventDate > b.eventDate ? -1 : 1;
+    });
   }
 
   async getEmployees(filters: EmployeeFilters = {}): Promise<EmployeeWithDepartment[]> {
@@ -3062,45 +3188,44 @@ export class DatabaseStorage implements IStorage {
   // Employee event methods
 
   async getEmployeeEvents(
-
     start?: Date,
-
     end?: Date,
-
   ): Promise<(EmployeeEvent & { employee: Employee })[]> {
+    const rangeStart = this.normalizeDateInput(start);
+    const rangeEnd = this.normalizeDateInput(end);
 
-    const where =
-
-      start && end
-
-        ? and(
-
-            gte(employeeEvents.eventDate, start.toISOString().split("T")[0]),
-
-            lte(employeeEvents.eventDate, end.toISOString().split("T")[0]),
-
-          )
-
-        : undefined;
-
-
+    let where;
+    if (rangeStart && rangeEnd) {
+      where = or(
+        and(
+          gte(employeeEvents.eventDate, rangeStart),
+          lte(employeeEvents.eventDate, rangeEnd),
+        ),
+        and(
+          eq(employeeEvents.eventType, "allowance"),
+          eq(employeeEvents.recurrenceType, "monthly"),
+          lte(employeeEvents.eventDate, rangeEnd),
+          or(
+            isNull(employeeEvents.recurrenceEndDate),
+            gte(employeeEvents.recurrenceEndDate, rangeStart),
+          ),
+        ),
+      );
+    }
 
     const events = await db.query.employeeEvents.findMany({
-
       with: {
-
         employee: true,
-
       },
-
       where,
-
       orderBy: desc(employeeEvents.createdAt),
-
     });
 
-    return events;
+    if (!rangeStart || !rangeEnd) {
+      return events;
+    }
 
+    return this.expandRecurringEmployeeEvents(events, rangeStart, rangeEnd);
   }
 
 
@@ -3128,6 +3253,8 @@ export class DatabaseStorage implements IStorage {
         status: event.status || "active",
 
         affectsPayroll: event.affectsPayroll ?? true,
+
+        recurrenceType: event.recurrenceType ?? "none",
 
       })
 
@@ -3263,11 +3390,37 @@ export class DatabaseStorage implements IStorage {
 
               eq(employeeEvents.employeeId, employeeId),
 
-              gte(employeeEvents.eventDate, startDate),
+              eq(employeeEvents.affectsPayroll, true),
 
-              lte(employeeEvents.eventDate, endDate),
+              or(
 
-              eq(employeeEvents.affectsPayroll, true)
+                and(
+
+                  gte(employeeEvents.eventDate, startDate),
+
+                  lte(employeeEvents.eventDate, endDate),
+
+                ),
+
+                and(
+
+                  eq(employeeEvents.eventType, "allowance"),
+
+                  eq(employeeEvents.recurrenceType, "monthly"),
+
+                  lte(employeeEvents.eventDate, endDate),
+
+                  or(
+
+                    isNull(employeeEvents.recurrenceEndDate),
+
+                    gte(employeeEvents.recurrenceEndDate, startDate),
+
+                  ),
+
+                ),
+
+              ),
 
             )
 
@@ -3277,13 +3430,23 @@ export class DatabaseStorage implements IStorage {
 
 
 
+      const expandedEvents = this.expandRecurringEmployeeEvents(
+
+        eventRows,
+
+        startDate,
+
+        endDate,
+
+      );
+
       return {
 
         payroll: payrollRows.map((r) => r.entry),
 
         loans: loansRows,
 
-        events: eventRows,
+        events: expandedEvents,
 
       };
 
@@ -3343,15 +3506,9 @@ export class DatabaseStorage implements IStorage {
 
 
 
-    const eventRows = await db
+    const rawEventRows = await db
 
-      .select({
-
-        period: periodExpr(employeeEvents.eventDate),
-
-        event: employeeEvents,
-
-      })
+      .select()
 
       .from(employeeEvents)
 
@@ -3361,11 +3518,37 @@ export class DatabaseStorage implements IStorage {
 
           eq(employeeEvents.employeeId, employeeId),
 
-          gte(employeeEvents.eventDate, startDate),
+          eq(employeeEvents.affectsPayroll, true),
 
-          lte(employeeEvents.eventDate, endDate),
+          or(
 
-          eq(employeeEvents.affectsPayroll, true)
+            and(
+
+              gte(employeeEvents.eventDate, startDate),
+
+              lte(employeeEvents.eventDate, endDate),
+
+            ),
+
+            and(
+
+              eq(employeeEvents.eventType, "allowance"),
+
+              eq(employeeEvents.recurrenceType, "monthly"),
+
+              lte(employeeEvents.eventDate, endDate),
+
+              or(
+
+                isNull(employeeEvents.recurrenceEndDate),
+
+                gte(employeeEvents.recurrenceEndDate, startDate),
+
+              ),
+
+            ),
+
+          ),
 
         )
 
@@ -3463,9 +3646,37 @@ export class DatabaseStorage implements IStorage {
 
     });
 
-    eventRows.forEach(({ period, event }) => {
+    const expandedEventRows = this.expandRecurringEmployeeEvents(
 
-      ensure(period).employeeEvents.push(event);
+      rawEventRows,
+
+      startDate,
+
+      endDate,
+
+    );
+
+    const resolvePeriod = (date?: string | null) => {
+
+      const normalized = this.normalizeDateInput(date);
+
+      if (!normalized) {
+
+        return undefined;
+
+      }
+
+      return groupBy === "year" ? normalized.slice(0, 4) : normalized.slice(0, 7);
+
+    };
+
+    expandedEventRows.forEach(event => {
+
+      const periodKey = resolvePeriod(event.eventDate);
+
+      if (!periodKey) return;
+
+      ensure(periodKey).employeeEvents.push(event);
 
     });
 

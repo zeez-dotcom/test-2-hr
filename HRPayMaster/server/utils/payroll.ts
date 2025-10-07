@@ -31,6 +31,8 @@ export interface EmployeeEvent {
   affectsPayroll: boolean;
   status: string;
   amount: string;
+  recurrenceType?: "none" | "monthly" | null;
+  recurrenceEndDate?: string | null;
 }
 
 export interface EmployeePayroll {
@@ -115,18 +117,56 @@ export function calculateEmployeePayroll({
       }, 0)
     : 0;
 
-  const employeeEventsInPeriod = employeeEvents.filter(event =>
+  const toDateOrUndefined = (value: string | null | undefined) => {
+    if (!value) return undefined;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? undefined : date;
+  };
+
+  const isWithinRange = (value: string | null | undefined) => {
+    const date = toDateOrUndefined(value ?? undefined);
+    if (!date) return false;
+    return date >= start && date <= end;
+  };
+
+  const overlapsRange = (event: EmployeeEvent) => {
+    const recurrenceStart = toDateOrUndefined(event.eventDate);
+    if (!recurrenceStart) return false;
+    if (recurrenceStart > end) return false;
+    const recurrenceEnd = toDateOrUndefined(event.recurrenceEndDate ?? undefined);
+    if (!recurrenceEnd) return true;
+    return recurrenceEnd >= start;
+  };
+
+  const employeeEventsForEmployee = employeeEvents.filter(event =>
     event.employeeId === employee.id &&
     event.affectsPayroll &&
     event.status === "active" &&
-    new Date(event.eventDate) >= start &&
-    new Date(event.eventDate) <= end &&
     event.eventType !== "vacation"
   );
 
+  const employeeEventsInPeriod = employeeEventsForEmployee.filter(event =>
+    isWithinRange(event.eventDate)
+  );
+
+  const recurringAllowanceTotal = employeeEventsForEmployee
+    .filter(
+      event =>
+        event.eventType === "allowance" &&
+        event.recurrenceType === "monthly" &&
+        overlapsRange(event),
+    )
+    .reduce((total, event) => {
+      if (isWithinRange(event.eventDate)) {
+        return total;
+      }
+      return total + parseFloat(event.amount);
+    }, 0);
+
   const bonusAmount = employeeEventsInPeriod
     .filter(event => ["bonus", "commission", "allowance", "overtime"].includes(event.eventType))
-    .reduce((total, event) => total + parseFloat(event.amount), 0);
+    .reduce((total, event) => total + parseFloat(event.amount), 0) +
+    recurringAllowanceTotal;
 
   const eventDeductions = employeeEventsInPeriod
     .filter(event => ["deduction", "penalty"].includes(event.eventType))

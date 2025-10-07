@@ -70,6 +70,7 @@ export default function EmployeeEvents() {
       affectsPayroll: true,
       status: "active",
       eventDate: format(new Date(), 'yyyy-MM-dd'),
+      recurrenceType: "none",
     },
   });
 
