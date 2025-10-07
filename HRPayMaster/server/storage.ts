@@ -3190,28 +3190,50 @@ export class DatabaseStorage implements IStorage {
   async getEmployeeEvents(
     start?: Date,
     end?: Date,
+    filters?: {
+      employeeId?: string;
+      eventType?: InsertEmployeeEvent["eventType"];
+    },
   ): Promise<(EmployeeEvent & { employee: Employee })[]> {
     const rangeStart = this.normalizeDateInput(start);
     const rangeEnd = this.normalizeDateInput(end);
 
-    let where;
+    const conditions: (SQL | undefined)[] = [];
+
+    if (filters?.employeeId) {
+      conditions.push(eq(employeeEvents.employeeId, filters.employeeId));
+    }
+
+    if (filters?.eventType) {
+      conditions.push(eq(employeeEvents.eventType, filters.eventType));
+    }
+
     if (rangeStart && rangeEnd) {
-      where = or(
-        and(
-          gte(employeeEvents.eventDate, rangeStart),
-          lte(employeeEvents.eventDate, rangeEnd),
-        ),
-        and(
-          eq(employeeEvents.eventType, "allowance"),
-          eq(employeeEvents.recurrenceType, "monthly"),
-          lte(employeeEvents.eventDate, rangeEnd),
-          or(
-            isNull(employeeEvents.recurrenceEndDate),
-            gte(employeeEvents.recurrenceEndDate, rangeStart),
+      conditions.push(
+        or(
+          and(
+            gte(employeeEvents.eventDate, rangeStart),
+            lte(employeeEvents.eventDate, rangeEnd),
+          ),
+          and(
+            eq(employeeEvents.eventType, "allowance"),
+            eq(employeeEvents.recurrenceType, "monthly"),
+            lte(employeeEvents.eventDate, rangeEnd),
+            or(
+              isNull(employeeEvents.recurrenceEndDate),
+              gte(employeeEvents.recurrenceEndDate, rangeStart),
+            ),
           ),
         ),
       );
     }
+
+    const activeConditions = conditions.filter(Boolean) as SQL[];
+    const where = activeConditions.length
+      ? activeConditions.length === 1
+        ? activeConditions[0]
+        : and(...activeConditions)
+      : undefined;
 
     const events = await db.query.employeeEvents.findMany({
       with: {

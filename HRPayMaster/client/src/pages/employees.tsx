@@ -296,6 +296,7 @@ export default function Employees({ defaultStatus = "active" }: EmployeesProps) 
                     onSubmit={handleUpdateEmployee}
                     isSubmitting={updateEmployeeMutation.isPending}
                     initialData={initialData}
+                    employeeId={editingEmployee.id}
                   />
                 );
               })()}
