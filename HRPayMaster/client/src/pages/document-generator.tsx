@@ -14,10 +14,12 @@ import { apiPost, apiPut } from "@/lib/http";
 import { getBrand } from "@/lib/brand";
 import { sanitizeImageSrc } from "@/lib/sanitizeImageSrc";
 import { defaultTemplates, type TemplateKey } from "@/lib/default-templates";
+import { expandEventsWithRecurringAllowances, parseDateInput, isDateWithinRange } from "@/lib/employee-events";
+import type { EmployeeEvent } from "@shared/schema";
 
 export default function DocumentGenerator() {
   const { data: employees = [] } = useQuery<any[]>({ queryKey: ["/api/employees"] });
-  const { data: events = [] } = useQuery<any[]>({ queryKey: ["/api/employee-events"] });
+  const { data: events = [] } = useQuery<EmployeeEvent[]>({ queryKey: ["/api/employee-events"] });
   const { data: assetAssignments = [] } = useQuery<any[]>({ queryKey: ["/api/asset-assignments"] });
 
   const [mode, setMode] = useState<'employee'|'custom'>("employee");
@@ -57,7 +59,19 @@ export default function DocumentGenerator() {
   }
 
   const selectedEmployee = useMemo(() => employees.find((e: any) => e.id === employeeId), [employees, employeeId]);
-  const employeeEvents = useMemo(() => (events as any[]).filter(e => e.employeeId === employeeId), [events, employeeId]);
+  const employeeEventsRaw = useMemo(
+    () => (events as EmployeeEvent[]).filter(e => e.employeeId === employeeId),
+    [events, employeeId],
+  );
+  const employeeEvents = useMemo(
+    () => {
+      const expanded = expandEventsWithRecurringAllowances(employeeEventsRaw);
+      return expanded.sort(
+        (a, b) => (parseDateInput(a.eventDate)?.getTime() ?? 0) - (parseDateInput(b.eventDate)?.getTime() ?? 0),
+      );
+    },
+    [employeeEventsRaw],
+  );
   const employeeActiveAssignments = useMemo(
     () => (assetAssignments as any[]).filter((assignment) => assignment.employeeId === employeeId && assignment.status === "active"),
     [assetAssignments, employeeId]
@@ -408,7 +422,7 @@ function EmployeesDrawer({ employees, assignments }: { employees: any[]; assignm
   const [employeeId, setEmployeeId] = useState<string>("");
   const [start, setStart] = useState<string>(() => new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0]);
   const [end, setEnd] = useState<string>(() => new Date().toISOString().split('T')[0]);
-  const { data: events = [] } = useQuery<any[]>({ queryKey: ["/api/employee-events"] });
+  const { data: events = [] } = useQuery<EmployeeEvent[]>({ queryKey: ["/api/employee-events"] });
   const { data: loans = [] } = useQuery<any[]>({ queryKey: ["/api/loans"] });
   const { data: report = [] } = useQuery<any[]>({
     queryKey: ["/api/reports/employees", employeeId, start, end],
@@ -422,7 +436,21 @@ function EmployeesDrawer({ employees, assignments }: { employees: any[]; assignm
   });
   const emp = employees.find((e)=> e.id === employeeId) || {} as any;
   const brand = getBrand();
-  const empEvents = (events as any[]).filter((e)=> e.employeeId === employeeId).sort((a,b)=> +new Date(a.eventDate) - +new Date(b.eventDate));
+  const empEvents = useMemo(() => {
+    if (!employeeId) return [] as Array<EmployeeEvent & { recurrenceOccurrenceId?: string }>;
+    const base = (events as EmployeeEvent[]).filter((e) => e.employeeId === employeeId);
+    const rangeStart = parseDateInput(start);
+    const rangeEnd = parseDateInput(end);
+    const expanded = expandEventsWithRecurringAllowances(base, {
+      rangeStart: rangeStart ?? undefined,
+      rangeEnd: rangeEnd ?? undefined,
+    });
+    return expanded
+      .filter(event => isDateWithinRange(event.eventDate, rangeStart ?? undefined, rangeEnd ?? undefined))
+      .sort(
+        (a, b) => (parseDateInput(a.eventDate)?.getTime() ?? 0) - (parseDateInput(b.eventDate)?.getTime() ?? 0),
+      );
+  }, [events, employeeId, start, end]);
   const empLoans = (loans as any[]).filter((l)=> l.employeeId === employeeId);
   const activeAssignments = useMemo(
     () => (assignments as any[]).filter((assignment) => assignment.employeeId === employeeId && assignment.status === "active"),
@@ -561,7 +589,7 @@ function EmployeesDrawer({ employees, assignments }: { employees: any[]; assignm
                 <div className="text-xs text-muted-foreground">No events in this range.</div>
               ) : (
                 empEvents.map((ev)=> (
-                  <div key={ev.id} className="border rounded p-2 flex items-center justify-between">
+                  <div key={ev.recurrenceOccurrenceId ?? ev.id} className="border rounded p-2 flex items-center justify-between">
                     <div className="text-xs"><span className="text-muted-foreground mr-2">[{new Date(ev.eventDate).toLocaleDateString()}]</span>{ev.title}</div>
                     <div className="text-xs text-muted-foreground">{ev.eventType}{ev.amount?` • ${ev.amount}`:''}</div>
                   </div>
