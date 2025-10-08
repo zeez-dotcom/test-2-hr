@@ -39,7 +39,8 @@ payrollRouter.get("/", async (req, res, next) => {
     const payrollRuns = await storage.getPayrollRuns();
     res.json(payrollRuns);
   } catch (error) {
-    next(new HttpError(500, "Failed to fetch payroll runs"));
+    console.error("Failed to fetch payroll runs:", error);
+    next(new HttpError(500, "Failed to fetch payroll runs", error));
   }
 });
 

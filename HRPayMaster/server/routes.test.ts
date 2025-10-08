@@ -982,6 +982,21 @@ describe('employee routes', () => {
     expect(res.body).toEqual(mockRuns);
   });
 
+  it('GET /api/payroll includes error details when fetching runs fails', async () => {
+    const error = new Error('Database offline');
+    (storage.getPayrollRuns as any).mockRejectedValue(error);
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const res = await request(app).get('/api/payroll');
+
+    expect(res.status).toBe(500);
+    expect(res.body.error.message).toBe('Failed to fetch payroll runs');
+    expect(res.body.error.details.message).toBe(error.message);
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to fetch payroll runs:', error);
+
+    consoleErrorSpy.mockRestore();
+  });
+
   it('GET /api/loans returns loans list', async () => {
     const mockLoans = [
       { id: '1', employeeId: '1', amount: '1000', status: 'active', remainingAmount: '500', monthlyDeduction: '100' }
