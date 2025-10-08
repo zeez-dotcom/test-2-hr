@@ -135,6 +135,17 @@ export interface LoanBalance {
   balance: number;
 }
 
+export interface UndoPayrollLoanResult {
+  payrollRun: PayrollRun;
+  loans: Loan[];
+  loanPayments: LoanPayment[];
+}
+
+export interface UndoPayrollLoanOptions {
+  tx?: TransactionClient;
+  removeLoanPayments?: boolean;
+}
+
 export interface EmployeeReportPeriod {
   period: string;
   payrollEntries: PayrollEntry[];
@@ -282,6 +293,10 @@ export interface IStorage {
   getPayrollRun(id: string): Promise<PayrollRunWithEntries | undefined>;
   createPayrollRun(payrollRun: InsertPayrollRun): Promise<PayrollRun>;
   updatePayrollRun(id: string, payrollRun: Partial<InsertPayrollRun>): Promise<PayrollRun | undefined>;
+  undoPayrollRunLoanDeductions(
+    payrollRunId: string,
+    options?: UndoPayrollLoanOptions,
+  ): Promise<UndoPayrollLoanResult | undefined>;
   deletePayrollRun(id: string): Promise<boolean>;
 
   // Payroll entry methods
@@ -1650,7 +1665,136 @@ export class DatabaseStorage implements IStorage {
 
   }
 
+  async undoPayrollRunLoanDeductions(
+    payrollRunId: string,
+    options: UndoPayrollLoanOptions = {},
+  ): Promise<UndoPayrollLoanResult | undefined> {
 
+    const removeLoanPayments = options.removeLoanPayments ?? true;
+
+    const payrollRunNotFound = Symbol("PAYROLL_RUN_NOT_FOUND");
+
+    const runUndo = async (client: TransactionClient): Promise<UndoPayrollLoanResult> => {
+
+      const runs = await client
+
+        .select()
+
+        .from(payrollRuns)
+
+        .where(eq(payrollRuns.id, payrollRunId));
+
+      const existingRun = runs[0];
+
+      if (!existingRun) {
+
+        throw payrollRunNotFound;
+
+      }
+
+      const paymentsForRun = await client
+
+        .select()
+
+        .from(loanPayments)
+
+        .where(eq(loanPayments.payrollRunId, payrollRunId));
+
+      await this.undoPayrollLoanDeductions(client, payrollRunId);
+
+      if (removeLoanPayments && paymentsForRun.length > 0) {
+
+        await client
+
+          .delete(loanPayments)
+
+          .where(eq(loanPayments.payrollRunId, payrollRunId));
+
+      }
+
+      const loanIds = Array.from(
+
+        new Set(
+
+          paymentsForRun
+
+            .map(payment => payment.loanId)
+
+            .filter((loanId): loanId is string => Boolean(loanId)),
+
+        ),
+
+      );
+
+      const loanRows = await Promise.all(
+
+        loanIds.map(async loanId => {
+
+          const result = await client
+
+            .select()
+
+            .from(loans)
+
+            .where(eq(loans.id, loanId));
+
+          return result[0];
+
+        }),
+
+      );
+
+      const loansAfterUndo = loanRows.filter((loan): loan is Loan => Boolean(loan));
+
+      return {
+
+        payrollRun: existingRun,
+
+        loanPayments: paymentsForRun,
+
+        loans: loansAfterUndo,
+
+      };
+
+    };
+
+    if (options.tx) {
+
+      try {
+
+        return await runUndo(options.tx);
+
+      } catch (error) {
+
+        if (error === payrollRunNotFound) {
+
+          return undefined;
+
+        }
+
+        throw error;
+
+      }
+
+    }
+
+    try {
+
+      return await db.transaction(runUndo);
+
+    } catch (error) {
+
+      if (error === payrollRunNotFound) {
+
+        return undefined;
+
+      }
+
+      throw error;
+
+    }
+
+  }
 
   private async undoPayrollLoanDeductions(
     tx: TransactionClient,
@@ -1858,21 +2002,14 @@ export class DatabaseStorage implements IStorage {
 
     try {
       return await db.transaction(async tx => {
-        const [existingRun] = await tx
-          .select({ id: payrollRuns.id })
-          .from(payrollRuns)
-          .where(eq(payrollRuns.id, id))
-          .limit(1);
+        const undoResult = await this.undoPayrollRunLoanDeductions(id, {
+          tx,
+          removeLoanPayments: true,
+        });
 
-        if (!existingRun) {
+        if (!undoResult) {
           throw payrollRunNotFound;
         }
-
-        await this.undoPayrollLoanDeductions(tx, id);
-
-        await tx
-          .delete(loanPayments)
-          .where(eq(loanPayments.payrollRunId, id));
 
         await tx
           .delete(payrollEntries)
