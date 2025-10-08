@@ -532,6 +532,32 @@ export class DatabaseStorage implements IStorage {
     return conditions;
   }
 
+  private isDataSourceUnavailableError(error: unknown): error is { code?: string } {
+
+    if (!error || typeof error !== "object") {
+
+      return false;
+
+    }
+
+
+
+    const code = (error as { code?: unknown }).code;
+
+    if (typeof code !== "string") {
+
+      return false;
+
+    }
+
+
+
+    return code === "42P01" || code === "42703";
+
+  }
+
+
+
   private normalizeDateInput(value: string | Date | null | undefined): string | undefined {
     if (!value) return undefined;
     if (typeof value === "string") {
@@ -1495,15 +1521,48 @@ export class DatabaseStorage implements IStorage {
 
 
 
-    const { breakdownByEmployee, allowanceKeys } = await this.buildAllowanceBreakdownForRun(
+    let allowanceMetadata: {
+      breakdownByEmployee: Map<string, AllowanceBreakdown>;
+      allowanceKeys: string[];
+    };
 
-      normalizedEntries,
+    try {
 
-      run.startDate,
+      allowanceMetadata = await this.buildAllowanceBreakdownForRun(
 
-      run.endDate,
+        normalizedEntries,
 
-    );
+        run.startDate,
+
+        run.endDate,
+
+      );
+
+    } catch (error) {
+
+      if (this.isDataSourceUnavailableError(error)) {
+
+        console.warn(
+
+          "Failed to load allowance metadata due to missing data source:",
+
+          error,
+
+        );
+
+        allowanceMetadata = { allowanceKeys: [], breakdownByEmployee: new Map() };
+
+      } else {
+
+        throw error;
+
+      }
+
+    }
+
+
+
+    const { breakdownByEmployee, allowanceKeys } = allowanceMetadata;
 
 
 

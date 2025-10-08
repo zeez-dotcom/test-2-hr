@@ -6,21 +6,25 @@ const {
   insertMock,
   loanPaymentsFindManyMock,
   carAssignmentsFindManyMock,
+  employeeEventsFindManyMock,
 } = vi.hoisted(() => ({
   selectMock: vi.fn(),
   transactionMock: vi.fn(),
   insertMock: vi.fn(),
   loanPaymentsFindManyMock: vi.fn(),
   carAssignmentsFindManyMock: vi.fn(),
+  employeeEventsFindManyMock: vi.fn(),
 }));
 
 vi.mock('./db', () => ({
   db: {
+    select: selectMock,
     transaction: transactionMock,
     insert: insertMock,
     query: {
       loanPayments: { findMany: loanPaymentsFindManyMock },
       carAssignments: { findMany: carAssignmentsFindManyMock },
+      employeeEvents: { findMany: employeeEventsFindManyMock },
     },
   },
 }));
@@ -38,7 +42,9 @@ describe('getMonthlyEmployeeSummary', () => {
   it('returns payroll, loans, and events for the month', async () => {
     const payrollRows = [{ entry: { id: 'p1', grossPay: '100', netPay: '80' } }];
     const loanRows = [{ id: 'l1', remainingAmount: '200', status: 'active' }];
-    const eventRows = [{ id: 'e1', eventType: 'bonus', amount: '10' }];
+    const eventRows = [
+      { id: 'e1', eventType: 'bonus', amount: '10', eventDate: '2024-02-10' },
+    ];
 
     selectMock
       .mockReturnValueOnce({
@@ -89,6 +95,84 @@ describe('getMonthlyEmployeeSummary', () => {
 
     const result = await storage.getMonthlyEmployeeSummary('emp1', new Date('2024-02-15'));
     expect(result).toEqual({ payroll: [], loans: [], events: [] });
+  });
+});
+
+describe('getPayrollRuns', () => {
+  beforeEach(() => {
+    selectMock.mockReset();
+  });
+
+  it('falls back to empty allowance metadata when employee events query fails with missing table error', async () => {
+    const payrollRun = {
+      id: 'run-1',
+      startDate: '2024-01-01',
+      endDate: '2024-01-31',
+      createdAt: '2024-02-01',
+      status: 'completed',
+      processedBy: 'admin',
+      totalGrossPay: 1000,
+      totalNetPay: 900,
+      totalDeductions: 100,
+      notes: null,
+    } as any;
+
+    selectMock
+      .mockReturnValueOnce({
+        from: () => ({
+          orderBy: vi.fn().mockResolvedValue([payrollRun]),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: () => ({
+          leftJoin: () => ({
+            where: vi.fn().mockResolvedValue([
+              {
+                id: 'entry-1',
+                createdAt: '2024-02-01',
+                payrollRunId: payrollRun.id,
+                employeeId: 'emp-1',
+                grossPay: 100,
+                baseSalary: 100,
+                bonusAmount: 0,
+                workingDays: 22,
+                actualWorkingDays: 22,
+                vacationDays: 0,
+                taxDeduction: 0,
+                socialSecurityDeduction: 0,
+                healthInsuranceDeduction: 0,
+                loanDeduction: 0,
+                otherDeductions: 0,
+                netPay: 90,
+                adjustmentReason: null,
+                employee: null,
+              },
+            ]),
+          }),
+        }),
+      });
+
+    const postgresError: any = new Error('relation "employee_events" does not exist');
+    postgresError.code = '42P01';
+
+    const eventsSpy = vi.spyOn(storage, 'getEmployeeEvents').mockRejectedValue(postgresError);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      const runs = await storage.getPayrollRuns();
+
+      expect(runs).toHaveLength(1);
+      expect(runs[0].allowanceKeys).toEqual([]);
+      expect(runs[0].entries).toHaveLength(1);
+      expect(runs[0].entries[0].allowances).toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Failed to load allowance metadata due to missing data source:',
+        postgresError,
+      );
+    } finally {
+      eventsSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
   });
 });
 
