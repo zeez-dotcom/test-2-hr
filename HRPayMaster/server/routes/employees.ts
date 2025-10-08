@@ -2521,10 +2521,6 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
         eventType = parsedType.data;
       }
 
-      if (!eventType && trimmedEmployeeId) {
-        eventType = "allowance";
-      }
-
       const events = await storage.getEmployeeEvents(startDate, endDate, {
         employeeId: trimmedEmployeeId,
         eventType,
