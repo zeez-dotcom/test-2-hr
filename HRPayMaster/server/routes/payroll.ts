@@ -469,6 +469,35 @@ payrollRouter.put("/:id", async (req, res, next) => {
   }
 });
 
+payrollRouter.post(
+  "/:id/undo-loan-deductions",
+  requireRole(["admin", "hr"]),
+  async (req, res, next) => {
+    try {
+      const result = await storage.undoPayrollRunLoanDeductions(req.params.id);
+      if (!result) {
+        return next(new HttpError(404, "Payroll run not found"));
+      }
+      res.status(200).json(result);
+    } catch (error) {
+      if (error instanceof LoanPaymentUndoError) {
+        return next(
+          new HttpError(
+            409,
+            "Payroll run cannot be reversed because loan payments from this run cannot be restored.",
+            {
+              loanId: error.loanId,
+              reason: error.message,
+            },
+            "payrollRunLoanUndoBlocked",
+          ),
+        );
+      }
+      next(new HttpError(500, "Failed to undo payroll loan deductions"));
+    }
+  },
+);
+
 payrollRouter.delete("/:id", async (req, res, next) => {
   try {
     const deleted = await storage.deletePayrollRun(req.params.id);

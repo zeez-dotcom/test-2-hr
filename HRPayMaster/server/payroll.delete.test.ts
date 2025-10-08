@@ -311,6 +311,32 @@ describe('DELETE /api/payroll/:id', () => {
     app.use(errorHandler);
   });
 
+  it('restores loan balances and removes payments when undoing deductions', async () => {
+    const res = await request(app).post('/api/payroll/run-1/undo-loan-deductions');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      payrollRun: expect.objectContaining({ id: 'run-1' }),
+    });
+    expect(res.body.loanPayments).toEqual([
+      expect.objectContaining({ id: 'payment-1', payrollRunId: 'run-1', amount: '100.00' }),
+    ]);
+    expect(res.body.loans).toEqual([
+      expect.objectContaining({ id: 'loan-1', remainingAmount: '500.00', status: 'active' }),
+    ]);
+
+    expect(dbState.loanPayments.has('payment-1')).toBe(false);
+    expect(dbState.loanPayments.has('payment-2')).toBe(true);
+    expect(dbState.loans.get('loan-1')).toEqual(
+      expect.objectContaining({ remainingAmount: '500.00', status: 'active' }),
+    );
+
+    const deleteRes = await request(app).delete('/api/payroll/run-1');
+    expect(deleteRes.status).toBe(204);
+    expect(dbState.payrollRuns.has('run-1')).toBe(false);
+    expect(dbState.payrollRuns.has('run-2')).toBe(true);
+  });
+
   it('removes payroll run with dependent entries and loan payments', async () => {
     const res = await request(app).delete('/api/payroll/run-1');
 
