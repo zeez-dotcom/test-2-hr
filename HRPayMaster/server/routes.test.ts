@@ -40,6 +40,7 @@ vi.mock('./storage', () => {
       getCarAssignment: vi.fn(),
       deleteCarAssignment: vi.fn(),
       createEmployeeEvent: vi.fn(),
+      getEmployeeEvents: vi.fn(),
       getEmployeeReport: vi.fn(),
       getCompanyPayrollSummary: vi.fn(),
       getLoanReportDetails: vi.fn(),
@@ -152,6 +153,25 @@ describe('employee routes', () => {
     const res = await request(app).get('/api/employees');
     expect(res.status).toBe(200);
     expect(res.body).toEqual(mockEmployees);
+  });
+
+  it('GET /api/employee-events with employeeId returns all event types', async () => {
+    const events = [
+      { id: 'evt-1', eventType: 'allowance' },
+      { id: 'evt-2', eventType: 'bonus' },
+    ];
+    (storage.getEmployeeEvents as any).mockResolvedValue(events);
+
+    const res = await request(app)
+      .get('/api/employee-events')
+      .query({ employeeId: 'emp-123' });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(events);
+    expect(storage.getEmployeeEvents).toHaveBeenCalledWith(undefined, undefined, {
+      employeeId: 'emp-123',
+      eventType: undefined,
+    });
   });
 
   it('GET /api/car-assignments forwards filters to storage', async () => {
