@@ -180,7 +180,7 @@ export interface AssetUsage {
   assetDetails: string | null;
   employeeId: string | null;
   employeeCode: string | null;
-  employeeName: string;
+  employeeName: string | null;
   assignedDate: string;
   returnDate: string | null;
   status: AssetAssignment["status"];
@@ -477,7 +477,7 @@ export class DatabaseStorage implements IStorage {
   private buildEmployeeOrder(
     sort?: EmployeeFilters["sort"],
     order: EmployeeFilters["order"] = "asc",
-  ): (AnyColumn | SQL)[] {
+  ): SQL<unknown>[] {
     const direction = order === "desc" ? desc : asc;
 
     const buildNameOrder = () => [
@@ -526,20 +526,24 @@ export class DatabaseStorage implements IStorage {
     if (searchTerm) {
       const sanitized = searchTerm.replace(/[%_]/g, "\\$&");
       const likeTerm = `%${sanitized}%`;
-      conditions.push(
-        or(
-          ilike(employees.firstName, likeTerm),
-          ilike(employees.lastName, likeTerm),
-          ilike(employees.arabicName, likeTerm),
-          ilike(employees.nickname, likeTerm),
-          ilike(employees.email, likeTerm),
-          ilike(employees.phone, likeTerm),
-          ilike(employees.employeeCode, likeTerm),
-          ilike(employees.position, likeTerm),
-          ilike(departments.name, likeTerm),
-          ilike(companies.name, likeTerm),
-        ),
-      );
+      const searchConditions: SQL<unknown>[] = [
+        ilike(employees.firstName, likeTerm),
+        ilike(employees.lastName, likeTerm),
+        ilike(employees.arabicName, likeTerm),
+        ilike(employees.nickname, likeTerm),
+        ilike(employees.email, likeTerm),
+        ilike(employees.phone, likeTerm),
+        ilike(employees.employeeCode, likeTerm),
+        ilike(employees.position, likeTerm),
+        ilike(departments.name, likeTerm),
+        ilike(companies.name, likeTerm),
+      ];
+      if (searchConditions.length > 0) {
+        const [firstCondition, ...rest] = searchConditions;
+        const combined: SQL<unknown> =
+          rest.length > 0 ? or(firstCondition, ...rest) ?? firstCondition : firstCondition;
+        conditions.push(combined);
+      }
     }
 
     return conditions;
@@ -726,7 +730,7 @@ export class DatabaseStorage implements IStorage {
     const whereCondition =
       conditions.length > 1 ? and(...conditions) : conditions[0];
 
-    let query = db
+    const baseQuery = db
       .select({
         employee: employees,
         department: departments,
@@ -736,24 +740,25 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(departments, eq(employees.departmentId, departments.id))
       .leftJoin(companies, eq(employees.companyId, companies.id));
 
-    if (whereCondition) {
-      query = query.where(whereCondition);
-    }
+    const filteredQuery = whereCondition ? baseQuery.where(whereCondition) : baseQuery;
 
     const orderByExpressions = this.buildEmployeeOrder(filters.sort, filters.order);
-    if (orderByExpressions.length > 0) {
-      query = query.orderBy(...orderByExpressions);
-    }
+    const orderedQuery =
+      orderByExpressions.length > 0
+        ? filteredQuery.orderBy(...orderByExpressions)
+        : filteredQuery;
 
-    if (typeof filters.limit === "number") {
-      query = query.limit(filters.limit);
-    }
+    const limitedQuery =
+      typeof filters.limit === "number"
+        ? orderedQuery.limit(filters.limit)
+        : orderedQuery;
 
-    if (typeof filters.offset === "number") {
-      query = query.offset(filters.offset);
-    }
+    const finalQuery =
+      typeof filters.offset === "number"
+        ? limitedQuery.offset(filters.offset)
+        : limitedQuery;
 
-    const rows = await query;
+    const rows = await finalQuery;
 
     return rows.map(row => ({
       ...row.employee,
@@ -767,15 +772,13 @@ export class DatabaseStorage implements IStorage {
     const whereCondition =
       conditions.length > 1 ? and(...conditions) : conditions[0];
 
-    let query = db
+    const baseQuery = db
       .select({ count: sql<number>`count(*)` })
       .from(employees)
       .leftJoin(departments, eq(employees.departmentId, departments.id))
       .leftJoin(companies, eq(employees.companyId, companies.id));
 
-    if (whereCondition) {
-      query = query.where(whereCondition);
-    }
+    const query = whereCondition ? baseQuery.where(whereCondition) : baseQuery;
 
     const [result] = await query;
     return result ? Number(result.count) : 0;
@@ -3716,12 +3719,12 @@ export class DatabaseStorage implements IStorage {
     }
 
     if (rangeStart && rangeEnd) {
-      conditions.push(
-        and(
-          gte(employeeEvents.eventDate, rangeStart),
-          lte(employeeEvents.eventDate, rangeEnd),
-        ),
-      );
+      const start = rangeStart;
+      const end = rangeEnd;
+      const startCondition = gte(employeeEvents.eventDate, start);
+      const endCondition = lte(employeeEvents.eventDate, end);
+      const combined: SQL<unknown> = and(startCondition, endCondition) ?? startCondition;
+      conditions.push(combined);
     }
 
     const where = conditions.length
@@ -3730,7 +3733,7 @@ export class DatabaseStorage implements IStorage {
         : and(...conditions)
       : undefined;
 
-    const rows = await db
+    const baseQuery = db
       .select({
         event: {
           id: employeeEvents.id,
@@ -3749,9 +3752,11 @@ export class DatabaseStorage implements IStorage {
         employee: employees,
       })
       .from(employeeEvents)
-      .leftJoin(employees, eq(employeeEvents.employeeId, employees.id))
-      .where(where)
-      .orderBy(desc(employeeEvents.createdAt));
+      .leftJoin(employees, eq(employeeEvents.employeeId, employees.id));
+
+    const query = where ? baseQuery.where(where) : baseQuery;
+
+    const rows = await query.orderBy(desc(employeeEvents.createdAt));
 
     return rows.map(({ event, employee }) => ({
       ...event,

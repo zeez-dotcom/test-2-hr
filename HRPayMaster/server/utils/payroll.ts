@@ -31,11 +31,11 @@ export interface EmployeeEvent {
   employeeId: string;
   eventDate: string;
   eventType: string;
-  affectsPayroll: boolean;
+  affectsPayroll?: boolean | null;
   status: string;
   amount: string;
   title?: string;
-  recurrenceType?: "none" | "monthly" | null;
+  recurrenceType?: string | null;
   recurrenceEndDate?: string | null;
 }
 
@@ -161,7 +161,7 @@ export function calculateEmployeePayroll({
 
   const employeeEventsForEmployee = employeeEvents.filter(event =>
     event.employeeId === employee.id &&
-    event.affectsPayroll &&
+    Boolean(event.affectsPayroll) &&
     event.status === "active" &&
     event.eventType !== "vacation" &&
     !(event.id && skippedEventIds?.has(event.id))

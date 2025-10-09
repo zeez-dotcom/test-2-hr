@@ -38,7 +38,7 @@ vi.mock("@/components/ui/input", () => ({
   Input: (props: any) => <input {...props} />,
 }));
 vi.mock("@/components/ui/select", () => {
-  const React = require("react");
+  const React = require("react") as typeof import("react");
   const SelectContext = React.createContext<{
     onValueChange?: (value: string) => void;
   }>({});
