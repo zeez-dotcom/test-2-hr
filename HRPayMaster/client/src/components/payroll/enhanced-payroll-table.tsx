@@ -19,7 +19,11 @@ import {
   ClipboardPaste,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { formatCurrency, calculateWorkingDaysAdjustment } from "@/lib/utils";
+import {
+  formatCurrency,
+  calculateWorkingDaysAdjustment,
+  summarizeAllowances,
+} from "@/lib/utils";
 import type { PayrollEntry } from "@shared/schema";
 import { SmartVacationForm } from "@/components/payroll/smart-vacation-form";
 import { SmartDeductionForm } from "@/components/payroll/smart-deduction-form";
@@ -31,6 +35,11 @@ interface EnhancedPayrollTableProps {
   entries: any[];
   payrollId: string;
 }
+
+const formatSignedCurrency = (amount: number) => {
+  const sign = amount >= 0 ? "+" : "-";
+  return `${sign}${formatCurrency(Math.abs(amount))}`;
+};
 
 export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTableProps) {
   const [editingCell, setEditingCell] = useState<string | null>(null);
@@ -289,10 +298,7 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
                 </div>
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Housing Allowance
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Food Allowance
+                Allowances
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <div className="flex items-center space-x-1">
@@ -321,18 +327,8 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
                     : "text-gray-900";
 
               const { englishName, arabicName, code } = getEmployeeDisplayDetails(entry);
-              const allowances = entry.allowances ?? {};
-              const getAllowanceValue = (keys: string[]) => {
-                for (const key of keys) {
-                  const value = allowances[key as keyof typeof allowances];
-                  if (typeof value === "number") {
-                    return value;
-                  }
-                }
-                return 0;
-              };
-              const housingAllowance = getAllowanceValue(["housing", "housing_allowance"]);
-              const foodAllowance = getAllowanceValue(["food", "food_allowance"]);
+              const allowanceSummary = summarizeAllowances(entry.allowances);
+              const hasAllowances = allowanceSummary.entries.length > 0;
 
               return (
                 <tr key={entry.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
@@ -380,10 +376,22 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
                     />
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
-                    +{formatCurrency(housingAllowance)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
-                    +{formatCurrency(foodAllowance)}
+                    {hasAllowances ? (
+                      <div className="space-y-1">
+                        <div className="font-semibold">
+                          {formatSignedCurrency(allowanceSummary.total)}
+                        </div>
+                        <div className="space-y-0.5 text-xs text-muted-foreground">
+                          {allowanceSummary.entries.map((allowance) => (
+                            <div key={allowance.key}>
+                              {allowance.label}: {formatSignedCurrency(allowance.amount)}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     <EditableCell
