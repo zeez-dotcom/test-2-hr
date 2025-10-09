@@ -140,7 +140,7 @@ describe('pdf utility', () => {
     });
 
     const texts = collectTexts(def.content);
-    expect(texts).toContain('الاسم\u061C: حسين صابر وقار');
+    expect(texts).toContain('الاسم؜: حسين صابر وقار');
     expect(texts).not.toContain('الاسم: حسينصابر وقار');
   });
 
