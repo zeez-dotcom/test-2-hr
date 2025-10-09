@@ -147,6 +147,7 @@ pdfMakeAny.createPdf = ((docDefinition: TDocumentDefinitions, tableLayouts?: any
   return originalCreatePdf(docDefinition, tableLayouts, fonts, vfs);
 }) as typeof pdfMakeAny.createPdf;
 const UNSAFE_CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+const ARABIC_LETTER_MARK = '\u061C';
 
 export const sanitizeString = (value: string | null | undefined): string => {
   if (value == null) {
@@ -309,6 +310,35 @@ const employeeFileLabelsByLocale: Record<'en' | 'ar', EmployeeFileLabels> = {
 };
 
 type DualLabel = { en: string; ar: string };
+
+const normalizeText = (value: string | null | undefined): string => {
+  if (!value) {
+    return '';
+  }
+  return value.replace(/\s+/g, ' ').trim();
+};
+
+const formatSummaryLabelValue = (label: DualLabel, value: DualLabel): DualLabel => {
+  const format = (lang: 'en' | 'ar'): string => {
+    const labelText = normalizeText(label[lang]);
+    const valueText = normalizeText(value[lang]);
+
+    if (!labelText && !valueText) {
+      return '';
+    }
+
+    const colon = lang === 'ar' ? `${ARABIC_LETTER_MARK}:` : ':';
+    if (!valueText) {
+      return labelText ? `${labelText}${colon}` : '';
+    }
+    return `${labelText}${colon} ${valueText}`;
+  };
+
+  return {
+    en: format('en'),
+    ar: format('ar'),
+  };
+};
 
 const formatReportTimestamp = (date: Date): DualLabel => {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
@@ -614,8 +644,8 @@ export function buildEmployeeFileReport(params: {
 
   const firstName = sanitizeString(employee.firstName);
   const lastName = sanitizeString(employee.lastName);
-  const fullName = `${firstName} ${lastName}`.trim();
-  const sanitizedArabicName = sanitizeString(employee.arabicName ?? '');
+  const fullName = normalizeText(`${firstName} ${lastName}`);
+  const sanitizedArabicName = normalizeText(sanitizeString(employee.arabicName ?? ''));
   const position = employee.position ? sanitizeString(employee.position) : '';
   const employeeId = sanitizeString(employee.id);
   const employeeCode = sanitizeString(employee.employeeCode ?? '');
@@ -704,12 +734,13 @@ export function buildEmployeeFileReport(params: {
       typeof pair.value === 'string'
         ? { en: pair.value, ar: pair.value }
         : pair.value;
+    const formattedLabel = formatSummaryLabelValue(pair.label, value);
+    if (!formattedLabel.en && !formattedLabel.ar) {
+      continue;
+    }
     summaryItems.push(
       createStack(
-        {
-          en: `${pair.label.en}: ${value.en}`,
-          ar: `${pair.label.ar}: ${value.ar}`,
-        },
+        formattedLabel,
         {
           primaryStyle: { fontSize: 10, color: '#111827' },
           secondaryStyle: { fontSize: 10, color: '#111827' },

@@ -125,6 +125,25 @@ describe('pdf utility', () => {
     expect(pdfAttachment).toBeDefined();
   });
 
+  it('formats Arabic summary rows with proper spacing and colon placement', () => {
+    const def = buildEmployeeFileReport({
+      employee: {
+        firstName: 'Hussein',
+        lastName: 'Saber',
+        id: 'emp-2',
+        arabicName: 'حسين   صابر   وقار',
+      },
+      events: [],
+      loans: [],
+      documents: [],
+      language: 'ar',
+    });
+
+    const texts = collectTexts(def.content);
+    expect(texts).toContain('الاسم\u061C: حسين صابر وقار');
+    expect(texts).not.toContain('الاسم: حسينصابر وقار');
+  });
+
   it('adds employee code row and profile image to action receipt', () => {
     const def = buildBilingualActionReceipt({
       titleEn: 'Test Receipt',
