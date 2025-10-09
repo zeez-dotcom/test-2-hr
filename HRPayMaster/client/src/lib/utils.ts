@@ -15,6 +15,29 @@ export function formatCurrency(amount: number | string): string {
   }).format(num);
 }
 
+export function formatAllowanceLabel(key: string): string {
+  if (!key) {
+    return 'Allowance';
+  }
+
+  const spaced = key
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!spaced) {
+    return 'Allowance';
+  }
+
+  const label = spaced
+    .split(' ')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+
+  return /\ballowance\b/i.test(label) ? label : `${label} Allowance`;
+}
+
 type NumericLike = number | string | null | undefined;
 
 const toNumericValue = (value: NumericLike): number => {
@@ -29,6 +52,28 @@ const toNumericValue = (value: NumericLike): number => {
 
   return 0;
 };
+
+export function summarizeAllowances(
+  allowances: Record<string, NumericLike> | null | undefined,
+): {
+  total: number;
+  entries: Array<{ key: string; label: string; amount: number }>;
+} {
+  const entries = Object.entries(allowances ?? {})
+    .map(([key, value]) => ({ key, amount: toNumericValue(value) }))
+    .filter(({ amount }) => amount !== 0);
+
+  const total = entries.reduce((sum, { amount }) => sum + amount, 0);
+
+  return {
+    total,
+    entries: entries.map(({ key, amount }) => ({
+      key,
+      amount,
+      label: formatAllowanceLabel(key),
+    })),
+  };
+}
 
 export function calculateWorkingDaysAdjustment(entry: {
   baseSalary?: NumericLike;

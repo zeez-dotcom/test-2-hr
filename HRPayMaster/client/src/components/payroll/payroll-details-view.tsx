@@ -6,7 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DollarSign, User, FileText, Printer } from "lucide-react";
 import type { PayrollRunWithEntries } from "@shared/schema";
-import { formatCurrency, formatDate, calculateWorkingDaysAdjustment } from "@/lib/utils";
+import {
+  formatCurrency,
+  formatDate,
+  calculateWorkingDaysAdjustment,
+  summarizeAllowances,
+} from "@/lib/utils";
 import { getBrand } from "@/lib/brand";
 
 type PayrollEntryWithEmployee = NonNullable<PayrollRunWithEntries["entries"]>[number];
@@ -46,6 +51,11 @@ const getEmployeeIdentifier = (entry: PayrollEntryWithEmployee) => {
   }
 
   return `ID: ${entry.employeeId}`;
+};
+
+const formatSignedCurrency = (amount: number) => {
+  const sign = amount >= 0 ? "+" : "-";
+  return `${sign}${formatCurrency(Math.abs(amount))}`;
 };
 
 interface PayrollDetailsViewProps {
@@ -297,10 +307,7 @@ export default function PayrollDetailsView({ payrollId, onRegisterPrint }: Payro
                       Vacation Days
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Housing Allowance
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Food Allowance
+                      Allowances
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Bonuses
@@ -323,18 +330,8 @@ export default function PayrollDetailsView({ payrollId, onRegisterPrint }: Payro
                           ? "text-green-600"
                           : "text-gray-900";
                     const { englishName, arabicName } = getEmployeeNames(entry);
-                    const allowances = entry.allowances ?? {};
-                    const getAllowanceValue = (keys: string[]) => {
-                      for (const key of keys) {
-                        const value = allowances[key as keyof typeof allowances];
-                        if (typeof value === "number") {
-                          return value;
-                        }
-                      }
-                      return 0;
-                    };
-                    const housingAllowance = getAllowanceValue(["housing", "housing_allowance"]);
-                    const foodAllowance = getAllowanceValue(["food", "food_allowance"]);
+                    const allowanceSummary = summarizeAllowances(entry.allowances);
+                    const hasAllowances = allowanceSummary.entries.length > 0;
 
                     return (
                       <tr key={entry.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
@@ -362,10 +359,22 @@ export default function PayrollDetailsView({ payrollId, onRegisterPrint }: Payro
                           {entry.vacationDays || 0}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
-                          +{formatCurrency(housingAllowance)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
-                          +{formatCurrency(foodAllowance)}
+                          {hasAllowances ? (
+                            <div className="space-y-1">
+                              <div className="font-semibold">
+                                {formatSignedCurrency(allowanceSummary.total)}
+                              </div>
+                              <div className="space-y-0.5 text-xs text-muted-foreground">
+                                {allowanceSummary.entries.map((allowance) => (
+                                  <div key={allowance.key}>
+                                    {allowance.label}: {formatSignedCurrency(allowance.amount)}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
                           +{formatCurrency(parseFloat(entry.bonusAmount) || 0)}

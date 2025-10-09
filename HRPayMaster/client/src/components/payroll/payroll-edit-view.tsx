@@ -14,7 +14,7 @@ import {
 import { queryClient } from "@/lib/queryClient";
 import { apiPut } from "@/lib/http";
 import { useToast } from "@/hooks/use-toast";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, summarizeAllowances } from "@/lib/utils";
 import type { PayrollRunWithEntries, PayrollEntry } from "@shared/schema";
 import { DeductionForm } from "@/components/payroll/deduction-form";
 import { BonusForm } from "@/components/payroll/bonus-form";
@@ -24,6 +24,11 @@ import { getEmployeeDisplayDetails } from "./employee-display";
 interface PayrollEditViewProps {
   payrollId: string;
 }
+
+const formatSignedCurrency = (amount: number) => {
+  const sign = amount >= 0 ? "+" : "-";
+  return `${sign}${formatCurrency(Math.abs(amount))}`;
+};
 
 export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
   const [editingCell, setEditingCell] = useState<string | null>(null);
@@ -292,10 +297,7 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
                       Vacation Days
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Housing Allowance
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Food Allowance
+                      Allowances
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Bonuses
@@ -314,18 +316,8 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
                 <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
                   {payrollRun.entries.map((entry) => {
                     const { englishName, arabicName, code } = getEmployeeDisplayDetails(entry);
-                    const allowances = entry.allowances ?? {};
-                    const getAllowanceValue = (keys: string[]) => {
-                      for (const key of keys) {
-                        const value = allowances[key as keyof typeof allowances];
-                        if (typeof value === "number") {
-                          return value;
-                        }
-                      }
-                      return 0;
-                    };
-                    const housingAllowance = getAllowanceValue(["housing", "housing_allowance"]);
-                    const foodAllowance = getAllowanceValue(["food", "food_allowance"]);
+                    const allowanceSummary = summarizeAllowances(entry.allowances);
+                    const hasAllowances = allowanceSummary.entries.length > 0;
 
                     return (
                       <tr key={entry.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
@@ -366,10 +358,22 @@ export default function PayrollEditView({ payrollId }: PayrollEditViewProps) {
                           />
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-green-600">
-                          +{formatCurrency(housingAllowance)}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-green-600">
-                          +{formatCurrency(foodAllowance)}
+                          {hasAllowances ? (
+                            <div className="space-y-1">
+                              <div className="font-semibold">
+                                {formatSignedCurrency(allowanceSummary.total)}
+                              </div>
+                              <div className="space-y-0.5 text-xs text-muted-foreground">
+                                {allowanceSummary.entries.map((allowance) => (
+                                  <div key={allowance.key}>
+                                    {allowance.label}: {formatSignedCurrency(allowance.amount)}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-green-600">
                           <div
