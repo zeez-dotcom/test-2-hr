@@ -42,8 +42,8 @@ vi.mock('@/hooks/use-toast', () => ({
   toast,
 }));
 
-vi.mock('@/components/payroll/payroll-form', () => ({
-  default: () => <div>PayrollForm</div>,
+vi.mock('@/components/payroll/payroll-generation-wizard', () => ({
+  default: () => <div>PayrollWizard</div>,
 }));
 
 vi.mock('@/components/payroll/payroll-details-view', () => ({

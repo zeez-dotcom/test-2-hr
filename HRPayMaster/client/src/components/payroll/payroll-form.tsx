@@ -24,9 +24,10 @@ interface PayrollFormProps {
   onSubmit: (data: FormData) => void;
   isSubmitting: boolean;
   canGenerate: boolean;
+  submitLabel?: string;
 }
 
-export default function PayrollForm({ onSubmit, isSubmitting, canGenerate }: PayrollFormProps) {
+export default function PayrollForm({ onSubmit, isSubmitting, canGenerate, submitLabel }: PayrollFormProps) {
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -191,7 +192,7 @@ export default function PayrollForm({ onSubmit, isSubmitting, canGenerate }: Pay
             disabled={isSubmitting || !canGenerate || !form.formState.isValid}
             className="bg-success text-white hover:bg-green-700"
           >
-            {isSubmitting ? "Generating..." : "Generate Payroll"}
+            {isSubmitting ? "Processing..." : submitLabel ?? "Generate Payroll"}
           </Button>
         </div>
       </form>
