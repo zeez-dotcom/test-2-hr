@@ -617,6 +617,28 @@ export function buildEmployeeFileReport(params: {
   const employeeId = sanitizeString(employee.id);
   const employeeCode = sanitizeString(employee.employeeCode ?? '');
   const profileImage = employee.profileImage ? sanitizeImageSrc(employee.profileImage) : undefined;
+  const generatedAtLabel = selectLabel(l => l.fields.generatedAt);
+  const reportGeneratedAt = new Date();
+
+  const formattedGeneratedAt: DualLabel = (() => {
+    if (!(reportGeneratedAt instanceof Date) || Number.isNaN(reportGeneratedAt.getTime())) {
+      return { en: '-', ar: '-' };
+    }
+
+    const fallbackIso = sanitizeString(reportGeneratedAt.toISOString());
+
+    try {
+      const formatted = formatReportTimestamp(reportGeneratedAt);
+      const enValue = sanitizeString(formatted.en);
+      const arValue = sanitizeString(formatted.ar);
+      return {
+        en: enValue || fallbackIso,
+        ar: arValue || fallbackIso,
+      };
+    } catch {
+      return { en: fallbackIso, ar: fallbackIso };
+    }
+  })();
 
   const brandHeader: Content = {
     columns:
@@ -661,7 +683,7 @@ export function buildEmployeeFileReport(params: {
     { label: selectLabel(l => l.fields.position), value: position || null },
     { label: selectLabel(l => l.fields.employeeCode), value: employeeCode || null },
     { label: selectLabel(l => l.fields.employeeId), value: employeeId || null },
-    { label: selectLabel(l => l.fields.generatedAt), value: formatReportTimestamp(new Date()) },
+    { label: generatedAtLabel, value: formattedGeneratedAt },
   ];
 
   for (const pair of summaryPairs) {
@@ -915,8 +937,16 @@ export function buildEmployeeFileReport(params: {
       columns: ((): any[] => {
         const left = brand.name || 'HRPayMaster';
         const contact = [brand.website, brand.phone, brand.email].filter(Boolean).join(' | ');
+        const timestampLabel: DualLabel = {
+          en: `${generatedAtLabel.en}: ${formattedGeneratedAt.en}`,
+          ar: `${generatedAtLabel.ar}: ${formattedGeneratedAt.ar}`,
+        };
         return [
           { text: contact ? `${left} | ${contact}` : left, color: '#64748B', fontSize: 9, font: 'Inter' },
+          createStack(timestampLabel, {
+            primaryStyle: { fontSize: 9, color: '#64748B', alignment: 'center' },
+            secondaryStyle: { fontSize: 9, color: '#64748B', alignment: 'center' },
+          }),
           { text: `Page ${currentPage} of ${pageCount}`, alignment: 'right', color: '#64748B', fontSize: 9, font: 'Inter' },
         ];
       })(),
