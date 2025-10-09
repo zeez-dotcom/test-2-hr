@@ -17,6 +17,7 @@ import { toastApiError } from "@/lib/toastError";
 import type { Company, Department, InsertEmployee, InsertEmployeeEvent, EmployeeEvent } from "@shared/schema";
 import { z } from "zod";
 import AllowanceRecurringFields from "@/components/employees/allowance-recurring-fields";
+import AllowanceTypeCombobox from "@/components/employees/allowance-type-combobox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Plus, Edit, Trash2 } from "lucide-react";
@@ -1473,7 +1474,15 @@ export default function EmployeeForm({
                       <FormItem>
                         <FormLabel>Title</FormLabel>
                         <FormControl>
-                          <Input placeholder="Housing allowance" {...field} />
+                          <AllowanceTypeCombobox
+                            value={field.value ?? ""}
+                            onChange={name => field.onChange(name)}
+                            placeholder="Housing allowance"
+                            disabled={isSavingAllowance}
+                            extraOptions={allowanceEvents
+                              .map(event => event.title ?? "")
+                              .filter(title => title.trim().length > 0)}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
