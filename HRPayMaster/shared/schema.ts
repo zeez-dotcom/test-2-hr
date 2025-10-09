@@ -355,7 +355,7 @@ export const loanPayments = pgTable("loan_payments", {
 export const notifications = pgTable("notifications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   employeeId: varchar("employee_id").references(() => employees.id).notNull(),
-  type: text("type").notNull(), // visa_expiry, civil_id_expiry, passport_expiry, loan_deduction, vacation_approved, status_change, salary_adjustment
+  type: text("type").notNull(), // visa_expiry, civil_id_expiry, passport_expiry, driving_license_expiry, vacation_return_due, loan_deduction, vacation_approved, status_change, salary_adjustment
   title: text("title").notNull(),
   message: text("message").notNull(),
   priority: text("priority").notNull().default("medium"), // low, medium, high, critical

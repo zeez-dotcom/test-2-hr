@@ -10,6 +10,7 @@ import { resolveInterFontFilesPath } from "./fontStatic";
 import { errorHandler } from "./errorHandler";
 import { storage } from "./storage";
 import { generateExpiryWarningEmail, shouldSendAlert, sendEmail } from "./emailService";
+import { processVacationReturnAlerts } from "./vacationReturnScheduler";
 import type { User } from "@shared/schema";
 import { users } from "@shared/schema";
 
@@ -348,4 +349,16 @@ app.use((req, res, next) => {
   // Run once after start and then every 12 hours
   processDocumentExpiryAlerts();
   setInterval(processDocumentExpiryAlerts, 12 * 60 * 60 * 1000);
+
+  const runVacationReturnAlerts = async () => {
+    try {
+      await processVacationReturnAlerts();
+    } catch (err) {
+      log(`warning: failed processing vacation return alerts: ${String(err)}`);
+    }
+  };
+
+  // Run once after start and then every 6 hours to catch return deadlines quickly
+  runVacationReturnAlerts();
+  setInterval(runVacationReturnAlerts, 6 * 60 * 60 * 1000);
 })();
