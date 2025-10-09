@@ -65,6 +65,40 @@ export default function EmployeeTable({
     language: "en" as "en" | "ar",
   });
 
+  function getStatusColor(status: string) {
+    switch (status) {
+      case "active":
+        return "bg-success text-white";
+      case "on_leave":
+        return "bg-warning text-white";
+      case "inactive":
+        return "bg-gray-500 text-white";
+      case "resigned":
+        return "bg-orange-500 text-white";
+      case "terminated":
+        return "bg-destructive text-white";
+      default:
+        return "bg-secondary text-secondary-foreground";
+    }
+  }
+
+  function getStatusLabel(status: string) {
+    switch (status) {
+      case "active":
+        return "Active";
+      case "on_leave":
+        return "On Leave";
+      case "inactive":
+        return "Inactive";
+      case "terminated":
+        return "Terminated";
+      case "resigned":
+        return "Resigned";
+      default:
+        return status;
+    }
+  }
+
   const employeeSections = useMemo(() => {
     if (!viewEmployee) return [] as { title: string; fields: { label: string; value: string | null }[] }[];
 
@@ -400,40 +434,6 @@ export default function EmployeeTable({
 
   const employees: EmployeeWithDepartment[] = data?.data ?? [];
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / pageSize));
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "active":
-        return "bg-success text-white";
-      case "on_leave":
-        return "bg-warning text-white";
-      case "inactive":
-        return "bg-gray-500 text-white";
-      case "resigned":
-        return "bg-orange-500 text-white";
-      case "terminated":
-        return "bg-destructive text-white";
-      default:
-        return "bg-secondary text-secondary-foreground";
-    }
-  };
-
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case "active":
-        return "Active";
-      case "on_leave":
-        return "On Leave";
-      case "inactive":
-        return "Inactive";
-      case "terminated":
-        return "Terminated";
-      case "resigned":
-        return "Resigned";
-      default:
-        return status;
-    }
-  };
 
   const renderDocument = (
     value: string | null | undefined,
