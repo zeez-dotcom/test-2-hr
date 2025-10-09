@@ -565,7 +565,8 @@
         "name": "الاسم",
         "position": "الوظيفة",
         "employeeCode": "رمز الموظف",
-        "employeeId": "رقم الموظف"
+        "employeeId": "رقم الموظف",
+        "generatedAt": "تم الإنشاء في"
       },
       "tables": {
         "events": {
