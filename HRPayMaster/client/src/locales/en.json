@@ -564,6 +564,7 @@
       "fields": {
         "name": "Name",
         "position": "Position",
+        "employeeCode": "Employee Code",
         "employeeId": "Employee ID"
       },
       "tables": {

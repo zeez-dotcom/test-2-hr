@@ -205,6 +205,7 @@ type EmployeeFileLabels = {
   fields: {
     name: string;
     position: string;
+    employeeCode: string;
     employeeId: string;
   };
   tables: {
@@ -231,6 +232,7 @@ const defaultEmployeeFileLabels: Record<'en' | 'ar', EmployeeFileLabels> = {
     fields: {
       name: 'Name',
       position: 'Position',
+      employeeCode: 'Employee Code',
       employeeId: 'Employee ID',
     },
     tables: {
@@ -255,6 +257,7 @@ const defaultEmployeeFileLabels: Record<'en' | 'ar', EmployeeFileLabels> = {
     fields: {
       name: 'الاسم',
       position: 'الوظيفة',
+      employeeCode: 'رمز الموظف',
       employeeId: 'رقم الموظف',
     },
     tables: {
@@ -308,6 +311,7 @@ export interface EmployeeLite {
   firstName: string;
   lastName: string;
   id: string;
+  employeeCode?: string | null;
   position?: string | null;
   profileImage?: string | null;
 }
@@ -595,6 +599,7 @@ export function buildEmployeeFileReport(params: {
   const fullName = `${firstName} ${lastName}`.trim();
   const position = employee.position ? sanitizeString(employee.position) : '';
   const employeeId = sanitizeString(employee.id);
+  const employeeCode = sanitizeString(employee.employeeCode ?? '');
   const profileImage = employee.profileImage ? sanitizeImageSrc(employee.profileImage) : undefined;
 
   const brandHeader: Content = {
@@ -638,6 +643,7 @@ export function buildEmployeeFileReport(params: {
   const summaryPairs: Array<{ label: DualLabel; value: string | null }> = [
     { label: selectLabel(l => l.fields.name), value: fullName || null },
     { label: selectLabel(l => l.fields.position), value: position || null },
+    { label: selectLabel(l => l.fields.employeeCode), value: employeeCode || null },
     { label: selectLabel(l => l.fields.employeeId), value: employeeId || null },
   ];
 
