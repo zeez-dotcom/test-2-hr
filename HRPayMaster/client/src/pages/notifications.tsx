@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Bell, CheckCircle, Clock, AlertTriangle, FileText, CreditCard, BookOpen } from "lucide-react";
+import { Bell, CheckCircle, Clock, AlertTriangle, FileText, CreditCard, BookOpen, CalendarCheck } from "lucide-react";
 import { format } from "date-fns";
 import { queryClient } from "@/lib/queryClient";
 import { apiPut, apiDelete } from "@/lib/http";
@@ -119,6 +119,8 @@ export default function NotificationsPage() {
         return <BookOpen className="w-5 h-5 text-purple-600" />;
       case 'driving_license_expiry':
         return <AlertTriangle className="w-5 h-5 text-amber-600" />;
+      case 'vacation_return_due':
+        return <CalendarCheck className="w-5 h-5 text-red-600" />;
       default:
         return <Bell className="w-5 h-5 text-gray-600" />;
     }
@@ -134,10 +136,18 @@ export default function NotificationsPage() {
         return 'Passport Expiry';
       case 'driving_license_expiry':
         return 'Driving License Expiry';
+      case 'vacation_return_due':
+        return 'Vacation Return Due';
       default:
         return 'Notification';
     }
   };
+
+  const getDateLabel = (type: string) =>
+    type === 'vacation_return_due' ? 'Return Date' : 'Expiry Date';
+
+  const getDaysLabel = (type: string) =>
+    type === 'vacation_return_due' ? 'Days Until Return' : 'Days Until Expiry';
 
   const getUrgencyColor = (daysUntilExpiry: number) => {
     if (daysUntilExpiry <= 7) return 'text-red-600 bg-red-50 dark:text-red-300 dark:bg-red-950 border-red-200 dark:border-red-900';
@@ -223,11 +233,11 @@ export default function NotificationsPage() {
                         <p className="text-gray-900">{notification.employee?.firstName} {notification.employee?.lastName}</p>
                       </div>
                       <div>
-                        <p className="text-gray-500 font-medium">Expiry Date</p>
+                        <p className="text-gray-500 font-medium">{getDateLabel(notification.type)}</p>
                         <p className="text-gray-900">{format(new Date(notification.expiryDate), "MMM d, yyyy")}</p>
                       </div>
                       <div>
-                        <p className="text-gray-500 font-medium">Days Until Expiry</p>
+                        <p className="text-gray-500 font-medium">{getDaysLabel(notification.type)}</p>
                         <p className={`font-semibold ${notification.daysUntilExpiry <= 7 ? 'text-red-600' : notification.daysUntilExpiry <= 30 ? 'text-orange-600' : 'text-gray-900'}`}>
                           {notification.daysUntilExpiry} days
                         </p>
