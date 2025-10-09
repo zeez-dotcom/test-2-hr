@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 
-import PayrollForm from "@/components/payroll/payroll-form";
+import PayrollGenerationWizard, {
+  type PayrollGenerationPayload,
+} from "@/components/payroll/payroll-generation-wizard";
 import PayrollDetailsView from "@/components/payroll/payroll-details-view";
 import PayrollEditView from "@/components/payroll/payroll-edit-view-simple";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,16 +28,7 @@ import { useSearch, useLocation } from "wouter";
 import { toastApiError } from "@/lib/toastError";
 import { useTranslation } from "react-i18next";
 
-interface PayrollGenerateRequest {
-  period: string;
-  startDate: string;
-  endDate: string;
-  deductions?: {
-    taxDeduction?: number;
-    socialSecurityDeduction?: number;
-    healthInsuranceDeduction?: number;
-  };
-}
+type PayrollGenerateRequest = PayrollGenerationPayload;
 
 const getErrorMessage = (error: unknown): string | undefined => {
   if (typeof error === "string") {
@@ -227,7 +220,7 @@ export default function Payroll() {
     },
   });
 
-    const handleGeneratePayroll = (data: PayrollGenerateRequest) => {
+  const handleGeneratePayroll = (data: PayrollGenerateRequest) => {
     const exists = payrollRuns?.some((run) => run.period === data.period);
     if (exists) {
       toast({
@@ -478,11 +471,11 @@ export default function Payroll() {
                         {t('payroll.generate','Generate Payroll')}
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+                    <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
                         <DialogTitle>{t('payroll.generateNew','Generate New Payroll')}</DialogTitle>
                       </DialogHeader>
-                      <PayrollForm
+                      <PayrollGenerationWizard
                         onSubmit={handleGeneratePayroll}
                         isSubmitting={generatePayrollMutation.isPending}
                         canGenerate={canGenerate}
@@ -508,11 +501,11 @@ export default function Payroll() {
                             Generate Payroll
                           </Button>
                         </DialogTrigger>
-                        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+                        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                           <DialogHeader>
                             <DialogTitle>Generate New Payroll</DialogTitle>
                           </DialogHeader>
-                          <PayrollForm
+                          <PayrollGenerationWizard
                             onSubmit={handleGeneratePayroll}
                             isSubmitting={generatePayrollMutation.isPending}
                             canGenerate={canGenerate}

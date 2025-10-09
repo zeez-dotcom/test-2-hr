@@ -11,6 +11,7 @@ export interface Employee {
 }
 
 export interface Loan {
+  id?: string;
   employeeId: string;
   status: string;
   remainingAmount: string;
@@ -18,6 +19,7 @@ export interface Loan {
 }
 
 export interface VacationRequest {
+  id?: string;
   employeeId: string;
   status: string;
   startDate: string;
@@ -25,6 +27,7 @@ export interface VacationRequest {
 }
 
 export interface EmployeeEvent {
+  id?: string;
   employeeId: string;
   eventDate: string;
   eventType: string;
@@ -34,6 +37,12 @@ export interface EmployeeEvent {
   title?: string;
   recurrenceType?: "none" | "monthly" | null;
   recurrenceEndDate?: string | null;
+}
+
+export interface PayrollCalculationOverrides {
+  skippedVacationIds?: Set<string>;
+  skippedLoanIds?: Set<string>;
+  skippedEventIds?: Set<string>;
 }
 
 export interface EmployeePayroll {
@@ -70,6 +79,7 @@ export function calculateEmployeePayroll({
   workingDays,
   attendanceDays,
   config,
+  overrides,
 }: {
   employee: Employee;
   loans: Loan[];
@@ -80,14 +90,18 @@ export function calculateEmployeePayroll({
   workingDays: number;
   attendanceDays?: number;
   config?: DeductionsConfig;
+  overrides?: PayrollCalculationOverrides;
 }): EmployeePayroll {
   const monthlySalary = parseFloat(employee.salary);
+
+  const skippedVacationIds = overrides?.skippedVacationIds;
 
   const employeeVacations = vacationRequests.filter(v =>
     v.employeeId === employee.id &&
     v.status === "approved" &&
     new Date(v.startDate) <= end &&
-    new Date(v.endDate) >= start
+    new Date(v.endDate) >= start &&
+    !(v.id && skippedVacationIds?.has(v.id))
   );
 
   const vacationDays = employeeVacations.reduce((total, vacation) => {
@@ -104,12 +118,15 @@ export function calculateEmployeePayroll({
       ? (monthlySalary * actualWorkingDays) / workingDays
       : 0;
 
+  const skippedLoanIds = overrides?.skippedLoanIds;
+
   const employeeLoans = loans.filter(l => {
     const isActive = l.status === "active" || l.status === "approved"; // tolerate legacy "approved"
     return (
       l.employeeId === employee.id &&
       isActive &&
-      parseFloat(l.remainingAmount) > 0
+      parseFloat(l.remainingAmount) > 0 &&
+      !(l.id && skippedLoanIds?.has(l.id))
     );
   });
 
@@ -140,11 +157,14 @@ export function calculateEmployeePayroll({
     return recurrenceEnd >= start;
   };
 
+  const skippedEventIds = overrides?.skippedEventIds;
+
   const employeeEventsForEmployee = employeeEvents.filter(event =>
     event.employeeId === employee.id &&
     event.affectsPayroll &&
     event.status === "active" &&
-    event.eventType !== "vacation"
+    event.eventType !== "vacation" &&
+    !(event.id && skippedEventIds?.has(event.id))
   );
 
   const employeeEventsInPeriod = employeeEventsForEmployee.filter(event =>
@@ -184,6 +204,9 @@ export function calculateEmployeePayroll({
         return;
       }
       const withinRange = isWithinRange(event.eventDate);
+      if (event.id && skippedEventIds?.has(event.id)) {
+        return;
+      }
       addAllowance((event as any).title as string | undefined, amount, !withinRange);
     });
 

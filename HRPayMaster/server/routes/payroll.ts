@@ -9,11 +9,21 @@ import {
   loans as loansTable,
   loanPayments as loanPaymentsTable,
 } from "@shared/schema";
+import type {
+  EmployeeWithDepartment,
+  LoanWithEmployee,
+  VacationRequestWithEmployee,
+  EmployeeEvent as EmployeeEventRecord,
+} from "@shared/schema";
 import { z } from "zod";
 import { db } from "../db";
 import { eq } from "drizzle-orm";
 import { requireRole } from "./auth";
-import { calculateEmployeePayroll, calculateTotals } from "../utils/payroll";
+import {
+  calculateEmployeePayroll,
+  calculateTotals,
+  type PayrollCalculationOverrides,
+} from "../utils/payroll";
 
 export const payrollRouter = Router();
 
@@ -22,6 +32,327 @@ const deductionsSchema = z.object({
   socialSecurityDeduction: z.number().optional(),
   healthInsuranceDeduction: z.number().optional(),
 });
+
+const overridesSchema = z.object({
+  skippedVacationIds: z.array(z.string().min(1)).optional(),
+  skippedLoanIds: z.array(z.string().min(1)).optional(),
+  skippedEventIds: z.array(z.string().min(1)).optional(),
+});
+
+const BONUS_EVENT_TYPES = new Set(["bonus", "commission", "overtime"]);
+const DEDUCTION_EVENT_TYPES = new Set(["deduction", "penalty"]);
+
+type PayrollInputs = {
+  employees: EmployeeWithDepartment[];
+  loans: LoanWithEmployee[];
+  vacationRequests: VacationRequestWithEmployee[];
+  employeeEvents: EmployeeEventRecord[];
+  attendanceSummary: Record<string, number>;
+};
+
+const parseAmount = (value: unknown) => {
+  const parsed = Number.parseFloat(String(value ?? 0));
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const resolveTitle = (value: unknown, fallback: string) => {
+  if (typeof value === "string" && value.trim() !== "") {
+    return value.trim();
+  }
+  return fallback;
+};
+
+const calculateVacationDaysInPeriod = (
+  vacation: VacationRequestWithEmployee,
+  start: Date,
+  end: Date,
+) => {
+  const vacStart = new Date(Math.max(new Date(vacation.startDate).getTime(), start.getTime()));
+  const vacEnd = new Date(Math.min(new Date(vacation.endDate).getTime(), end.getTime()));
+  return Math.max(0, Math.ceil((vacEnd.getTime() - vacStart.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+};
+
+const getEmployeeDisplayName = (employee: EmployeeWithDepartment) => {
+  const englishName = [employee.firstName, employee.lastName]
+    .filter(part => typeof part === "string" && part.trim() !== "")
+    .join(" ")
+    .trim();
+  if (englishName) {
+    return englishName;
+  }
+  if (employee.nickname && employee.nickname.trim() !== "") {
+    return employee.nickname.trim();
+  }
+  return employee.employeeCode ?? "Employee";
+};
+
+const toDateOrUndefined = (value?: string | null) => {
+  if (!value) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+};
+
+const isWithinRange = (
+  value: string | null | undefined,
+  start: Date,
+  end: Date,
+) => {
+  const date = toDateOrUndefined(value ?? undefined);
+  if (!date) {
+    return false;
+  }
+  return date >= start && date <= end;
+};
+
+const buildOverrideSets = (
+  overrides?: z.infer<typeof overridesSchema>,
+): PayrollCalculationOverrides | undefined => {
+  if (!overrides) {
+    return undefined;
+  }
+
+  let hasAny = false;
+  const sets: PayrollCalculationOverrides = {};
+
+  if (overrides.skippedVacationIds && overrides.skippedVacationIds.length > 0) {
+    sets.skippedVacationIds = new Set(overrides.skippedVacationIds);
+    hasAny = true;
+  }
+  if (overrides.skippedLoanIds && overrides.skippedLoanIds.length > 0) {
+    sets.skippedLoanIds = new Set(overrides.skippedLoanIds);
+    hasAny = true;
+  }
+  if (overrides.skippedEventIds && overrides.skippedEventIds.length > 0) {
+    sets.skippedEventIds = new Set(overrides.skippedEventIds);
+    hasAny = true;
+  }
+
+  return hasAny ? sets : undefined;
+};
+
+const resolveUseAttendance = async (overrideValue: unknown) => {
+  if (overrideValue !== undefined) {
+    return Boolean(overrideValue);
+  }
+  const companies = await storage.getCompanies();
+  const company = companies[0];
+  return Boolean((company as any)?.useAttendanceForDeductions);
+};
+
+const loadPayrollInputs = async ({
+  start,
+  end,
+  useAttendance,
+}: {
+  start: Date;
+  end: Date;
+  useAttendance: boolean;
+}): Promise<PayrollInputs> => {
+  const [employees, loans, vacationRequests, rawEvents] = await Promise.all([
+    storage.getEmployees({ status: ["active"], includeTerminated: false }),
+    storage.getLoans(start, end),
+    storage.getVacationRequests(start, end),
+    storage.getEmployeeEvents(start, end),
+  ]);
+
+  const attendanceSummary: Record<string, number> = useAttendance
+    ? await storage.getAttendanceSummary(start, end)
+    : {};
+
+  const employeeEvents = rawEvents.map(({ employee, ...event }) => ({
+    ...event,
+    affectsPayroll: (event as any).affectsPayroll ?? true,
+  })) as EmployeeEventRecord[];
+
+  return {
+    employees,
+    loans,
+    vacationRequests,
+    employeeEvents,
+    attendanceSummary,
+  };
+};
+
+const overlapsRange = (event: EmployeeEventRecord, start: Date, end: Date) => {
+  const recurrenceStart = toDateOrUndefined(event.eventDate);
+  if (!recurrenceStart || recurrenceStart > end) {
+    return false;
+  }
+  const recurrenceEnd = toDateOrUndefined(event.recurrenceEndDate ?? undefined);
+  if (!recurrenceEnd) {
+    return true;
+  }
+  return recurrenceEnd >= start;
+};
+
+interface PayrollPreviewVacationImpact {
+  id: string;
+  startDate: string;
+  endDate: string;
+  daysInPeriod: number;
+}
+
+interface PayrollPreviewLoanImpact {
+  id: string;
+  reason: string | null;
+  monthlyDeduction: number;
+  remainingAmount: number;
+}
+
+interface PayrollPreviewEventImpact {
+  id: string;
+  title: string;
+  amount: number;
+  eventType: string;
+  eventDate: string | null;
+  effect: "bonus" | "deduction";
+}
+
+interface PayrollPreviewAllowanceImpact {
+  id: string;
+  title: string;
+  amount: number;
+  source: "period" | "recurring";
+}
+
+interface PayrollPreviewEmployeeImpact {
+  employeeId: string;
+  employeeCode: string | null;
+  employeeName: string;
+  position: string | null;
+  vacations: PayrollPreviewVacationImpact[];
+  loans: PayrollPreviewLoanImpact[];
+  events: PayrollPreviewEventImpact[];
+  allowances: PayrollPreviewAllowanceImpact[];
+}
+
+interface PayrollPreviewResponse {
+  period: string;
+  startDate: string;
+  endDate: string;
+  employees: PayrollPreviewEmployeeImpact[];
+}
+
+const buildEmployeePreview = (
+  employee: EmployeeWithDepartment,
+  context: Omit<PayrollInputs, "employees" | "attendanceSummary">,
+  start: Date,
+  end: Date,
+): PayrollPreviewEmployeeImpact => {
+  const employeeVacations = context.vacationRequests.filter(vacation =>
+    vacation.employeeId === employee.id &&
+    vacation.status === "approved" &&
+    new Date(vacation.startDate) <= end &&
+    new Date(vacation.endDate) >= start,
+  );
+
+  const vacations: PayrollPreviewVacationImpact[] = [];
+  for (const vacation of employeeVacations) {
+    const id = vacation.id ?? `${employee.id}-vacation-${vacations.length}`;
+    vacations.push({
+      id,
+      startDate: vacation.startDate,
+      endDate: vacation.endDate,
+      daysInPeriod: calculateVacationDaysInPeriod(vacation, start, end),
+    });
+  }
+
+  const employeeLoans = context.loans.filter(loan => {
+    const isActive = loan.status === "active" || loan.status === "approved";
+    return (
+      loan.employeeId === employee.id &&
+      isActive &&
+      parseAmount(loan.remainingAmount) > 0
+    );
+  });
+
+  const loans: PayrollPreviewLoanImpact[] = [];
+  for (const loan of employeeLoans) {
+    const id = loan.id ?? `${employee.id}-loan-${loans.length}`;
+    const remaining = parseAmount(loan.remainingAmount);
+    const monthly = parseAmount(loan.monthlyDeduction);
+    loans.push({
+      id,
+      reason: (loan as any).reason ?? null,
+      monthlyDeduction: Math.min(monthly, remaining),
+      remainingAmount: remaining,
+    });
+  }
+
+  const eventsForEmployee = context.employeeEvents.filter(event =>
+    event.employeeId === employee.id &&
+    event.affectsPayroll &&
+    event.status === "active" &&
+    event.eventType !== "vacation",
+  );
+
+  const eventsInPeriod = eventsForEmployee.filter(event =>
+    isWithinRange(event.eventDate ?? undefined, start, end),
+  );
+
+  const events: PayrollPreviewEventImpact[] = [];
+  const allowances: PayrollPreviewAllowanceImpact[] = [];
+
+  for (const event of eventsInPeriod) {
+    if (event.eventType === "allowance") {
+      allowances.push({
+        id: event.id ?? `${employee.id}-allowance-${allowances.length}`,
+        title: resolveTitle((event as any).title, "Allowance"),
+        amount: parseAmount(event.amount),
+        source: "period",
+      });
+      continue;
+    }
+
+    if (
+      !BONUS_EVENT_TYPES.has(event.eventType) &&
+      !DEDUCTION_EVENT_TYPES.has(event.eventType)
+    ) {
+      continue;
+    }
+
+    events.push({
+      id: event.id ?? `${employee.id}-event-${events.length}`,
+      title: resolveTitle((event as any).title, event.eventType),
+      amount: parseAmount(event.amount),
+      eventType: event.eventType,
+      eventDate: event.eventDate ?? null,
+      effect: BONUS_EVENT_TYPES.has(event.eventType) ? "bonus" : "deduction",
+    });
+  }
+
+  eventsForEmployee
+    .filter(
+      event =>
+        event.eventType === "allowance" &&
+        event.recurrenceType === "monthly" &&
+        overlapsRange(event, start, end),
+    )
+    .forEach(event => {
+      if (isWithinRange(event.eventDate ?? undefined, start, end)) {
+        return;
+      }
+      allowances.push({
+        id: event.id ?? `${employee.id}-allowance-${allowances.length}`,
+        title: resolveTitle((event as any).title, "Allowance"),
+        amount: parseAmount(event.amount),
+        source: "recurring",
+      });
+    });
+
+  const employeeName = getEmployeeDisplayName(employee);
+
+  return {
+    employeeId: employee.id,
+    employeeCode: employee.employeeCode ?? null,
+    employeeName,
+    position: employee.position ?? null,
+    vacations,
+    loans,
+    events,
+    allowances,
+  };
+};
 
 const toComparableTime = (value: unknown) => {
   if (!value) return Number.POSITIVE_INFINITY;
@@ -171,6 +502,63 @@ payrollRouter.post(
   },
 );
 
+payrollRouter.post(
+  "/preview",
+  requireRole(["admin", "hr"]),
+  async (req, res, next) => {
+    try {
+      const { period, startDate, endDate } = req.body ?? {};
+
+      if (!period || !startDate || !endDate) {
+        return next(new HttpError(400, "Period, start date, and end date are required"));
+      }
+
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+        return next(new HttpError(400, "Invalid payroll period"));
+      }
+
+      if (start > end) {
+        return next(new HttpError(400, "Start date must be before end date"));
+      }
+
+      const useAttendance = await resolveUseAttendance(req.body?.useAttendance);
+      const { employees, loans, vacationRequests, employeeEvents } = await loadPayrollInputs({
+        start,
+        end,
+        useAttendance,
+      });
+
+      if (employees.length === 0) {
+        return next(new HttpError(400, "No active employees found"));
+      }
+
+      const previewEmployees = employees.map(employee =>
+        buildEmployeePreview(
+          employee,
+          { loans, vacationRequests, employeeEvents },
+          start,
+          end,
+        ),
+      );
+
+      const response: PayrollPreviewResponse = {
+        period,
+        startDate,
+        endDate,
+        employees: previewEmployees,
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error("Failed to preview payroll impacts:", error);
+      next(new HttpError(500, "Failed to preview payroll impacts", error));
+    }
+  },
+);
+
 payrollRouter.get("/:id", async (req, res, next) => {
   try {
     const payrollRun = await storage.getPayrollRun(req.params.id);
@@ -214,9 +602,29 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
 
     const deductionConfig = parsedDeductions.data;
 
+    const overridesInput =
+      typeof req.body?.overrides === "object" && req.body.overrides !== null
+        ? req.body.overrides
+        : {};
+    const parsedOverrides = overridesSchema.safeParse(overridesInput);
+    if (!parsedOverrides.success) {
+      return next(
+        new HttpError(400, "Invalid override data", parsedOverrides.error.errors),
+      );
+    }
+    const overrideSets = buildOverrideSets(parsedOverrides.data);
+
     // Parse dates once for reuse below
     const start = new Date(startDate);
     const end = new Date(endDate);
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      return next(new HttpError(400, "Invalid payroll period"));
+    }
+
+    if (start > end) {
+      return next(new HttpError(400, "Start date must be before end date"));
+    }
 
     // Prevent duplicate payroll runs for overlapping periods
     const newStart = start.toISOString().split("T")[0];
@@ -230,34 +638,19 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
       return next(new HttpError(409, "Payroll run already exists for this period"));
     }
 
-    // Get all active employees
-    const activeEmployees = await storage.getEmployees({
-      status: ["active"],
-      includeTerminated: false,
-    });
+    const useAttendance = await resolveUseAttendance(req.body?.useAttendance);
+
+    const {
+      employees: activeEmployees,
+      loans,
+      vacationRequests,
+      employeeEvents,
+      attendanceSummary,
+    } = await loadPayrollInputs({ start, end, useAttendance });
 
     if (activeEmployees.length === 0) {
       return next(new HttpError(400, "No active employees found"));
     }
-
-    // Get loans, vacation requests, and employee events for the period
-    const loans = await storage.getLoans(start, end);
-    const vacationRequests = await storage.getVacationRequests(start, end);
-    const rawEvents = await storage.getEmployeeEvents(start, end);
-    const employeeEvents = rawEvents.map(({ employee, ...e }) => ({
-      ...e,
-      affectsPayroll: (e as any).affectsPayroll ?? true,
-    }));
-    // Attendance summary per employee (optional)
-    // Attendance-based deduction toggle: request body override or company setting
-    const companies = await storage.getCompanies();
-    const company = companies[0];
-    const useAttendance = (req.body?.useAttendance !== undefined)
-      ? Boolean(req.body.useAttendance)
-      : Boolean((company as any)?.useAttendanceForDeductions);
-    const attendanceSummary = useAttendance
-      ? await storage.getAttendanceSummary(start, end)
-      : {} as Record<string, number>;
 
     const payrollEntries = await Promise.all(
       activeEmployees.map(employee => {
@@ -273,6 +666,7 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
           workingDays: employeeWorkingDays,
           attendanceDays: attendanceSummary[employee.id],
           config: deductionConfig,
+          overrides: overrideSets,
         });
       })
     );
@@ -285,6 +679,7 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
     const activeLoansByEmployee = new Map<string, typeof loans[number][]>();
     for (const loan of loans) {
       if (loan.status !== "active") continue;
+      if (overrideSets?.skippedLoanIds?.has(loan.id)) continue;
       const remaining = Number.parseFloat(String(loan.remainingAmount ?? 0));
       if (!(remaining > 0)) continue;
       const bucket = activeLoansByEmployee.get(loan.employeeId);
