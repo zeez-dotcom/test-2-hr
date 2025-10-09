@@ -569,6 +569,7 @@ export function buildEmployeeFileReport(params: {
     return {
       text: sanitized,
       font: lang === 'ar' ? 'Amiri' : 'Inter',
+      rtl: lang === 'ar',
       alignment: alignment ?? (lang === 'ar' ? 'right' : 'left'),
       ...rest,
     } as Content;
