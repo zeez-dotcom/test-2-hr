@@ -147,7 +147,7 @@ pdfMakeAny.createPdf = ((docDefinition: TDocumentDefinitions, tableLayouts?: any
   return originalCreatePdf(docDefinition, tableLayouts, fonts, vfs);
 }) as typeof pdfMakeAny.createPdf;
 const UNSAFE_CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
-const ARABIC_LETTER_MARK = '\u061C';
+const ARABIC_LETTER_MARK = '؜';
 
 export const sanitizeString = (value: string | null | undefined): string => {
   if (value == null) {
