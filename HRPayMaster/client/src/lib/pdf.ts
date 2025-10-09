@@ -747,8 +747,9 @@ export function buildEmployeeFileReport(params: {
       { fontSize: 10, bold: true, color: titleColor },
       { fontSize: 10, color: '#475569' }
     );
+    const isFirstAttachment = attachments.length === 0;
     const stackItems: Content[] = [
-      { stack: headingTexts, margin: [0, attachments.length === 0 ? 12 : 16, 0, 6] },
+      { stack: headingTexts, margin: [0, 0, 0, 6] },
     ];
 
     const isImage = /^data:image\//i.test(sanitizedUrl);
@@ -781,7 +782,11 @@ export function buildEmployeeFileReport(params: {
       );
     }
 
-    const block: Content = { stack: stackItems, unbreakable: true };
+    const block: Content = {
+      stack: stackItems,
+      unbreakable: true,
+      margin: [0, isFirstAttachment ? 12 : 16, 0, 0],
+    };
     attachments.push(block);
   });
 
