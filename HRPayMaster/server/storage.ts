@@ -64,6 +64,8 @@ import {
   type DocumentExpiryCheck,
   type CarRepair,
   type InsertCarRepair,
+  type AllowanceType,
+  type InsertAllowanceType,
   type EmployeeCustomField,
   type InsertEmployeeCustomField,
   type EmployeeCustomValue,
@@ -95,6 +97,7 @@ import {
   carRepairs,
   attendance,
   users,
+  allowanceTypes,
 } from "@shared/schema";
 
 
@@ -243,6 +246,10 @@ export interface IStorage {
   createCompany(company: InsertCompany): Promise<Company>;
   updateCompany(id: string, company: Partial<InsertCompany>): Promise<Company | undefined>;
   deleteCompany(id: string): Promise<boolean>;
+
+  // Allowance type methods
+  getAllowanceTypes(): Promise<AllowanceType[]>;
+  createAllowanceType(type: InsertAllowanceType): Promise<AllowanceType>;
 
   // Generic documents
   getGenericDocuments(): Promise<import("@shared/schema").GenericDocument[]>;
@@ -991,6 +998,70 @@ export class DatabaseStorage implements IStorage {
     const result = await db.delete(companies).where(eq(companies.id, id));
 
     return (result.rowCount ?? 0) > 0;
+
+  }
+
+
+
+  async getAllowanceTypes(): Promise<AllowanceType[]> {
+
+    return await db.select().from(allowanceTypes).orderBy(asc(allowanceTypes.name));
+
+  }
+
+
+
+  async createAllowanceType(type: InsertAllowanceType): Promise<AllowanceType> {
+
+    const name = type.name.trim();
+
+    if (!name) {
+
+      throw new Error("Allowance type name is required");
+
+    }
+
+    const normalizedName = normalizeAllowanceTitle(name);
+
+    const [record] = await db
+
+      .insert(allowanceTypes)
+
+      .values({ name, normalizedName })
+
+      .onConflictDoUpdate({
+
+        target: allowanceTypes.normalizedName,
+
+        set: { name },
+
+      })
+
+      .returning();
+
+    if (record) {
+
+      return record;
+
+    }
+
+    const [existing] = await db
+
+      .select()
+
+      .from(allowanceTypes)
+
+      .where(eq(allowanceTypes.normalizedName, normalizedName))
+
+      .limit(1);
+
+    if (existing) {
+
+      return existing;
+
+    }
+
+    throw new Error("Failed to create allowance type");
 
   }
 

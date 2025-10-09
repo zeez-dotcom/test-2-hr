@@ -16,6 +16,7 @@ import {
   insertEmployeeEventSchema,
   insertGenericDocumentSchema,
   insertAttendanceSchema,
+  insertAllowanceTypeSchema,
   type InsertEmployeeEvent,
   type InsertEmployee,
   type InsertCar,
@@ -363,6 +364,35 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
       next(new HttpError(500, "Failed to delete company"));
     }
   });
+
+  employeesRouter.get("/api/allowance-types", async (_req, res, next) => {
+    try {
+      const types = await storage.getAllowanceTypes();
+      res.json(types);
+    } catch (error) {
+      next(new HttpError(500, "Failed to fetch allowance types", error));
+    }
+  });
+
+  employeesRouter.post(
+    "/api/allowance-types",
+    requireRole(["admin", "hr"]),
+    async (req, res, next) => {
+      try {
+        const payload = insertAllowanceTypeSchema.parse(req.body);
+        const created = await storage.createAllowanceType(payload);
+        res.status(201).json(created);
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return next(new HttpError(400, "Invalid allowance type", error.errors));
+        }
+        if (error instanceof Error && error.message.includes("Allowance type name")) {
+          return next(new HttpError(400, error.message));
+        }
+        next(new HttpError(500, "Failed to create allowance type", error));
+      }
+    },
+  );
 
   // Employee routes
   employeesRouter.get("/api/employees", async (req, res, next) => {

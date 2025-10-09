@@ -1,5 +1,15 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, numeric, date, timestamp, boolean, integer, index } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  varchar,
+  numeric,
+  date,
+  timestamp,
+  boolean,
+  integer,
+  index,
+} from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import {
@@ -113,6 +123,13 @@ export const employees = pgTable("employees", {
 export const employeeCustomFields = pgTable("employee_custom_fields", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(),
+});
+
+export const allowanceTypes = pgTable("allowance_types", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  normalizedName: text("normalized_name").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const employeeCustomValues = pgTable("employee_custom_values", {
@@ -508,6 +525,19 @@ export const insertEmployeeCustomFieldSchema = createInsertSchema(employeeCustom
   id: true,
 });
 
+export const insertAllowanceTypeSchema = createInsertSchema(allowanceTypes)
+  .omit({
+    id: true,
+    normalizedName: true,
+    createdAt: true,
+  })
+  .extend({
+    name: z
+      .string()
+      .trim()
+      .min(1, "Name is required"),
+  });
+
 export const insertEmployeeCustomValueSchema = createInsertSchema(employeeCustomValues).omit({
   id: true,
 });
@@ -764,6 +794,9 @@ export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
 
 export type EmployeeCustomField = typeof employeeCustomFields.$inferSelect;
 export type InsertEmployeeCustomField = z.infer<typeof insertEmployeeCustomFieldSchema>;
+
+export type AllowanceType = typeof allowanceTypes.$inferSelect;
+export type InsertAllowanceType = z.infer<typeof insertAllowanceTypeSchema>;
 
 export type EmployeeCustomValue = typeof employeeCustomValues.$inferSelect;
 export type InsertEmployeeCustomValue = z.infer<typeof insertEmployeeCustomValueSchema>;

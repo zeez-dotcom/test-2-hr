@@ -25,6 +25,7 @@ import ConfirmDialog from "@/components/ui/confirm-dialog";
 import { generateEventReceipt } from "@/lib/event-receipts";
 import { allowanceRecursInRange, getMonthBounds, parseDateInput } from "@/lib/employee-events";
 import AllowanceRecurringFields from "@/components/employees/allowance-recurring-fields";
+import AllowanceTypeCombobox from "@/components/employees/allowance-type-combobox";
 
 const financialEventTypes = ["bonus", "commission", "deduction", "allowance", "overtime", "penalty"] as const;
 
@@ -443,7 +444,22 @@ export default function EmployeeEvents() {
                     <FormItem>
                       <FormLabel>Title *</FormLabel>
                       <FormControl>
-                        <Input placeholder="Event title (e.g., Car damage deduction)" {...field} />
+                        {selectedEventType === "allowance" ? (
+                          <AllowanceTypeCombobox
+                            value={field.value ?? ""}
+                            onChange={name => field.onChange(name)}
+                            placeholder="Select allowance type"
+                            extraOptions={events
+                              ?.filter(event => event.eventType === "allowance")
+                              .map(event => event.title ?? "")
+                              .filter(title => title.trim().length > 0)}
+                          />
+                        ) : (
+                          <Input
+                            placeholder="Event title (e.g., Car damage deduction)"
+                            {...field}
+                          />
+                        )}
                       </FormControl>
                       <FormMessage />
                     </FormItem>

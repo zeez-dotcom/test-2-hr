@@ -21,10 +21,7 @@ vi.mock('wouter', () => ({
 
 vi.mock('@tanstack/react-query', async () => {
   const actual: any = await vi.importActual('@tanstack/react-query');
-  return {
-    ...actual,
-    useMutation: () => ({ mutate: vi.fn(), isPending: false }),
-  };
+  return actual;
 });
 
 vi.mock('@/hooks/use-toast', () => ({
@@ -79,6 +76,25 @@ vi.mock('@/components/ui/textarea', () => ({
 
 vi.mock('@/components/ui/badge', () => ({
   Badge: ({ children }: any) => <span>{children}</span>,
+}));
+
+vi.mock('@/components/ui/command', () => ({
+  Command: ({ children }: any) => <div>{children}</div>,
+  CommandEmpty: ({ children }: any) => <div>{children}</div>,
+  CommandGroup: ({ children }: any) => <div>{children}</div>,
+  CommandInput: ({ value, onValueChange, placeholder }: any) => (
+    <input
+      placeholder={placeholder}
+      value={value ?? ''}
+      onChange={event => onValueChange?.(event.target.value)}
+    />
+  ),
+  CommandItem: ({ children, onSelect }: any) => (
+    <div role="option" onClick={() => onSelect?.()}>
+      {children}
+    </div>
+  ),
+  CommandList: ({ children }: any) => <div>{children}</div>,
 }));
 
 vi.mock('@/components/ui/popover', () => ({
@@ -213,5 +229,107 @@ describe('EmployeeEvents recurrence controls', () => {
     await user.click(calendars[calendars.length - 1]);
 
     await waitFor(() => expect(clearEndDateButton).not.toBeDisabled());
+  });
+
+  it('allows creating new allowance types from the combobox', async () => {
+    const user = userEvent.setup();
+
+    locationState.value = '/employee-events?month=2024-02';
+
+    const allowanceTypes = [
+      {
+        id: 'allow-type-1',
+        name: 'Housing Allowance',
+        normalizedName: 'housing_allowance',
+        createdAt: '2024-01-01T00:00:00.000Z',
+      },
+    ];
+
+    const allowanceEvent = {
+      id: 'evt-allowance',
+      employeeId: 'emp-1',
+      employee: { id: 'emp-1', firstName: 'Sam', lastName: 'Taylor' },
+      eventType: 'allowance',
+      recurrenceType: 'none',
+      recurrenceEndDate: null,
+      eventDate: '2024-02-15',
+      amount: '125',
+      status: 'active',
+      affectsPayroll: true,
+      title: 'Housing Allowance',
+      description: 'Monthly housing support',
+    };
+
+    httpMocks.apiGet.mockImplementation(async (path: string) => {
+      if (path === '/api/employee-events') {
+        return { ok: true, data: [allowanceEvent] };
+      }
+      if (path === '/api/employees') {
+        return { ok: true, data: [allowanceEvent.employee] };
+      }
+      if (path === '/api/allowance-types') {
+        return { ok: true, data: allowanceTypes.slice() };
+      }
+      return { ok: true, data: [] };
+    });
+
+    httpMocks.apiPost.mockImplementation(async (path: string, payload: any = undefined) => {
+      if (path === '/api/allowance-types') {
+        const newType = {
+          id: 'allow-type-2',
+          name: payload?.name,
+          normalizedName: String(payload?.name ?? '')
+            .toLowerCase()
+            .replace(/\s+/g, '_'),
+          createdAt: '2024-02-01T00:00:00.000Z',
+        };
+        allowanceTypes.push(newType);
+        return { ok: true, data: newType };
+      }
+      return { ok: true, data: allowanceEvent };
+    });
+
+    queryClient.setQueryData(['/api/employee-events'], [allowanceEvent]);
+    queryClient.setQueryData(['/api/employees'], [allowanceEvent.employee]);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <EmployeeEvents />
+      </QueryClientProvider>,
+    );
+
+    const eventRowTitle = await screen.findByText('Housing Allowance');
+    const rowContainer = eventRowTitle.closest('div');
+    const eventRowElement = rowContainer?.parentElement?.parentElement?.parentElement as HTMLElement | null;
+    expect(eventRowElement).not.toBeNull();
+    const buttons = within(eventRowElement as HTMLElement).getAllByRole('button');
+    const printButton = buttons.find(button => /Print/i.test(button.textContent ?? ''));
+    expect(printButton).toBeDefined();
+    const editButton = buttons[buttons.indexOf(printButton!) + 1];
+    await user.click(editButton);
+
+    const trigger = await screen.findByTestId('allowance-type-trigger');
+    expect(trigger).toHaveTextContent('Housing Allowance');
+
+    await user.click(trigger);
+
+    const searchInput = screen.getByPlaceholderText('Search allowances...');
+    await user.clear(searchInput);
+    await user.type(searchInput, 'Transport Allowance');
+
+    const createButton = screen.getByTestId('allowance-type-create');
+    await user.click(createButton);
+
+    await waitFor(() => {
+      const allowanceCall = httpMocks.apiPost.mock.calls.find(([path]) => path === '/api/allowance-types');
+      expect(allowanceCall).toBeTruthy();
+      expect(allowanceCall?.[1]).toEqual({ name: 'Transport Allowance' });
+    });
+
+    await waitFor(() => {
+      const allowanceCalls = httpMocks.apiGet.mock.calls.filter(([path]) => path === '/api/allowance-types');
+      expect(allowanceCalls.length).toBeGreaterThanOrEqual(2);
+      expect(screen.getByTestId('allowance-type-trigger')).toHaveTextContent('Transport Allowance');
+    });
   });
 });
