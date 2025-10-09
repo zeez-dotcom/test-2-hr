@@ -75,6 +75,39 @@ export function summarizeAllowances(
   };
 }
 
+export function formatAllowanceSummaryForCsv(
+  summaryOrAllowances:
+    | ReturnType<typeof summarizeAllowances>
+    | Record<string, NumericLike>
+    | null
+    | undefined,
+): string {
+  const summary =
+    summaryOrAllowances &&
+    typeof summaryOrAllowances === "object" &&
+    "entries" in summaryOrAllowances
+      ? (summaryOrAllowances as ReturnType<typeof summarizeAllowances>)
+      : summarizeAllowances(
+          summaryOrAllowances as Record<string, NumericLike> | null | undefined,
+        );
+
+  if (summary.entries.length === 0) {
+    return "";
+  }
+
+  const parts: string[] = [];
+
+  if (summary.entries.length > 1 && summary.total !== 0) {
+    parts.push(`Total: ${formatCurrency(summary.total)}`);
+  }
+
+  parts.push(
+    ...summary.entries.map(({ label, amount }) => `${label}: ${formatCurrency(amount)}`),
+  );
+
+  return parts.join("; ");
+}
+
 export function calculateWorkingDaysAdjustment(entry: {
   baseSalary?: NumericLike;
   employee?: { salary?: NumericLike } | null;

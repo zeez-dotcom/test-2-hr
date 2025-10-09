@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { formatAllowanceLabel, summarizeAllowances } from "./utils";
+import {
+  formatAllowanceLabel,
+  summarizeAllowances,
+  formatAllowanceSummaryForCsv,
+  formatCurrency,
+} from "./utils";
 
 describe("formatAllowanceLabel", () => {
   it("capitalizes words and appends allowance when missing", () => {
@@ -38,5 +43,34 @@ describe("summarizeAllowances", () => {
 
     expect(summary.total).toBe(0);
     expect(summary.entries).toHaveLength(0);
+  });
+});
+
+describe("formatAllowanceSummaryForCsv", () => {
+  it("returns a semi-colon separated summary with total when multiple allowances exist", () => {
+    const csvValue = formatAllowanceSummaryForCsv({
+      housing: 100,
+      food_allowance: 25,
+    });
+
+    expect(csvValue).toBe(
+      [
+        `Total: ${formatCurrency(125)}`,
+        `Housing Allowance: ${formatCurrency(100)}`,
+        `Food Allowance: ${formatCurrency(25)}`,
+      ].join("; "),
+    );
+  });
+
+  it("returns label-value pairs without total when a single allowance exists", () => {
+    const csvValue = formatAllowanceSummaryForCsv({
+      transport: "50",
+    });
+
+    expect(csvValue).toBe(`Transport Allowance: ${formatCurrency(50)}`);
+  });
+
+  it("returns an empty string when no allowances are provided", () => {
+    expect(formatAllowanceSummaryForCsv(null)).toBe("");
   });
 });
