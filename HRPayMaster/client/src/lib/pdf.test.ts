@@ -101,8 +101,8 @@ describe('pdf utility', () => {
       events: [],
       loans: [],
       documents: [
-        { title: 'Visa Document', url: 'data:image/png;base64,BBBB' },
-        { title: 'Passport Document', url: 'data:application/pdf;base64,CCCC' },
+        { title: 'Vacation approved (Mar 2024)', url: 'data:image/png;base64,BBBB' },
+        { title: 'Civil ID Document', url: 'data:application/pdf;base64,CCCC' },
       ],
     });
 
@@ -110,9 +110,19 @@ describe('pdf utility', () => {
     expect(serialized).toContain('data:image/png;base64,BBBB');
 
     const texts = collectTexts(def.content);
-    expect(texts).toContain('Passport Document');
+    expect(texts).toContain('Civil ID Document');
     expect(texts).toContain('Open PDF attachment');
     expect(texts).toContain('Preview unavailable for PDF attachments.');
+
+    const attachmentBlocks = (def.content as any[]).filter(
+      block => block && typeof block === 'object' && 'stack' in block && block.unbreakable === true
+    );
+
+    expect(attachmentBlocks.length).toBeGreaterThanOrEqual(2);
+    const imageAttachment = attachmentBlocks.find(block => collectTexts(block).includes('Vacation approved (Mar 2024)'));
+    expect(imageAttachment).toBeDefined();
+    const pdfAttachment = attachmentBlocks.find(block => collectTexts(block).includes('Civil ID Document'));
+    expect(pdfAttachment).toBeDefined();
   });
 
   it('adds employee code row and profile image to action receipt', () => {
