@@ -330,6 +330,7 @@ export interface EmployeeLite {
   employeeCode?: string | null;
   position?: string | null;
   profileImage?: string | null;
+  arabicName?: string | null;
 }
 
 export interface EmployeeEventLite {
@@ -613,6 +614,7 @@ export function buildEmployeeFileReport(params: {
   const firstName = sanitizeString(employee.firstName);
   const lastName = sanitizeString(employee.lastName);
   const fullName = `${firstName} ${lastName}`.trim();
+  const sanitizedArabicName = sanitizeString(employee.arabicName ?? '');
   const position = employee.position ? sanitizeString(employee.position) : '';
   const employeeId = sanitizeString(employee.id);
   const employeeCode = sanitizeString(employee.employeeCode ?? '');
@@ -678,8 +680,17 @@ export function buildEmployeeFileReport(params: {
   });
 
   const summaryItems: Content[] = [];
+  const nameValue: DualLabel | null = (() => {
+    const enValue = fullName;
+    const arValue = sanitizedArabicName || fullName;
+    if (!enValue && !arValue) {
+      return null;
+    }
+    return { en: enValue, ar: arValue };
+  })();
+
   const summaryPairs: Array<{ label: DualLabel; value: string | DualLabel | null }> = [
-    { label: selectLabel(l => l.fields.name), value: fullName || null },
+    { label: selectLabel(l => l.fields.name), value: nameValue },
     { label: selectLabel(l => l.fields.position), value: position || null },
     { label: selectLabel(l => l.fields.employeeCode), value: employeeCode || null },
     { label: selectLabel(l => l.fields.employeeId), value: employeeId || null },
