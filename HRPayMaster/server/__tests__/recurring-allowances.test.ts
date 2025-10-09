@@ -22,6 +22,8 @@ describe('DatabaseStorage recurring allowance expansion', () => {
   beforeEach(() => {
     employeeEventsFindManyMock.mockReset();
     selectMock.mockReset();
+    (storage as any).hasRecurringEmployeeEventsColumns = undefined;
+    (storage as any).loggedMissingRecurringEventColumns = false;
   });
 
   it('returns monthly allowance occurrences for overlapping periods in getEmployeeEvents', async () => {
@@ -202,5 +204,256 @@ describe('DatabaseStorage recurring allowance expansion', () => {
     expect(run?.entries).toHaveLength(1);
     expect(run?.entries?.[0].allowances).toEqual({ housing: 100, food: 50 });
     expect(run?.allowanceKeys).toEqual(['food', 'housing']);
+  });
+
+  it('hydrates payroll entries with monthly allowances for a single payroll run in getEmployeeReport', async () => {
+    const entryRow = {
+      id: 'entry-single',
+      payrollRunId: 'run-single',
+      employeeId: 'emp-allow',
+      grossPay: '1500',
+      baseSalary: '1200',
+      bonusAmount: '300',
+      taxDeduction: '0',
+      socialSecurityDeduction: '0',
+      healthInsuranceDeduction: '0',
+      loanDeduction: '0',
+      otherDeductions: '0',
+      netPay: '1500',
+    } as any;
+
+    selectMock
+      .mockReturnValueOnce({
+        from: () => ({
+          innerJoin: () => ({
+            where: async () => [
+              {
+                period: '2024-01',
+                entry: entryRow,
+                runId: 'run-single',
+                runStart: '2024-01-01',
+                runEnd: '2024-01-31',
+              },
+            ],
+          }),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: () => ({
+          where: async () => [],
+        }),
+      })
+      .mockReturnValueOnce({
+        from: () => ({
+          where: async () => [],
+        }),
+      })
+      .mockReturnValueOnce({
+        from: () => ({
+          where: async () => [],
+        }),
+      });
+
+    employeeEventsFindManyMock.mockResolvedValue([
+      {
+        id: 'evt-monthly',
+        employeeId: 'emp-allow',
+        eventDate: '2023-12-15',
+        eventType: 'allowance',
+        amount: '150',
+        status: 'active',
+        affectsPayroll: true,
+        recurrenceType: 'monthly',
+        recurrenceEndDate: null,
+        title: 'Housing Allowance',
+        employee: {
+          id: 'emp-allow',
+          firstName: 'Test',
+          lastName: 'Employee',
+        },
+      },
+    ]);
+
+    const report = await storage.getEmployeeReport('emp-allow', {
+      startDate: '2024-01-01',
+      endDate: '2024-01-31',
+      groupBy: 'month',
+    });
+
+    expect(report).toEqual([
+      {
+        period: '2024-01',
+        payrollEntries: [
+          expect.objectContaining({
+            id: 'entry-single',
+            allowances: { housing: 150 },
+          }),
+        ],
+        employeeEvents: [],
+        loans: [],
+        vacationRequests: [],
+      },
+    ]);
+  });
+
+  it('hydrates payroll entries with recurring allowances across multiple payroll runs in getEmployeeReport', async () => {
+    const januaryEntry = {
+      id: 'entry-jan',
+      payrollRunId: 'run-jan',
+      employeeId: 'emp-allow',
+      grossPay: '1500',
+      baseSalary: '1200',
+      bonusAmount: '300',
+      taxDeduction: '0',
+      socialSecurityDeduction: '0',
+      healthInsuranceDeduction: '0',
+      loanDeduction: '0',
+      otherDeductions: '0',
+      netPay: '1500',
+    } as any;
+
+    const februaryEntry = {
+      id: 'entry-feb',
+      payrollRunId: 'run-feb',
+      employeeId: 'emp-allow',
+      grossPay: '1525',
+      baseSalary: '1200',
+      bonusAmount: '325',
+      taxDeduction: '0',
+      socialSecurityDeduction: '0',
+      healthInsuranceDeduction: '0',
+      loanDeduction: '0',
+      otherDeductions: '0',
+      netPay: '1525',
+    } as any;
+
+    selectMock
+      .mockReturnValueOnce({
+        from: () => ({
+          innerJoin: () => ({
+            where: async () => [
+              {
+                period: '2024-01',
+                entry: januaryEntry,
+                runId: 'run-jan',
+                runStart: '2024-01-01',
+                runEnd: '2024-01-31',
+              },
+              {
+                period: '2024-02',
+                entry: februaryEntry,
+                runId: 'run-feb',
+                runStart: '2024-02-01',
+                runEnd: '2024-02-29',
+              },
+            ],
+          }),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: () => ({
+          where: async () => [],
+        }),
+      })
+      .mockReturnValueOnce({
+        from: () => ({
+          where: async () => [],
+        }),
+      })
+      .mockReturnValueOnce({
+        from: () => ({
+          where: async () => [],
+        }),
+      });
+
+    employeeEventsFindManyMock
+      .mockResolvedValueOnce([
+        {
+          id: 'evt-monthly',
+          employeeId: 'emp-allow',
+          eventDate: '2023-12-15',
+          eventType: 'allowance',
+          amount: '150',
+          status: 'active',
+          affectsPayroll: true,
+          recurrenceType: 'monthly',
+          recurrenceEndDate: null,
+          title: 'Housing Allowance',
+          employee: {
+            id: 'emp-allow',
+            firstName: 'Test',
+            lastName: 'Employee',
+          },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'evt-monthly',
+          employeeId: 'emp-allow',
+          eventDate: '2023-12-15',
+          eventType: 'allowance',
+          amount: '150',
+          status: 'active',
+          affectsPayroll: true,
+          recurrenceType: 'monthly',
+          recurrenceEndDate: null,
+          title: 'Housing Allowance',
+          employee: {
+            id: 'emp-allow',
+            firstName: 'Test',
+            lastName: 'Employee',
+          },
+        },
+        {
+          id: 'evt-transport',
+          employeeId: 'emp-allow',
+          eventDate: '2024-02-10',
+          eventType: 'allowance',
+          amount: '25',
+          status: 'active',
+          affectsPayroll: true,
+          recurrenceType: 'none',
+          recurrenceEndDate: null,
+          title: 'Transport Allowance',
+          employee: {
+            id: 'emp-allow',
+            firstName: 'Test',
+            lastName: 'Employee',
+          },
+        },
+      ]);
+
+    const report = await storage.getEmployeeReport('emp-allow', {
+      startDate: '2024-01-01',
+      endDate: '2024-02-29',
+      groupBy: 'month',
+    });
+
+    expect(report).toEqual([
+      {
+        period: '2024-01',
+        payrollEntries: [
+          expect.objectContaining({
+            id: 'entry-jan',
+            allowances: { housing: 150 },
+          }),
+        ],
+        employeeEvents: [],
+        loans: [],
+        vacationRequests: [],
+      },
+      {
+        period: '2024-02',
+        payrollEntries: [
+          expect.objectContaining({
+            id: 'entry-feb',
+            allowances: { housing: 150, transport: 25 },
+          }),
+        ],
+        employeeEvents: [],
+        loans: [],
+        vacationRequests: [],
+      },
+    ]);
   });
 });
