@@ -147,7 +147,11 @@ pdfMakeAny.createPdf = ((docDefinition: TDocumentDefinitions, tableLayouts?: any
   return originalCreatePdf(docDefinition, tableLayouts, fonts, vfs);
 }) as typeof pdfMakeAny.createPdf;
 const UNSAFE_CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
-const ARABIC_LETTER_MARK = '\u061C';
+const ARABIC_LETTER_MARK = '؜';
+const RIGHT_TO_LEFT_EMBEDDING = '\u202B';
+const POP_DIRECTIONAL_FORMATTING = '\u202C';
+const LEFT_TO_RIGHT_MARK = '\u200E';
+const HAS_LATIN_OR_DIGITS = /[A-Za-z0-9]/;
 
 export const sanitizeString = (value: string | null | undefined): string => {
   if (value == null) {
@@ -327,7 +331,23 @@ const formatSummaryLabelValue = (label: DualLabel, value: DualLabel): DualLabel 
       return '';
     }
 
-    const colon = lang === 'ar' ? `${ARABIC_LETTER_MARK}:` : ':';
+    if (lang === 'ar') {
+      if (!labelText) {
+        return valueText;
+      }
+
+      const colon = `${ARABIC_LETTER_MARK}:`;
+      if (!valueText) {
+        return `${RIGHT_TO_LEFT_EMBEDDING}${labelText}${colon}${POP_DIRECTIONAL_FORMATTING}`;
+      }
+
+      const needsLeftToRightIsolation = HAS_LATIN_OR_DIGITS.test(valueText);
+      const isolatedValue = needsLeftToRightIsolation ? `${LEFT_TO_RIGHT_MARK}${valueText}` : valueText;
+      const formatted = `${labelText}${colon} ${isolatedValue}`;
+      return `${RIGHT_TO_LEFT_EMBEDDING}${formatted}${POP_DIRECTIONAL_FORMATTING}`;
+    }
+
+    const colon = ':';
     if (!valueText) {
       return labelText ? `${labelText}${colon}` : '';
     }

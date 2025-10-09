@@ -132,6 +132,8 @@ describe('pdf utility', () => {
         lastName: 'Saber',
         id: 'emp-2',
         arabicName: 'حسين   صابر   وقار',
+        position: 'software engineer',
+        employeeCode: '001',
       },
       events: [],
       loans: [],
@@ -140,8 +142,18 @@ describe('pdf utility', () => {
     });
 
     const texts = collectTexts(def.content);
-    expect(texts).toContain('الاسم\u061C: حسين صابر وقار');
+    expect(texts.some(text => text.includes('الاسم؜: حسين صابر وقار'))).toBe(true);
     expect(texts).not.toContain('الاسم: حسينصابر وقار');
+
+    const summaryLines = texts.filter(text => text.includes('؜:'));
+
+    const positionLine = summaryLines.find(text => text.includes('software engineer'));
+    expect(positionLine).toBeDefined();
+    expect(positionLine).toContain('‎software engineer');
+
+    const codeLine = summaryLines.find(text => text.includes('001'));
+    expect(codeLine).toBeDefined();
+    expect(codeLine).toContain('‎001');
   });
 
   it('adds employee code row and profile image to action receipt', () => {
