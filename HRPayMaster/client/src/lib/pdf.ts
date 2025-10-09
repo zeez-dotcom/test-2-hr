@@ -781,7 +781,8 @@ export function buildEmployeeFileReport(params: {
       );
     }
 
-    attachments.push({ stack: stackItems });
+    const block: Content = { stack: stackItems, unbreakable: true };
+    attachments.push(block);
   });
 
   const assetsBody: any[] = [
