@@ -227,16 +227,7 @@ export default function Payroll() {
     },
   });
 
-  if (error) {
-    return (
-      <div>
-        <p>{t('payroll.errorLoading','Error loading payroll data')}</p>
-        <Button onClick={() => refetch()}>{t('common.retry','Retry')}</Button>
-      </div>
-    );
-  }
-
-  const handleGeneratePayroll = (data: PayrollGenerateRequest) => {
+    const handleGeneratePayroll = (data: PayrollGenerateRequest) => {
     const exists = payrollRuns?.some((run) => run.period === data.period);
     if (exists) {
       toast({
@@ -352,18 +343,14 @@ export default function Payroll() {
     }
   }, [isViewDialogOpen]);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return 'bg-success text-white';
-      case 'pending':
-        return 'bg-warning text-white';
-      case 'cancelled':
-        return 'bg-destructive text-white';
-      default:
-        return 'bg-secondary text-secondary-foreground';
-    }
-  };
+  if (error) {
+    return (
+      <div>
+        <p>{t('payroll.errorLoading','Error loading payroll data')}</p>
+        <Button onClick={() => refetch()}>{t('common.retry','Retry')}</Button>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -386,7 +373,20 @@ export default function Payroll() {
     );
   }
 
-  const totalPayroll = payrollRuns?.reduce((sum, run) => sum + parseFloat(run.grossAmount), 0) || 0;
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'bg-success text-white';
+      case 'pending':
+        return 'bg-warning text-white';
+      case 'cancelled':
+        return 'bg-destructive text-white';
+      default:
+        return 'bg-secondary text-secondary-foreground';
+    }
+  };
+
+    const totalPayroll = payrollRuns?.reduce((sum, run) => sum + parseFloat(run.grossAmount), 0) || 0;
   const completedRuns = payrollRuns?.filter(run => run.status === 'completed').length || 0;
   const pendingRuns = payrollRuns?.filter(run => run.status === 'pending').length || 0;
 

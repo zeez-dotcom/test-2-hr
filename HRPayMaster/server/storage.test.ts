@@ -324,6 +324,67 @@ describe('loan payment helpers', () => {
   });
 });
 
+
+
+describe('getEmployeeEvents', () => {
+  beforeEach(() => {
+    selectMock.mockReset();
+    employeeEventsFindManyMock.mockReset();
+    (storage as any).hasRecurringEmployeeEventsColumns = undefined;
+    (storage as any).loggedMissingRecurringEventColumns = false;
+  });
+
+  it('falls back to legacy query when recurrence columns are missing', async () => {
+    employeeEventsFindManyMock.mockRejectedValueOnce({ code: '42703' });
+
+    const fallbackRows = [
+      {
+        event: {
+          id: 'event-1',
+          employeeId: 'emp-1',
+          eventType: 'allowance',
+          title: 'Housing',
+          description: 'Monthly housing allowance',
+          amount: '100',
+          eventDate: '2024-01-05',
+          affectsPayroll: true,
+          documentUrl: null,
+          status: 'active',
+          addedBy: null,
+          createdAt: '2024-01-05T00:00:00Z',
+        },
+        employee: { id: 'emp-1', firstName: 'Alice', lastName: 'Smith' },
+      },
+    ];
+
+    selectMock.mockReturnValueOnce({
+      from: () => ({
+        leftJoin: () => ({
+          where: () => ({
+            orderBy: vi.fn().mockResolvedValue(fallbackRows),
+          }),
+        }),
+      }),
+    });
+
+    const result = await storage.getEmployeeEvents(
+      new Date('2024-01-01'),
+      new Date('2024-01-31'),
+      { eventType: 'allowance' },
+    );
+
+    expect(employeeEventsFindManyMock).toHaveBeenCalled();
+    expect(selectMock).toHaveBeenCalled();
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: 'event-1',
+        recurrenceType: 'none',
+        recurrenceEndDate: null,
+      }),
+    ]);
+  });
+});
+
 describe('getCarAssignments', () => {
   beforeEach(() => {
     carAssignmentsFindManyMock.mockReset();

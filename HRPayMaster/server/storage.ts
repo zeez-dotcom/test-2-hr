@@ -420,6 +420,10 @@ export interface IStorage {
 
 export class DatabaseStorage implements IStorage {
 
+  private hasRecurringEmployeeEventsColumns: boolean | undefined;
+
+  private loggedMissingRecurringEventColumns = false;
+
   async getUserById(id: string): Promise<User | undefined> {
 
     const [row] = await db.select().from(users).where(eq(users.id, id));
@@ -532,28 +536,53 @@ export class DatabaseStorage implements IStorage {
     return conditions;
   }
 
-  private isDataSourceUnavailableError(error: unknown): error is { code?: string } {
-
+  private isDataSourceUnavailableError(error: unknown): boolean {
     if (!error || typeof error !== "object") {
-
       return false;
-
     }
 
+    const seen = new Set<unknown>();
+    const queue: unknown[] = [error];
 
+    const matchesCode = (code: unknown) =>
+      typeof code === "string" && (code === "42P01" || code === "42703");
 
-    const code = (error as { code?: unknown }).code;
-
-    if (typeof code !== "string") {
-
+    const matchesMessage = (message: unknown) => {
+      if (typeof message !== "string") {
+        return false;
+      }
+      const normalized = message.toLowerCase();
+      if (normalized.includes("does not exist") && normalized.includes("employee")) {
+        return true;
+      }
+      if (normalized.includes("column") && normalized.includes("recurrence")) {
+        return true;
+      }
       return false;
+    };
 
+    while (queue.length) {
+      const current = queue.shift();
+      if (!current || typeof current !== "object" || seen.has(current)) {
+        continue;
+      }
+      seen.add(current);
+      const candidate: any = current;
+      if (matchesCode(candidate.code) || matchesMessage(candidate.message)) {
+        return true;
+      }
+      if (candidate.cause) {
+        queue.push(candidate.cause);
+      }
+      if (candidate.originalError) {
+        queue.push(candidate.originalError);
+      }
+      if (Array.isArray(candidate.errors)) {
+        queue.push(...candidate.errors);
+      }
     }
 
-
-
-    return code === "42P01" || code === "42703";
-
+    return false;
   }
 
 
@@ -3522,7 +3551,88 @@ export class DatabaseStorage implements IStorage {
     const rangeStart = this.normalizeDateInput(start);
     const rangeEnd = this.normalizeDateInput(end);
 
-    const conditions: (SQL | undefined)[] = [];
+    if (this.hasRecurringEmployeeEventsColumns === false) {
+      return this.getEmployeeEventsLegacy(rangeStart, rangeEnd, filters);
+    }
+
+    try {
+      const conditions: (SQL | undefined)[] = [];
+
+      if (filters?.employeeId) {
+        conditions.push(eq(employeeEvents.employeeId, filters.employeeId));
+      }
+
+      if (filters?.eventType) {
+        conditions.push(eq(employeeEvents.eventType, filters.eventType));
+      }
+
+      if (rangeStart && rangeEnd) {
+        conditions.push(
+          or(
+            and(
+              gte(employeeEvents.eventDate, rangeStart),
+              lte(employeeEvents.eventDate, rangeEnd),
+            ),
+            and(
+              eq(employeeEvents.eventType, "allowance"),
+              eq(employeeEvents.recurrenceType, "monthly"),
+              lte(employeeEvents.eventDate, rangeEnd),
+              or(
+                isNull(employeeEvents.recurrenceEndDate),
+                gte(employeeEvents.recurrenceEndDate, rangeStart),
+              ),
+            ),
+          ),
+        );
+      }
+
+      const activeConditions = conditions.filter(Boolean) as SQL[];
+      const where = activeConditions.length
+        ? activeConditions.length === 1
+          ? activeConditions[0]
+          : and(...activeConditions)
+        : undefined;
+
+      const events = await db.query.employeeEvents.findMany({
+        with: {
+          employee: true,
+        },
+        where,
+        orderBy: desc(employeeEvents.createdAt),
+      });
+
+      this.hasRecurringEmployeeEventsColumns = true;
+
+      if (!rangeStart || !rangeEnd) {
+        return events;
+      }
+
+      return this.expandRecurringEmployeeEvents(events, rangeStart, rangeEnd);
+    } catch (error) {
+      if (this.isDataSourceUnavailableError(error)) {
+        if (!this.loggedMissingRecurringEventColumns) {
+          console.warn(
+            "Recurring employee event columns unavailable; falling back without recurrence support.",
+            error,
+          );
+          this.loggedMissingRecurringEventColumns = true;
+        }
+        this.hasRecurringEmployeeEventsColumns = false;
+        return this.getEmployeeEventsLegacy(rangeStart, rangeEnd, filters);
+      }
+      throw error;
+    }
+  }
+
+  private async getEmployeeEventsLegacy(
+    rangeStart?: string,
+    rangeEnd?: string,
+    filters?: {
+      employeeId?: string;
+      eventType?: InsertEmployeeEvent["eventType"];
+    },
+  ): Promise<(EmployeeEvent & { employee: Employee })[]> {
+    const conditions: SQL[] = [];
 
     if (filters?.employeeId) {
       conditions.push(eq(employeeEvents.employeeId, filters.employeeId));
@@ -3534,46 +3644,49 @@ export class DatabaseStorage implements IStorage {
 
     if (rangeStart && rangeEnd) {
       conditions.push(
-        or(
-          and(
-            gte(employeeEvents.eventDate, rangeStart),
-            lte(employeeEvents.eventDate, rangeEnd),
-          ),
-          and(
-            eq(employeeEvents.eventType, "allowance"),
-            eq(employeeEvents.recurrenceType, "monthly"),
-            lte(employeeEvents.eventDate, rangeEnd),
-            or(
-              isNull(employeeEvents.recurrenceEndDate),
-              gte(employeeEvents.recurrenceEndDate, rangeStart),
-            ),
-          ),
+        and(
+          gte(employeeEvents.eventDate, rangeStart),
+          lte(employeeEvents.eventDate, rangeEnd),
         ),
       );
     }
 
-    const activeConditions = conditions.filter(Boolean) as SQL[];
-    const where = activeConditions.length
-      ? activeConditions.length === 1
-        ? activeConditions[0]
-        : and(...activeConditions)
+    const where = conditions.length
+      ? conditions.length === 1
+        ? conditions[0]
+        : and(...conditions)
       : undefined;
 
-    const events = await db.query.employeeEvents.findMany({
-      with: {
-        employee: true,
-      },
-      where,
-      orderBy: desc(employeeEvents.createdAt),
-    });
+    const rows = await db
+      .select({
+        event: {
+          id: employeeEvents.id,
+          employeeId: employeeEvents.employeeId,
+          eventType: employeeEvents.eventType,
+          title: employeeEvents.title,
+          description: employeeEvents.description,
+          amount: employeeEvents.amount,
+          eventDate: employeeEvents.eventDate,
+          affectsPayroll: employeeEvents.affectsPayroll,
+          documentUrl: employeeEvents.documentUrl,
+          status: employeeEvents.status,
+          addedBy: employeeEvents.addedBy,
+          createdAt: employeeEvents.createdAt,
+        },
+        employee: employees,
+      })
+      .from(employeeEvents)
+      .leftJoin(employees, eq(employeeEvents.employeeId, employees.id))
+      .where(where)
+      .orderBy(desc(employeeEvents.createdAt));
 
-    if (!rangeStart || !rangeEnd) {
-      return events;
-    }
-
-    return this.expandRecurringEmployeeEvents(events, rangeStart, rangeEnd);
+    return rows.map(({ event, employee }) => ({
+      ...event,
+      recurrenceType: "none",
+      recurrenceEndDate: null,
+      employee: employee ?? undefined,
+    })) as (EmployeeEvent & { employee: Employee })[];
   }
-
 
 
   async getEmployeeEvent(id: string): Promise<EmployeeEvent | undefined> {
