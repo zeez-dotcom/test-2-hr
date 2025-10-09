@@ -687,7 +687,7 @@ export const insertAssetSchema = createInsertSchema(assets).omit({
   createdAt: true,
 });
 
-export const insertAssetAssignmentSchema = createInsertSchema(assetAssignments)
+const assetAssignmentBaseSchema = createInsertSchema(assetAssignments)
   .omit({
     id: true,
     createdAt: true,
@@ -700,17 +700,30 @@ export const insertAssetAssignmentSchema = createInsertSchema(assetAssignments)
       },
       z.string().min(1, "Employee is required").optional(),
     ),
-  })
-  .refine(
-    data => {
-      if (!data.status || data.status === "maintenance") return true;
-      return !!data.employeeId;
-    },
-    {
-      path: ["employeeId"],
-      message: "Employee is required unless the asset is in maintenance",
-    },
-  );
+  });
+
+export const insertAssetAssignmentSchema = assetAssignmentBaseSchema.refine(
+  data => {
+    if (!data.status || data.status === "maintenance") return true;
+    return !!data.employeeId;
+  },
+  {
+    path: ["employeeId"],
+    message: "Employee is required unless the asset is in maintenance",
+  },
+);
+
+export const updateAssetAssignmentSchema = assetAssignmentBaseSchema
+  .partial()
+  .superRefine((data, ctx) => {
+    if (data.status && data.status !== "maintenance" && !data.employeeId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Employee is required unless the asset is in maintenance",
+        path: ["employeeId"],
+      });
+    }
+  });
 
 export const insertAssetDocumentSchema = createInsertSchema(assetDocuments).omit({
   id: true,
@@ -953,27 +966,27 @@ export type LoanWithEmployee = Loan & {
 };
 
 export type CarWithAssignment = Car & {
-  currentAssignment?: CarAssignment & {
-    employee?: Employee;
-  };
+  currentAssignment?: (CarAssignment & {
+    employee?: Employee | null;
+  }) | null;
 };
 
 export type CarAssignmentWithDetails = CarAssignment & {
-  car?: Car;
-  employee?: Employee;
-  assigner?: Employee;
+  car?: Car | null;
+  employee?: Employee | null;
+  assigner?: Employee | null;
 };
 
 export type AssetWithAssignment = Asset & {
-  currentAssignment?: AssetAssignment & {
-    employee?: Employee;
-  };
+  currentAssignment?: (AssetAssignment & {
+    employee?: Employee | null;
+  }) | null;
 };
 
 export type AssetAssignmentWithDetails = AssetAssignment & {
-  asset?: Asset;
-  employee?: Employee;
-  assigner?: Employee;
+  asset?: Asset | null;
+  employee?: Employee | null;
+  assigner?: Employee | null;
 };
 
 // Relations

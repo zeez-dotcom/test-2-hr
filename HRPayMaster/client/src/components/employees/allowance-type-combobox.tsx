@@ -15,7 +15,8 @@ import { useAllowanceTypes, useCreateAllowanceType } from "@/lib/allowance-types
 import { useToast } from "@/hooks/use-toast";
 import { toastApiError } from "@/lib/toastError";
 
-interface AllowanceTypeComboboxProps extends React.HTMLAttributes<HTMLDivElement> {
+interface AllowanceTypeComboboxProps
+  extends Omit<React.HTMLAttributes<HTMLDivElement>, "onChange"> {
   value?: string | null;
   onChange: (value: string) => void;
   placeholder?: string;

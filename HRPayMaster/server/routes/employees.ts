@@ -10,6 +10,7 @@ import {
   insertAssetSchema,
   insertCarSchema,
   insertAssetAssignmentSchema,
+  updateAssetAssignmentSchema,
   insertCarAssignmentSchema,
   insertNotificationSchema,
   insertEmailAlertSchema,
@@ -404,7 +405,12 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
       const offset = limitNum ? (pageNum - 1) * limitNum : undefined;
 
       const statusValues = Array.isArray(status)
-        ? status
+        ? status.reduce<string[]>((acc, value) => {
+            if (typeof value === "string") {
+              acc.push(...value.split(","));
+            }
+            return acc;
+          }, [])
         : typeof status === "string"
           ? status.split(",")
           : [];
@@ -1445,7 +1451,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
 
   employeesRouter.put("/api/asset-assignments/:id", async (req, res, next) => {
     try {
-      const updates = insertAssetAssignmentSchema.partial().parse(req.body);
+      const updates = updateAssetAssignmentSchema.parse(req.body);
       const updated = await assetService.updateAssignment(req.params.id, updates);
       if (!updated) {
         return next(new HttpError(404, "Asset assignment not found"));

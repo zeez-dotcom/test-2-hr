@@ -3,17 +3,42 @@ import { render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
+import type { ApiResult } from '@/lib/http';
 import EmployeeEvents from '../employee-events';
 import '@testing-library/jest-dom';
 
 const { toast } = vi.hoisted(() => ({ toast: vi.fn() }));
 const locationState = vi.hoisted(() => ({ value: '/employee-events?month=2024-01' }));
-const httpMocks = vi.hoisted(() => ({
-  apiGet: vi.fn(async () => ({ ok: true, data: [] })),
-  apiPost: vi.fn(async () => ({ ok: true, data: {} })),
-  apiPut: vi.fn(async () => ({ ok: true })),
-  apiDelete: vi.fn(async () => ({ ok: true })),
-}));
+type HttpModule = typeof import("@/lib/http");
+type MockedHttpModule = {
+  [K in keyof HttpModule]: ReturnType<typeof vi.fn<HttpModule[K]>>;
+};
+
+const httpMocks = vi.hoisted(() => {
+  const createSuccess = <T,>(data: T): ApiResult<T> => ({
+    ok: true,
+    status: 200,
+    data,
+    headers: new Headers(),
+  });
+
+  const module: MockedHttpModule = {
+    apiGet: vi.fn(async () => createSuccess([])),
+    apiPost: vi.fn(async () => createSuccess({})),
+    apiPut: vi.fn(async () => createSuccess({})),
+    apiDelete: vi.fn(async () => createSuccess(undefined)),
+    apiUpload: vi.fn(async () => createSuccess(undefined)),
+  };
+
+  return module;
+});
+
+const createSuccessResponse = <T,>(data: T): ApiResult<T> => ({
+  ok: true,
+  status: 200,
+  data,
+  headers: new Headers(),
+});
 
 vi.mock('wouter', () => ({
   useLocation: () => [locationState.value, vi.fn()],
@@ -140,7 +165,7 @@ describe('EmployeeEvents recurrence controls', () => {
     httpMocks.apiPost.mockReset();
     httpMocks.apiPut.mockReset();
     httpMocks.apiDelete.mockReset();
-    httpMocks.apiGet.mockResolvedValue({ ok: true, data: [] });
+    httpMocks.apiGet.mockResolvedValue(createSuccessResponse([]));
   });
 
   it('shows recurring allowance for month filter and handles recurrence toggles', async () => {
@@ -178,12 +203,12 @@ describe('EmployeeEvents recurrence controls', () => {
 
     httpMocks.apiGet.mockImplementation(async (path: string) => {
       if (path === '/api/employee-events') {
-        return { ok: true, data: [recurringEvent, bonusEvent] };
+        return createSuccessResponse([recurringEvent, bonusEvent]);
       }
       if (path === '/api/employees') {
-        return { ok: true, data: [recurringEvent.employee] };
+        return createSuccessResponse([recurringEvent.employee]);
       }
-      return { ok: true, data: [] };
+      return createSuccessResponse([]);
     });
 
     queryClient.setQueryData(['/api/employee-events'], [recurringEvent, bonusEvent]);
@@ -262,15 +287,15 @@ describe('EmployeeEvents recurrence controls', () => {
 
     httpMocks.apiGet.mockImplementation(async (path: string) => {
       if (path === '/api/employee-events') {
-        return { ok: true, data: [allowanceEvent] };
+        return createSuccessResponse([allowanceEvent]);
       }
       if (path === '/api/employees') {
-        return { ok: true, data: [allowanceEvent.employee] };
+        return createSuccessResponse([allowanceEvent.employee]);
       }
       if (path === '/api/allowance-types') {
-        return { ok: true, data: allowanceTypes.slice() };
+        return createSuccessResponse(allowanceTypes.slice());
       }
-      return { ok: true, data: [] };
+      return createSuccessResponse([]);
     });
 
     httpMocks.apiPost.mockImplementation(async (path: string, payload: any = undefined) => {
@@ -284,9 +309,9 @@ describe('EmployeeEvents recurrence controls', () => {
           createdAt: '2024-02-01T00:00:00.000Z',
         };
         allowanceTypes.push(newType);
-        return { ok: true, data: newType };
+        return createSuccessResponse(newType);
       }
-      return { ok: true, data: allowanceEvent };
+      return createSuccessResponse(allowanceEvent);
     });
 
     queryClient.setQueryData(['/api/employee-events'], [allowanceEvent]);

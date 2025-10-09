@@ -34,8 +34,8 @@ import {
 
 export function hasVacationConflict(
   vacations: VacationRequest[],
-  employeeId: string,
-  assignedDateValue: string,
+  employeeId: string | null | undefined,
+  assignedDateValue: string | null | undefined,
 ) {
   if (!employeeId || !assignedDateValue) {
     return false;
