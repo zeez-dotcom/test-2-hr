@@ -62,6 +62,7 @@ import {
   type EmployeeEvent,
   type InsertEmployeeEvent,
   type DocumentExpiryCheck,
+  type FleetExpiryCheck,
   type CarRepair,
   type InsertCarRepair,
   type AllowanceType,
@@ -415,6 +416,7 @@ export interface IStorage {
 
   // Document expiry check methods
   checkDocumentExpiries(): Promise<DocumentExpiryCheck[]>;
+  checkFleetExpiries(): Promise<FleetExpiryCheck[]>;
 
   // Attendance methods
   getAttendance(start?: Date, end?: Date): Promise<Attendance[]>;
@@ -5179,6 +5181,45 @@ export class DatabaseStorage implements IStorage {
 
     return checks;
 
+  }
+
+  async checkFleetExpiries(): Promise<FleetExpiryCheck[]> {
+    const carsWithAssignments = await this.getCars();
+    const checks: FleetExpiryCheck[] = carsWithAssignments.map((car) => {
+      const registrationExpiry = car.registrationExpiry ?? null;
+      const daysUntilExpiry = registrationExpiry
+        ? this.calculateDaysUntilExpiry(registrationExpiry)
+        : null;
+      const assignedEmployee = car.currentAssignment?.employee
+        ? `${car.currentAssignment.employee.firstName ?? ""} ${car.currentAssignment.employee.lastName ?? ""}`.trim()
+        : null;
+      return {
+        carId: car.id,
+        make: car.make,
+        model: car.model,
+        year: car.year ?? null,
+        plateNumber: car.plateNumber,
+        registrationExpiry,
+        daysUntilRegistrationExpiry: daysUntilExpiry,
+        status: car.status,
+        assignedEmployeeName: assignedEmployee || null,
+        registrationOwner: car.registrationOwner ?? null,
+      };
+    });
+
+    return checks.sort((a, b) => {
+      const aDays = a.daysUntilRegistrationExpiry;
+      const bDays = b.daysUntilRegistrationExpiry;
+      if (aDays === null && bDays === null) {
+        return a.make.localeCompare(b.make) || a.model.localeCompare(b.model) || a.plateNumber.localeCompare(b.plateNumber);
+      }
+      if (aDays === null) return 1;
+      if (bDays === null) return -1;
+      if (aDays === bDays) {
+        return a.make.localeCompare(b.make) || a.model.localeCompare(b.model) || a.plateNumber.localeCompare(b.plateNumber);
+      }
+      return aDays - bDays;
+    });
   }
 
 

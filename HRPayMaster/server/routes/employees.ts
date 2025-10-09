@@ -2231,6 +2231,15 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
     }
   });
 
+  employeesRouter.get("/api/fleet/expiry-check", async (_req, res, next) => {
+    try {
+      const fleetChecks = await storage.checkFleetExpiries();
+      res.json(fleetChecks);
+    } catch (error) {
+      next(new HttpError(500, "Failed to check fleet expiries"));
+    }
+  });
+
   // Attendance CSV import
   const uploadCsv = multer();
   employeesRouter.post("/api/attendance/import", uploadCsv.single('file'), async (req, res, next) => {

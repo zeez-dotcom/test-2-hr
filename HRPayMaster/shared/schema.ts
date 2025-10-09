@@ -918,6 +918,19 @@ export type DocumentExpiryCheck = {
   };
 };
 
+export type FleetExpiryCheck = {
+  carId: string;
+  make: string;
+  model: string;
+  year: number | null;
+  plateNumber: string;
+  registrationExpiry: string | null;
+  daysUntilRegistrationExpiry: number | null;
+  status: string;
+  assignedEmployeeName?: string | null;
+  registrationOwner?: string | null;
+};
+
 // Extended types for API responses
 export type EmployeeWithDepartment = Employee & {
   department?: Department;
