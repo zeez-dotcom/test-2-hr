@@ -207,6 +207,7 @@ type EmployeeFileLabels = {
     position: string;
     employeeCode: string;
     employeeId: string;
+    generatedAt: string;
   };
   tables: {
     events: { title: string; date: string };
@@ -234,6 +235,7 @@ const defaultEmployeeFileLabels: Record<'en' | 'ar', EmployeeFileLabels> = {
       position: 'Position',
       employeeCode: 'Employee Code',
       employeeId: 'Employee ID',
+      generatedAt: 'Generated At',
     },
     tables: {
       events: { title: 'Title', date: 'Date' },
@@ -259,6 +261,7 @@ const defaultEmployeeFileLabels: Record<'en' | 'ar', EmployeeFileLabels> = {
       position: 'الوظيفة',
       employeeCode: 'رمز الموظف',
       employeeId: 'رقم الموظف',
+      generatedAt: 'تم الإنشاء في',
     },
     tables: {
       events: { title: 'العنوان', date: 'التاريخ' },
@@ -306,6 +309,19 @@ const employeeFileLabelsByLocale: Record<'en' | 'ar', EmployeeFileLabels> = {
 };
 
 type DualLabel = { en: string; ar: string };
+
+const formatReportTimestamp = (date: Date): DualLabel => {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return { en: '-', ar: '-' };
+  }
+
+  const options: Intl.DateTimeFormatOptions = { dateStyle: 'medium', timeStyle: 'short' };
+
+  return {
+    en: new Intl.DateTimeFormat('en-US', options).format(date),
+    ar: new Intl.DateTimeFormat('ar-SA', options).format(date),
+  };
+};
 
 export interface EmployeeLite {
   firstName: string;
@@ -640,20 +656,25 @@ export function buildEmployeeFileReport(params: {
   });
 
   const summaryItems: Content[] = [];
-  const summaryPairs: Array<{ label: DualLabel; value: string | null }> = [
+  const summaryPairs: Array<{ label: DualLabel; value: string | DualLabel | null }> = [
     { label: selectLabel(l => l.fields.name), value: fullName || null },
     { label: selectLabel(l => l.fields.position), value: position || null },
     { label: selectLabel(l => l.fields.employeeCode), value: employeeCode || null },
     { label: selectLabel(l => l.fields.employeeId), value: employeeId || null },
+    { label: selectLabel(l => l.fields.generatedAt), value: formatReportTimestamp(new Date()) },
   ];
 
   for (const pair of summaryPairs) {
     if (!pair.value) continue;
+    const value: DualLabel =
+      typeof pair.value === 'string'
+        ? { en: pair.value, ar: pair.value }
+        : pair.value;
     summaryItems.push(
       createStack(
         {
-          en: `${pair.label.en}: ${pair.value}`,
-          ar: `${pair.label.ar}: ${pair.value}`,
+          en: `${pair.label.en}: ${value.en}`,
+          ar: `${pair.label.ar}: ${value.ar}`,
         },
         {
           primaryStyle: { fontSize: 10, color: '#111827' },
