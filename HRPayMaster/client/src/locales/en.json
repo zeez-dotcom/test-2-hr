@@ -565,7 +565,8 @@
         "name": "Name",
         "position": "Position",
         "employeeCode": "Employee Code",
-        "employeeId": "Employee ID"
+        "employeeId": "Employee ID",
+        "generatedAt": "Generated At"
       },
       "tables": {
         "events": {

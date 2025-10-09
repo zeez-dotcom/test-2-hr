@@ -207,6 +207,7 @@ type EmployeeFileLabels = {
     position: string;
     employeeCode: string;
     employeeId: string;
+    generatedAt: string;
   };
   tables: {
     events: { title: string; date: string };
@@ -234,6 +235,7 @@ const defaultEmployeeFileLabels: Record<'en' | 'ar', EmployeeFileLabels> = {
       position: 'Position',
       employeeCode: 'Employee Code',
       employeeId: 'Employee ID',
+      generatedAt: 'Generated At',
     },
     tables: {
       events: { title: 'Title', date: 'Date' },
@@ -259,6 +261,7 @@ const defaultEmployeeFileLabels: Record<'en' | 'ar', EmployeeFileLabels> = {
       position: 'الوظيفة',
       employeeCode: 'رمز الموظف',
       employeeId: 'رقم الموظف',
+      generatedAt: 'تاريخ إنشاء التقرير',
     },
     tables: {
       events: { title: 'العنوان', date: 'التاريخ' },
@@ -640,20 +643,34 @@ export function buildEmployeeFileReport(params: {
   });
 
   const summaryItems: Content[] = [];
-  const summaryPairs: Array<{ label: DualLabel; value: string | null }> = [
+  const generatedAtDate = new Date();
+  const generatedAtValue: DualLabel = {
+    en: sanitizeString(
+      new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(generatedAtDate)
+    ),
+    ar: sanitizeString(
+      new Intl.DateTimeFormat('ar', { dateStyle: 'medium', timeStyle: 'short' }).format(generatedAtDate)
+    ),
+  };
+  const summaryPairs: Array<{ label: DualLabel; value: string | DualLabel | null }> = [
     { label: selectLabel(l => l.fields.name), value: fullName || null },
     { label: selectLabel(l => l.fields.position), value: position || null },
     { label: selectLabel(l => l.fields.employeeCode), value: employeeCode || null },
     { label: selectLabel(l => l.fields.employeeId), value: employeeId || null },
+    { label: selectLabel(l => l.fields.generatedAt), value: generatedAtValue },
   ];
 
   for (const pair of summaryPairs) {
     if (!pair.value) continue;
+    const value = pair.value;
+    const valueEn = sanitizeString(typeof value === 'string' ? value : value?.en ?? '');
+    const valueAr = sanitizeString(typeof value === 'string' ? value : value?.ar ?? '');
+    if (!valueEn && !valueAr) continue;
     summaryItems.push(
       createStack(
         {
-          en: `${pair.label.en}: ${pair.value}`,
-          ar: `${pair.label.ar}: ${pair.value}`,
+          en: valueEn ? `${pair.label.en}: ${valueEn}` : '',
+          ar: valueAr ? `${pair.label.ar}: ${valueAr}` : '',
         },
         {
           primaryStyle: { fontSize: 10, color: '#111827' },
