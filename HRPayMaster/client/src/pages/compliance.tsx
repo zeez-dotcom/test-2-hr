@@ -10,10 +10,14 @@ import { Button } from "@/components/ui/button";
 import { apiPut } from "@/lib/http";
 import { useToast } from "@/hooks/use-toast";
 import { sanitizeImageSrc } from "@/lib/sanitizeImageSrc";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { format } from "date-fns";
+import type { FleetExpiryCheck } from "@shared/schema";
 
 export default function Compliance() {
   const { t } = useTranslation();
-  const allowed = ["expiry", "notifications", "approvals"] as const;
+  const allowed = ["expiry", "fleet", "notifications", "approvals"] as const;
   const defaultTab = "expiry" as const;
   const [location, navigate] = useLocation();
   const search = useSearch();
@@ -39,11 +43,15 @@ export default function Compliance() {
       <Tabs value={tab} onValueChange={onTabChange} className="space-y-4">
         <TabsList>
           <TabsTrigger value="expiry">{t('compliance.expiry','Expiry')}</TabsTrigger>
+          <TabsTrigger value="fleet">{t('compliance.fleet','Fleet')}</TabsTrigger>
           <TabsTrigger value="notifications">{t('compliance.notifications','Notifications')}</TabsTrigger>
           <TabsTrigger value="approvals">{t('compliance.approvals','Approvals')}</TabsTrigger>
         </TabsList>
         <TabsContent value="expiry">
           <Documents />
+        </TabsContent>
+        <TabsContent value="fleet">
+          <FleetExpiry />
         </TabsContent>
         <TabsContent value="notifications">
           <Notifications />
@@ -52,6 +60,167 @@ export default function Compliance() {
           <Approvals />
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function FleetExpiry() {
+  const { t } = useTranslation();
+  const { data: fleetChecks = [], isLoading, error } = useQuery<FleetExpiryCheck[]>({
+    queryKey: ["/api/fleet/expiry-check"],
+  });
+
+  if (error) {
+    return <div className="text-sm text-destructive">{t('compliance.fleetError','Failed to load fleet expiries.')}</div>;
+  }
+
+  const withExpiry = fleetChecks.filter((check) => Boolean(check.registrationExpiry));
+  const expired = withExpiry.filter((check) => (check.daysUntilRegistrationExpiry ?? 0) < 0);
+  const expiringSoon = withExpiry.filter((check) => {
+    const days = check.daysUntilRegistrationExpiry ?? Infinity;
+    return days >= 0 && days <= 30;
+  });
+  const missingDates = fleetChecks.filter((check) => !check.registrationExpiry);
+
+  const getStatusBadge = (days: number | null) => {
+    if (days === null) {
+      return (
+        <Badge className="bg-gray-100 text-gray-800 border-gray-200">
+          {t('compliance.fleetMissing','Missing date')}
+        </Badge>
+      );
+    }
+    if (days < 0) {
+      return (
+        <Badge className="bg-red-100 text-red-800 border-red-200">
+          {t('compliance.fleetExpired','Expired {{days}} days ago', { days: Math.abs(days) })}
+        </Badge>
+      );
+    }
+    if (days <= 7) {
+      return (
+        <Badge className="bg-red-100 text-red-800 border-red-200">
+          {t('compliance.fleetDueWeek','Due in {{days}} days', { days })}
+        </Badge>
+      );
+    }
+    if (days <= 30) {
+      return (
+        <Badge className="bg-orange-100 text-orange-800 border-orange-200">
+          {t('compliance.fleetDueSoon','Due in {{days}} days', { days })}
+        </Badge>
+      );
+    }
+    return (
+      <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">
+        {t('compliance.fleetCurrent','Current')}
+      </Badge>
+    );
+  };
+
+  const formatExpiryDate = (value: string | null) => {
+    if (!value) return t('compliance.fleetNoDate','—');
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return format(parsed, 'PPP');
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg text-red-800 dark:text-red-200">
+              {t('compliance.fleetExpiredTitle','Expired Registrations')}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-red-800 dark:text-red-200">{expired.length}</div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg text-orange-800 dark:text-orange-200">
+              {t('compliance.fleetSoonTitle','Due in 30 Days')}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-orange-800 dark:text-orange-200">{expiringSoon.length}</div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-900/60">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg text-gray-800 dark:text-gray-200">
+              {t('compliance.fleetMissingTitle','Missing Expiry Date')}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-gray-800 dark:text-gray-200">{missingDates.length}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('compliance.fleetTableTitle','Vehicle Registration Status')}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="space-y-3">
+              {[...Array(3)].map((_, idx) => (
+                <div key={idx} className="animate-pulse h-12 bg-muted rounded" />
+              ))}
+            </div>
+          ) : fleetChecks.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              {t('compliance.fleetEmpty','No fleet vehicles found.')}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t('compliance.fleetVehicle','Vehicle')}</TableHead>
+                    <TableHead>{t('compliance.fleetExpiryDate','Registration Expiry')}</TableHead>
+                    <TableHead>{t('compliance.fleetStatus','Status')}</TableHead>
+                    <TableHead>{t('compliance.fleetAssigned','Assigned To')}</TableHead>
+                    <TableHead>{t('compliance.fleetOwner','Registration Owner')}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {fleetChecks.map((check) => {
+                    const vehicleLabel = `${check.year ? `${check.year} ` : ''}${check.make} ${check.model}`.trim();
+                    return (
+                      <TableRow key={check.carId}>
+                        <TableCell>
+                          <div className="font-medium">{vehicleLabel}</div>
+                          <div className="text-xs text-muted-foreground">{t('compliance.fleetPlate','Plate')}: {check.plateNumber}</div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">{formatExpiryDate(check.registrationExpiry)}</div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            {getStatusBadge(check.daysUntilRegistrationExpiry ?? null)}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {check.assignedEmployeeName || (
+                            <span className="text-xs text-muted-foreground">{t('compliance.fleetUnassigned','Unassigned')}</span>
+                          )}
+                        </TableCell>
+                        <TableCell>{check.registrationOwner || '—'}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
