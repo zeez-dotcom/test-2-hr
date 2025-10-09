@@ -4014,6 +4014,12 @@ export class DatabaseStorage implements IStorage {
 
         entry: payrollEntries,
 
+        runId: payrollRuns.id,
+
+        runStart: payrollRuns.startDate,
+
+        runEnd: payrollRuns.endDate,
+
       })
 
       .from(payrollEntries)
@@ -4170,10 +4176,83 @@ export class DatabaseStorage implements IStorage {
 
 
 
-    payrollRows.forEach(({ period, entry }) => {
+    const entriesByRun = new Map<
+      string,
+      {
+        start: string | Date | null | undefined;
+        end: string | Date | null | undefined;
+        entries: PayrollEntry[];
+      }
+    >();
 
-      ensure(period).payrollEntries.push(entry);
+    payrollRows.forEach(({ runId, runStart, runEnd, entry }) => {
+      if (!runId) {
+        return;
+      }
+      const existing = entriesByRun.get(runId);
+      if (existing) {
+        existing.entries.push(entry);
+      } else {
+        entriesByRun.set(runId, {
+          start: runStart,
+          end: runEnd,
+          entries: [entry],
+        });
+      }
+    });
 
+    const allowanceBreakdownByRun = new Map<string, Map<string, AllowanceBreakdown>>();
+
+    for (const [runId, { start, end, entries }] of entriesByRun.entries()) {
+      const employeeIds = Array.from(
+        new Set(
+          entries
+            .map((entry) => entry.employeeId)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      );
+
+      if (!start || employeeIds.length === 0) {
+        allowanceBreakdownByRun.set(runId, new Map());
+        continue;
+      }
+
+      const allowanceEnd = end ?? start;
+
+      try {
+        const { breakdownByEmployee } = await this.buildAllowanceBreakdownForRun(
+          employeeIds.map((id) => ({ employeeId: id })),
+          start,
+          allowanceEnd,
+        );
+        allowanceBreakdownByRun.set(runId, breakdownByEmployee);
+      } catch (error) {
+        if (this.isDataSourceUnavailableError(error)) {
+          console.warn(
+            "Failed to load allowance metadata due to missing data source:",
+            error,
+          );
+          allowanceBreakdownByRun.set(runId, new Map());
+        } else {
+          throw error;
+        }
+      }
+    }
+
+    payrollRows.forEach(({ period, entry, runId }) => {
+      const employeeEntryId = entry.employeeId;
+      const breakdownForRun = runId ? allowanceBreakdownByRun.get(runId) : undefined;
+      const allowances =
+        employeeEntryId && breakdownForRun
+          ? breakdownForRun.get(employeeEntryId)
+          : undefined;
+
+      const normalizedEntry: PayrollEntry =
+        allowances && Object.keys(allowances).length > 0
+          ? { ...entry, allowances: { ...allowances } }
+          : { ...entry, allowances: undefined };
+
+      ensure(period).payrollEntries.push(normalizedEntry);
     });
 
     const expandedEventRows = this.expandRecurringEmployeeEvents(
