@@ -140,6 +140,7 @@ export default function EmployeeFile() {
             id: String(employee.id),
             firstName: String(employee.firstName ?? ''),
             lastName: String(employee.lastName ?? ''),
+            employeeCode: employee.employeeCode,
             position: employee.position,
             profileImage: employee.profileImage,
           },

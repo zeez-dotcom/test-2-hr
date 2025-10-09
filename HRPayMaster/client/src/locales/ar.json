@@ -564,6 +564,7 @@
       "fields": {
         "name": "الاسم",
         "position": "الوظيفة",
+        "employeeCode": "رمز الموظف",
         "employeeId": "رقم الموظف"
       },
       "tables": {
