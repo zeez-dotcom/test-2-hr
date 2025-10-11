@@ -1,11 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type {
-  Employee,
-  InsertEmployeeEvent,
-  InsertVacationRequest,
-  InsertPayrollRun,
-} from "@shared/schema";
+import type { Employee, InsertEmployeeEvent } from "@shared/schema";
 import { resolveDate, ChatIntent } from "@shared/chatbot";
 import { differenceInCalendarDays } from "date-fns";
 import { apiGet, apiPost } from "@/lib/http";
@@ -23,7 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import ImageUpload from "@/components/ui/image-upload";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus } from "lucide-react";
+import { AlertCircle, Loader2, Plus, Sparkles } from "lucide-react";
 
 interface Message {
   from: "bot" | "user";
@@ -49,6 +45,37 @@ interface PendingIntent {
     value?: string;
   };
   confirm?: boolean;
+}
+
+const SERVER_ACTION_INTENTS = [
+  "requestVacation",
+  "cancelVacation",
+  "changeVacation",
+  "runPayroll",
+  "acknowledgeDocument",
+] as const;
+
+type ServerActionIntent = (typeof SERVER_ACTION_INTENTS)[number];
+
+const isServerIntent = (intent: ChatIntent): intent is ServerActionIntent =>
+  SERVER_ACTION_INTENTS.includes(intent as ServerActionIntent);
+
+interface ServerConfirmationState {
+  intent: ServerActionIntent;
+  message: string;
+  payload: Record<string, unknown>;
+}
+
+interface ProactivePrompt {
+  id: string;
+  title: string;
+  message: string;
+  priority?: string | null;
+  documentUrl?: string | null;
+  action?: {
+    intent: ServerActionIntent;
+    payload?: Record<string, unknown>;
+  };
 }
 
 export function Chatbot() {
@@ -84,6 +111,14 @@ export function Chatbot() {
   });
   const [docUpload, setDocUpload] = useState<string | undefined>();
   const [docSaving, setDocSaving] = useState(false);
+  const [serverConfirmation, setServerConfirmation] = useState<ServerConfirmationState | null>(null);
+  const [serverActionLoading, setServerActionLoading] = useState(false);
+  const [knowledgeQuery, setKnowledgeQuery] = useState("");
+  const [knowledgeResults, setKnowledgeResults] = useState<any[]>([]);
+  const [knowledgeLoading, setKnowledgeLoading] = useState(false);
+  const [proactivePrompts, setProactivePrompts] = useState<ProactivePrompt[]>([]);
+  const [wsConnected, setWsConnected] = useState(false);
+  const [wsError, setWsError] = useState<string | null>(null);
 
   const { toast } = useToast();
 
@@ -318,6 +353,183 @@ export function Chatbot() {
     setMessages([{ from: "bot", text: t("chatbot.selectAction") }]);
   }, [t]);
 
+  const runKnowledgeSearch = async (event?: FormEvent) => {
+    if (event) event.preventDefault();
+    const query = knowledgeQuery.trim();
+    if (!query) {
+      setKnowledgeResults([]);
+      return;
+    }
+    setKnowledgeLoading(true);
+    try {
+      const res = await apiGet(`/api/chatbot/knowledge?q=${encodeURIComponent(query)}&limit=5`);
+      if (!res.ok) {
+        throw new Error(res.error || 'Search failed');
+      }
+      const results = Array.isArray((res.data as any)?.results) ? (res.data as any).results : [];
+      setKnowledgeResults(results);
+    } catch (error) {
+      console.error('Knowledge search failed', error);
+      toast({
+        title: 'Knowledge search failed',
+        description: 'Unable to fetch policy references right now.',
+        variant: 'destructive',
+      });
+    } finally {
+      setKnowledgeLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!knowledgeQuery.trim()) {
+      setKnowledgeResults([]);
+    }
+  }, [knowledgeQuery]);
+
+  const submitServerIntent = async (
+    intent: ServerActionIntent,
+    payload: Record<string, unknown>,
+    confirm = false,
+  ) => {
+    if (!selectedEmployee && intent !== "acknowledgeDocument") {
+      toast({
+        title: 'Select employee',
+        description: 'Choose an employee before submitting this action.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setServerConfirmation(null);
+    setServerActionLoading(true);
+    try {
+      const requestPayload: Record<string, unknown> = {
+        intent,
+        payload,
+        confirm,
+      };
+      if (selectedEmployee) {
+        requestPayload.employeeId = selectedEmployee;
+      }
+      const res = await apiPost('/api/chatbot/intents', requestPayload);
+      if (!res.ok) {
+        throw new Error(res.error || 'Request failed');
+      }
+      const body = res.data as any;
+      if (body?.status === 'needs-confirmation' && body?.confirmation) {
+        const confirmationPayload = {
+          ...(body.confirmation.payload ?? {}),
+        } as Record<string, unknown>;
+        if (selectedEmployee && confirmationPayload.employeeId === undefined) {
+          confirmationPayload.employeeId = selectedEmployee;
+        }
+        setServerConfirmation({
+          intent,
+          message: body.confirmation.message || 'Confirm action?',
+          payload: confirmationPayload,
+        });
+        setMessages((m) => [...m, { from: 'bot', text: body.confirmation.message || 'Please confirm.' }]);
+      } else if (body?.status === 'completed') {
+        setServerConfirmation(null);
+        const messageText = body?.message || 'Action completed successfully.';
+        setMessages((m) => [...m, { from: 'bot', text: messageText }]);
+        if (intent === 'acknowledgeDocument' && body?.result?.id) {
+          setProactivePrompts((current) => current.filter((item) => item.id !== body.result.id));
+        }
+      }
+    } catch (error) {
+      console.error('Server intent failed', error);
+      toast({
+        title: 'Action failed',
+        description: error instanceof Error ? error.message : 'Unable to complete action right now.',
+        variant: 'destructive',
+      });
+    } finally {
+      setServerActionLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let closed = false;
+    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    const socket = new WebSocket(`${protocol}://${window.location.host}/ws/chatbot`);
+
+    socket.addEventListener("open", () => {
+      if (!closed) {
+        setWsConnected(true);
+        setWsError(null);
+      }
+    });
+
+    socket.addEventListener("close", () => {
+      if (!closed) {
+        setWsConnected(false);
+      }
+    });
+
+    socket.addEventListener("error", () => {
+      if (!closed) {
+        setWsError("Connection lost");
+      }
+    });
+
+    socket.addEventListener("message", (event) => {
+      try {
+        const payload = JSON.parse(event.data ?? "{}");
+        if (payload?.type === "context" && payload?.payload?.employeeId) {
+          setSelectedEmployee((prev) => prev || payload.payload.employeeId);
+        }
+        if (payload?.type === "notification" && payload?.payload) {
+          const rawAction = payload.payload.action;
+          const actionPayload =
+            rawAction && typeof rawAction === "object"
+              ? Object.fromEntries(
+                  Object.entries(rawAction).filter(([key]) => key !== "intent"),
+                )
+              : undefined;
+          const prompt: ProactivePrompt = {
+            id: payload.payload.id,
+            title: payload.payload.title || "Notification",
+            message: payload.payload.message || "",
+            priority: payload.payload.priority,
+            documentUrl: payload.payload.documentUrl,
+            action:
+              rawAction && isServerIntent(rawAction.intent)
+                ? {
+                    intent: rawAction.intent,
+                    payload: (actionPayload ?? {}) as Record<string, unknown>,
+                  }
+                : undefined,
+          };
+          setProactivePrompts((current) => {
+            if (current.some((item) => item.id === prompt.id)) {
+              return current;
+            }
+            return [prompt, ...current].slice(0, 6);
+          });
+          setMessages((current) => [
+            ...current,
+            { from: "bot", text: `Notification: ${prompt.title}` },
+          ]);
+        }
+        if (payload?.type === "notification:update" && payload?.payload?.id) {
+          setProactivePrompts((current) => current.filter((item) => item.id !== payload.payload.id));
+        }
+      } catch (error) {
+        console.error("Failed to parse chatbot socket payload", error);
+      }
+    });
+
+    return () => {
+      closed = true;
+      try {
+        socket.close();
+      } catch {
+        // ignore
+      }
+    };
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const text = input.trim();
@@ -384,8 +596,7 @@ export function Chatbot() {
         setMessages((m) => [...m, { from: "bot", text: "When does the vacation start?" }]);
         break;
       case "cancelVacation":
-        setPending({ type: "cancelVacation", data: {} });
-        setMessages((m) => [...m, { from: "bot", text: "Confirm cancel latest vacation request? (yes/no)" }]);
+        await submitServerIntent("cancelVacation", {});
         break;
       case "changeVacation":
         setPending({ type: "changeVacation", data: {} });
@@ -542,6 +753,19 @@ export function Chatbot() {
     const lower = text.toLowerCase();
 
     if (pending.confirm) {
+      if (isServerIntent(pending.type)) {
+        if (lower.startsWith("y")) {
+          await submitServerIntent(
+            pending.type,
+            pending.data as Record<string, unknown>,
+            true,
+          );
+        } else {
+          setMessages((m) => [...m, { from: "bot", text: "Action cancelled." }]);
+        }
+        setPending(null);
+        return;
+      }
       if (lower.startsWith("y")) {
         // User confirmed action
         switch (pending.type) {
@@ -603,102 +827,6 @@ export function Chatbot() {
             }
             break;
           }
-          case "requestVacation": {
-            const days =
-              differenceInCalendarDays(
-                new Date(pending.data.endDate!),
-                new Date(pending.data.startDate!)
-              ) + 1;
-            const vacation: InsertVacationRequest = {
-              employeeId: selectedEmployee,
-              startDate: pending.data.startDate!,
-              endDate: pending.data.endDate!,
-              days,
-              reason: pending.data.reason,
-              leaveType: "annual",
-              deductFromSalary: false,
-              status: "approved",
-            };
-            try {
-              const res = await apiPost("/api/vacations", vacation);
-              if (!res.ok) throw new Error(res.error);
-              // Save bilingual document for vacation approval
-
-
-            const reasonText = vacation.reason?.trim() || "No reason provided";
-            const doc = buildReceiptDocument({
-              titleEn: "Vacation Approved",
-              subheadingEn: `${vacation.startDate} ? ${vacation.endDate}`,
-              bodyEn: `This document confirms that ${employeeLine} is approved for vacation from ${vacation.startDate} to ${vacation.endDate} covering ${vacation.days} day(s). Reason: ${reasonText}.`,
-              detailsEn: [
-                `Start date: ${vacation.startDate}`,
-                `End date: ${vacation.endDate}`,
-                `Total days: ${vacation.days}`,
-                `Reason: ${reasonText}`,
-              ],
-            });
-
-              setMessages((m) => [
-                ...m,
-                {
-                  from: "bot",
-                  text: `Vacation from ${vacation.startDate} to ${vacation.endDate} recorded.`,
-                },
-              ]);
-            } catch (err) {
-              console.error("Vacation request failed", err);
-              setMessages((m) => [
-                ...m,
-                { from: "bot", text: "Could not connect to server" },
-              ]);
-            }
-            break;
-          }
-          case "runPayroll": {
-            const payroll: InsertPayrollRun = {
-              period: pending.data.period!,
-              startDate: pending.data.startDate!,
-              endDate: pending.data.endDate!,
-              grossAmount: "0",
-              totalDeductions: "0",
-              netAmount: "0",
-              status: "draft",
-              scenarioKey: "chatbot", 
-              scenarioToggles: {},
-              exportArtifacts: [],
-            };
-            try {
-              const res = await apiPost("/api/payroll/generate", payroll);
-              if (!res.ok) throw new Error(res.error);
-
-
-            const doc = buildReceiptDocument({
-              titleEn: "Payroll Generated",
-              subheadingEn: payroll.period,
-              bodyEn: `This document confirms that payroll for ${employeeLine} was generated for the period ${payroll.period} covering ${payroll.startDate} to ${payroll.endDate}.`,
-              detailsEn: [
-                `Period: ${payroll.period}`,
-                `Start date: ${payroll.startDate}`,
-                `End date: ${payroll.endDate}`,
-              ],
-            });
-
-              setMessages((m) => [
-                ...m,
-                {
-                  from: "bot",
-                  text: `Payroll for ${payroll.period} generated.`,
-                },
-              ]);
-            } catch (err) {
-              console.error("Payroll generate request failed", err);
-              setMessages((m) => [
-                ...m,
-                { from: "bot", text: "Could not connect to server" },
-              ]);
-            }
-            break;
-          }
         }
       } else {
         setMessages((m) => [...m, { from: "bot", text: "Action cancelled." }]);
@@ -751,41 +879,6 @@ export function Chatbot() {
         }
         break;
       }
-      case "cancelVacation": {
-        if (!pending.confirm) {
-          if (lower.startsWith('y')) {
-            const vac = (vacations || []).filter((v:any) => v.employeeId === selectedEmployee).sort((a:any,b:any) => +new Date(b.startDate) - +new Date(a.startDate))[0];
-            if (!vac) {
-              setMessages((m)=>[...m,{from:'bot',text:'No vacation found to cancel.'}]);
-              setPending(null); return;
-            }
-            try {
-              const res = await apiPost(`/api/vacations/${vac.id}`, { status: 'rejected' } as any);
-              if (!res.ok) throw new Error(res.error);
-
-
-            const doc = buildReceiptDocument({
-              titleEn: "Vacation Cancelled",
-              subheadingEn: `${vac.startDate} to ${vac.endDate}`,
-              bodyEn: `This document confirms that the vacation for ${employeeLine} scheduled from ${vac.startDate} to ${vac.endDate} has been cancelled.`,
-              detailsEn: [
-                `Original start date: ${vac.startDate}`,
-                `Original end date: ${vac.endDate}`,
-              ],
-            });
-
-              setMessages((m)=>[...m,{from:'bot',text:'Vacation cancelled.'}]);
-            } catch {
-              setMessages((m)=>[...m,{from:'bot',text:'Failed to cancel vacation.'}]);
-            }
-          } else {
-            setMessages((m)=>[...m,{from:'bot',text:'Action cancelled.'}]);
-          }
-          setPending(null);
-          return;
-        }
-        break;
-      }
       case "changeVacation": {
         if (!pending.data.startDate) {
           const startDate = resolveDate(text, currentDate);
@@ -795,28 +888,15 @@ export function Chatbot() {
         }
         if (!pending.data.endDate) {
           const endDate = resolveDate(text, currentDate);
-          const vac = (vacations || []).filter((v:any)=> v.employeeId===selectedEmployee && v.status==='pending').sort((a:any,b:any)=> +new Date(b.startDate) - +new Date(a.startDate))[0];
-          if (!vac) { setMessages((m)=>[...m,{from:'bot',text:'No pending vacation to change.'}]); setPending(null); return; }
-          try {
-            const res = await apiPost(`/api/vacations/${vac.id}`, { startDate: pending.data.startDate, endDate, status: 'pending' } as any);
-            if (!res.ok) throw new Error(res.error);
-
-
-            const doc = buildReceiptDocument({
-              titleEn: "Vacation Updated",
-              subheadingEn: `${pending.data.startDate} to ${endDate}`,
-              bodyEn: `This document confirms that the vacation for ${employeeLine} has been updated to run from ${pending.data.startDate} to ${endDate}.`,
-              detailsEn: [
-                `New start date: ${pending.data.startDate}`,
-                `New end date: ${endDate}`,
-              ],
-            });
-
-            setMessages((m)=>[...m,{from:'bot', text:`Vacation updated to ${pending.data.startDate} to ${endDate}.`}]);
-          } catch {
-            setMessages((m)=>[...m,{from:'bot',text:'Failed to update vacation.'}]);
-          }
-          setPending(null); return;
+          await submitServerIntent(
+            "changeVacation",
+            {
+              startDate: pending.data.startDate!,
+              endDate,
+            },
+          );
+          setPending(null);
+          return;
         }
         break;
       }
@@ -1019,20 +1099,15 @@ export function Chatbot() {
         }
         if (!pending.data.reason) {
           const reason = text;
-          const start = pending.data.startDate!;
-          const end = pending.data.endDate!;
-          setPending({
-            ...pending,
-            data: { ...pending.data, reason },
-            confirm: true,
-          });
-          setMessages((m) => [
-            ...m,
+          await submitServerIntent(
+            "requestVacation",
             {
-              from: "bot",
-              text: `Confirm vacation from ${start} to ${end}? (yes/no)`,
+              startDate: pending.data.startDate!,
+              endDate: pending.data.endDate!,
+              reason,
             },
-          ]);
+          );
+          setPending(null);
           return;
         }
         break;
@@ -1051,15 +1126,15 @@ export function Chatbot() {
         }
         if (!pending.data.endDate) {
           const endDate = resolveDate(text, currentDate);
-          const data = { ...pending.data, endDate };
-          setPending({ ...pending, data, confirm: true });
-          setMessages((m) => [
-            ...m,
+          await submitServerIntent(
+            "runPayroll",
             {
-              from: "bot",
-              text: `Confirm payroll for ${data.period} from ${data.startDate} to ${endDate}? (yes/no)`,
+              period: pending.data.period!,
+              startDate: pending.data.startDate!,
+              endDate,
             },
-          ]);
+          );
+          setPending(null);
           return;
         }
         break;
@@ -1207,7 +1282,7 @@ export function Chatbot() {
           </Select>
         </div>
         <div>
-          <Select value={selectedIntent} onValueChange={(v) => setSelectedIntent(v as ChatIntent | "")}>
+          <Select value={selectedIntent} onValueChange={(v) => setSelectedIntent(v as ChatIntent | "")}> 
 
           <SelectTrigger>
             <SelectValue placeholder={t("chatbot.selectAction")} />
@@ -1235,8 +1310,119 @@ export function Chatbot() {
           </SelectContent>
           </Select>
         </div>
-      <div className="flex-1 overflow-y-auto space-y-2">
-        {messages.map((m, i) => (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded border bg-muted/40 px-2 py-1 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <Sparkles className={`h-4 w-4 ${wsConnected ? "text-emerald-400" : "text-muted-foreground"}`} />
+            {wsConnected ? "Live assistant connected" : "Assistant offline"}
+          </span>
+          {wsError && (
+            <span className="flex items-center gap-1 text-destructive">
+              <AlertCircle className="h-4 w-4" />
+              {wsError}
+            </span>
+          )}
+        </div>
+        <form onSubmit={runKnowledgeSearch} className="flex items-center gap-2">
+          <Input
+            value={knowledgeQuery}
+            onChange={(event) => setKnowledgeQuery(event.target.value)}
+            placeholder="Search policies or templates"
+          />
+          <Button type="submit" size="sm" variant="secondary" disabled={knowledgeLoading}>
+            {knowledgeLoading ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+            Search
+          </Button>
+        </form>
+        {knowledgeResults.length > 0 && (
+          <div className="space-y-2 text-sm">
+            {knowledgeResults.map((result: any) => (
+              <Card key={`${result.type}-${result.id}`} className="border-dashed border-muted-foreground/40 bg-muted/20">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold">{result.title}</CardTitle>
+                  <CardDescription className="text-xs uppercase text-muted-foreground">
+                    {result.type === 'policy' ? 'Policy Document' : 'Template'}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="text-xs text-muted-foreground">
+                  {result.snippet}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+        {proactivePrompts.length > 0 && (
+          <div className="space-y-2">
+            {proactivePrompts.map((prompt) => (
+              <Card key={prompt.id} className="border-l-4 border-amber-400 bg-amber-50">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold text-amber-900">{prompt.title}</CardTitle>
+                  <CardDescription className="text-xs text-amber-700">
+                    {prompt.priority ? `Priority: ${prompt.priority}` : 'Notification'}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <p className="text-amber-900/80">{prompt.message}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {prompt.action && (
+                      <Button
+                        size="sm"
+                        onClick={() =>
+                          submitServerIntent(prompt.action.intent, prompt.action.payload ?? {}, false)
+                        }
+                        disabled={serverActionLoading}
+                      >
+                        Acknowledge
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setProactivePrompts((current) => current.filter((item) => item.id !== prompt.id))}
+                    >
+                      Dismiss
+                    </Button>
+                    {prompt.documentUrl && (
+                      <Button size="sm" variant="ghost" asChild>
+                        <a href={prompt.documentUrl} target="_blank" rel={getNewTabRel()}>Open document</a>
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+        {serverConfirmation && (
+          <Card className="border-amber-500 bg-amber-50">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold text-amber-900">Confirmation required</CardTitle>
+              <CardDescription className="text-xs text-amber-800">
+                {serverConfirmation.message}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex gap-2">
+              <Button
+                size="sm"
+                onClick={() => submitServerIntent(serverConfirmation.intent, serverConfirmation.payload, true)}
+                disabled={serverActionLoading}
+              >
+                Confirm
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setServerConfirmation(null);
+                  setMessages((m) => [...m, { from: 'bot', text: 'Action cancelled.' }]);
+                }}
+              >
+                Cancel
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+        <div className="flex-1 overflow-y-auto space-y-2">
+          {messages.map((m, i) => (
           <div key={i} className={m.from === "bot" ? "text-left" : "text-right"}>
             <span
               className={

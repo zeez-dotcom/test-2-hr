@@ -18,6 +18,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { randomUUID } from "node:crypto";
 import { db } from "./db";
 import { normalizeAllowanceTitle } from "./utils/payroll";
+import { CHATBOT_EVENT_TYPES, emitChatbotNotification } from "./chatbotEvents";
 
 type TransactionClient = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -7261,6 +7262,21 @@ export class DatabaseStorage implements IStorage {
       .insert(notifications)
       .values(insertPayload)
       .returning();
+
+    if (newNotification) {
+      emitChatbotNotification({
+        type: CHATBOT_EVENT_TYPES.notificationCreated,
+        payload: {
+          id: newNotification.id,
+          employeeId: newNotification.employeeId,
+          title: newNotification.title,
+          message: newNotification.message,
+          priority: newNotification.priority,
+          documentUrl: newNotification.documentUrl,
+        },
+      });
+    }
+
     return newNotification;
   }
 
@@ -7310,6 +7326,20 @@ export class DatabaseStorage implements IStorage {
       .set(updatePayload)
       .where(eq(notifications.id, id))
       .returning();
+
+    if (updated) {
+      emitChatbotNotification({
+        type: CHATBOT_EVENT_TYPES.notificationUpdated,
+        payload: {
+          id: updated.id,
+          employeeId: updated.employeeId,
+          title: updated.title,
+          message: updated.message,
+          priority: updated.priority,
+          documentUrl: updated.documentUrl,
+        },
+      });
+    }
 
     return updated || undefined;
   }
