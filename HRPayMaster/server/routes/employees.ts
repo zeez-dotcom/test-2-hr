@@ -1295,6 +1295,13 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
           return next(new HttpError(404, "Workflow step not found"));
         }
 
+        if (step.status === "completed" || step.status === "skipped") {
+          const reason = step.status === "completed" ? "completed" : "skipped";
+          return next(
+            new HttpError(409, `Workflow step has already been ${reason} and cannot be progressed again.`),
+          );
+        }
+
         const payloadData = (payload ?? {}) as Record<string, unknown>;
         const metadataResult: Record<string, unknown> = {};
         const stepMetadata: Record<string, unknown> = { ...(step.metadata ?? {}) };
