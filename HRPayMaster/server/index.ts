@@ -292,6 +292,8 @@ app.use((req, res, next) => {
             expiryDate: check.visa.expiryDate,
             daysUntilExpiry: check.visa.daysUntilExpiry,
             emailSent: false,
+            deliveryChannels: ['email'],
+            escalationHistory: [],
           });
           await sendEmail({ to: employee.email || '', from: process.env.FROM_EMAIL || 'hr@company.com', subject: email.subject, html: email.html, text: email.text });
         }
@@ -306,6 +308,8 @@ app.use((req, res, next) => {
             expiryDate: check.civilId.expiryDate,
             daysUntilExpiry: check.civilId.daysUntilExpiry,
             emailSent: false,
+            deliveryChannels: ['email'],
+            escalationHistory: [],
           });
           await sendEmail({ to: employee.email || '', from: process.env.FROM_EMAIL || 'hr@company.com', subject: email.subject, html: email.html, text: email.text });
         }
@@ -320,6 +324,8 @@ app.use((req, res, next) => {
             expiryDate: check.passport.expiryDate,
             daysUntilExpiry: check.passport.daysUntilExpiry,
             emailSent: false,
+            deliveryChannels: ['email'],
+            escalationHistory: [],
           });
           await sendEmail({ to: employee.email || '', from: process.env.FROM_EMAIL || 'hr@company.com', subject: email.subject, html: email.html, text: email.text });
         }
@@ -334,6 +340,8 @@ app.use((req, res, next) => {
             expiryDate: check.drivingLicense.expiryDate,
             daysUntilExpiry: check.drivingLicense.daysUntilExpiry,
             emailSent: false,
+            deliveryChannels: ['email'],
+            escalationHistory: [],
           });
           await sendEmail({ to: employee.email || '', from: process.env.FROM_EMAIL || 'hr@company.com', subject: email.subject, html: email.html, text: email.text });
         }

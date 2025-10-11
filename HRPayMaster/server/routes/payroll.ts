@@ -1276,6 +1276,8 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
               expiryDate: parsed.endDate,
               daysUntilExpiry: 0,
               emailSent: false,
+              deliveryChannels: ["email"],
+              escalationHistory: [],
             });
           }
           if (scenarioToggles.loans && entry.loanDeduction > 0) {
@@ -1289,6 +1291,8 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
               expiryDate: parsed.endDate,
               daysUntilExpiry: 0,
               emailSent: false,
+              deliveryChannels: ["email"],
+              escalationHistory: [],
             });
           }
 
@@ -1335,17 +1339,19 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
               if (anomalies.length > 0) {
                 const hasCritical =
                   scheduleInfo.overtimeLimitBreaches.length > 0 || scheduleInfo.missingPunches > 0;
-                await storage.createNotification({
-                  employeeId: entry.employeeId,
-                  type: "attendance_variance",
-                  title: `Schedule variance for ${parsed.period}`,
-                  message: `Attendance variance detected: ${anomalies.join("; ")}.`,
-                  priority: hasCritical ? "high" : "medium",
-                  status: "unread",
-                  expiryDate: parsed.endDate,
-                  daysUntilExpiry: 0,
-                  emailSent: false,
-                });
+              await storage.createNotification({
+                employeeId: entry.employeeId,
+                type: "attendance_variance",
+                title: `Schedule variance for ${parsed.period}`,
+                message: `Attendance variance detected: ${anomalies.join("; ")}.`,
+                priority: hasCritical ? "high" : "medium",
+                status: "unread",
+                expiryDate: parsed.endDate,
+                daysUntilExpiry: 0,
+                emailSent: false,
+                deliveryChannels: ["email"],
+                escalationHistory: [],
+              });
               }
             }
           }

@@ -72,6 +72,8 @@ export async function processVacationReturnAlerts(now: Date = new Date()): Promi
         expiryDate: endOfVacation as any,
         daysUntilExpiry: daysUntilReturn,
         emailSent: false,
+        deliveryChannels: ["email"],
+        escalationHistory: [],
       });
     } catch (error) {
       log(`warning: failed to create vacation return notification: ${String(error)}`);

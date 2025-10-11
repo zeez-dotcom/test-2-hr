@@ -68,6 +68,14 @@ import {
   type Notification,
   type InsertNotification,
   type NotificationWithEmployee,
+  type NotificationRoutingRule,
+  type InsertNotificationRoutingRule,
+  type NotificationRoutingRuleWithSteps,
+  type NotificationEscalationStep,
+  type UpsertNotificationRoutingRule,
+  type NotificationEscalationHistoryEntry,
+  type NotificationChannel,
+  type NotificationEscalationStatus,
   type EmailAlert,
   type InsertEmailAlert,
   type EmployeeEvent,
@@ -132,6 +140,8 @@ import {
   cars,
   carAssignments,
   notifications,
+  notificationRoutingRules,
+  notificationEscalationSteps,
   emailAlerts,
   employeeEvents,
   carRepairs,
@@ -142,6 +152,69 @@ import {
   allowanceTypes,
   sickLeaveTracking,
 } from "@shared/schema";
+
+const normalizeDateInput = (value: unknown): Date | null | undefined => {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  }
+  return undefined;
+};
+
+const normalizeDeliveryChannels = (
+  channels: unknown,
+  defaultEmpty = false,
+): NotificationChannel[] | undefined => {
+  if (channels === undefined) {
+    return defaultEmpty ? ([] as NotificationChannel[]) : undefined;
+  }
+  if (channels === null) {
+    return [] as NotificationChannel[];
+  }
+  if (Array.isArray(channels)) {
+    return channels as NotificationChannel[];
+  }
+  return defaultEmpty ? ([] as NotificationChannel[]) : undefined;
+};
+
+type PersistedNotificationEscalationHistoryEntry = Omit<
+  NotificationEscalationHistoryEntry,
+  'status'
+> & {
+  status: NotificationEscalationStatus;
+};
+
+const normalizeEscalationHistoryEntries = (
+  entries: unknown,
+  defaultEmpty = false,
+): PersistedNotificationEscalationHistoryEntry[] | undefined => {
+  if (entries === undefined) {
+    return defaultEmpty ? ([] as PersistedNotificationEscalationHistoryEntry[]) : undefined;
+  }
+  if (!Array.isArray(entries)) {
+    return defaultEmpty ? ([] as PersistedNotificationEscalationHistoryEntry[]) : undefined;
+  }
+  if (entries.length === 0) {
+    return [] as PersistedNotificationEscalationHistoryEntry[];
+  }
+  return entries
+    .map(entry => {
+      const base = entry as NotificationEscalationHistoryEntry;
+      const status = (base.status ?? "escalated") as NotificationEscalationStatus;
+      const sanitized: PersistedNotificationEscalationHistoryEntry = {
+        ...base,
+        status,
+      };
+      return sanitized;
+    })
+    .filter(Boolean) as PersistedNotificationEscalationHistoryEntry[];
+};
+
+const hasOwn = (obj: object, key: PropertyKey): boolean =>
+  Object.prototype.hasOwnProperty.call(obj, key);
 
 export const DEFAULT_OVERTIME_LIMIT_MINUTES = 120;
 
@@ -669,6 +742,15 @@ export interface IStorage {
   updateNotification(id: string, notification: Partial<InsertNotification>): Promise<Notification | undefined>;
   markNotificationAsRead(id: string): Promise<boolean>;
   deleteNotification(id: string): Promise<boolean>;
+  getNotificationRoutingRules(): Promise<NotificationRoutingRuleWithSteps[]>;
+  upsertNotificationRoutingRule(
+    rule: UpsertNotificationRoutingRule,
+  ): Promise<NotificationRoutingRuleWithSteps>;
+  appendNotificationEscalationHistory(
+    id: string,
+    entry: NotificationEscalationHistoryEntry,
+    status?: NotificationEscalationStatus,
+  ): Promise<Notification | undefined>;
 
   // Email alert methods
   getEmailAlerts(): Promise<EmailAlert[]>;
@@ -6476,103 +6558,150 @@ export class DatabaseStorage implements IStorage {
   // Notification methods
 
   async getNotifications(): Promise<NotificationWithEmployee[]> {
-
     return await db.query.notifications.findMany({
-
       with: {
-
         employee: true,
-
+        routingRule: {
+          with: {
+            steps: {
+              orderBy: asc(notificationEscalationSteps.level),
+            },
+          },
+        },
       },
-
       orderBy: desc(notifications.createdAt),
-
     });
-
   }
-
-
 
   async getUnreadNotifications(): Promise<NotificationWithEmployee[]> {
-
     return await db.query.notifications.findMany({
-
       where: eq(notifications.status, 'unread'),
-
       with: {
-
         employee: true,
-
+        routingRule: {
+          with: {
+            steps: {
+              orderBy: asc(notificationEscalationSteps.level),
+            },
+          },
+        },
       },
-
       orderBy: desc(notifications.createdAt),
-
     });
-
   }
 
-
-
   async createNotification(notification: InsertNotification): Promise<Notification> {
+    const normalized = { ...notification } as InsertNotification;
+    const normalizedChannels =
+      normalizeDeliveryChannels(notification.deliveryChannels, true) ?? [];
+    normalized.deliveryChannels = [...normalizedChannels] as any;
+    const normalizedHistory =
+      normalizeEscalationHistoryEntries(notification.escalationHistory, true) ?? [];
+    normalized.escalationHistory = [...normalizedHistory] as any;
+    normalized.escalationStatus = notification.escalationStatus ?? 'pending';
+    normalized.escalationLevel = notification.escalationLevel ?? 0;
+
+    for (const field of ['snoozedUntil', 'slaDueAt', 'lastEscalatedAt'] as const) {
+      const value = normalizeDateInput(
+        (notification as Partial<InsertNotification>)[field],
+      );
+      if (value === undefined) {
+        delete (normalized as Partial<InsertNotification>)[field];
+      } else {
+        normalized[field] = value as any;
+      }
+    }
+
+    if (normalized.routingRuleId) {
+      const rule = await db.query.notificationRoutingRules.findFirst({
+        where: eq(notificationRoutingRules.id, normalized.routingRuleId),
+      });
+      if (rule) {
+        if (!normalized.deliveryChannels?.length && rule.deliveryChannels?.length) {
+          normalized.deliveryChannels = rule.deliveryChannels;
+        }
+        if (!normalized.slaDueAt && rule.slaMinutes) {
+          const due = new Date(Date.now() + rule.slaMinutes * 60_000);
+          normalized.slaDueAt = due;
+        }
+      }
+    }
 
     // Deduplicate by employeeId+type+title+expiryDate
-
     const existing = await db.query.notifications.findFirst({
-
-      where: (n, { and, eq }) => and(
-
-        eq(n.employeeId, notification.employeeId),
-
-        eq(n.type, notification.type),
-
-        eq(n.title, notification.title),
-
-        eq(n.expiryDate, notification.expiryDate as any)
-
-      ),
-
+      where: (n, { and, eq }) =>
+        and(
+          eq(n.employeeId, normalized.employeeId),
+          eq(n.type, normalized.type),
+          eq(n.title, normalized.title),
+          eq(n.expiryDate, normalized.expiryDate as any),
+        ),
     });
 
     if (existing) return existing;
 
+    const insertPayload = {
+      ...normalized,
+      status: normalized.status || 'unread',
+      priority: normalized.priority || 'medium',
+      emailSent: normalized.emailSent || false,
+    } as typeof notifications.$inferInsert;
+
     const [newNotification] = await db
-
       .insert(notifications)
-
-      .values({
-
-        ...notification,
-
-        status: notification.status || "unread",
-
-        priority: notification.priority || "medium",
-
-        emailSent: notification.emailSent || false,
-
-      })
-
+      .values(insertPayload)
       .returning();
-
     return newNotification;
-
   }
 
 
 
-  async updateNotification(id: string, notification: Partial<InsertNotification>): Promise<Notification | undefined> {
+  async updateNotification(
+    id: string,
+    notification: Partial<InsertNotification>,
+  ): Promise<Notification | undefined> {
+    const normalized: Partial<InsertNotification> = { ...notification };
+
+    if (hasOwn(notification, 'deliveryChannels')) {
+      if (notification.deliveryChannels === undefined) {
+        delete normalized.deliveryChannels;
+      } else {
+        const channels =
+          normalizeDeliveryChannels(notification.deliveryChannels, true) ?? [];
+        normalized.deliveryChannels = [...channels] as any;
+      }
+    }
+
+    if (hasOwn(notification, 'escalationHistory')) {
+      if (notification.escalationHistory === undefined) {
+        delete normalized.escalationHistory;
+      } else {
+        const history =
+          normalizeEscalationHistoryEntries(notification.escalationHistory, true) ?? [];
+        normalized.escalationHistory = [...history] as any;
+      }
+    }
+
+    for (const field of ['snoozedUntil', 'slaDueAt', 'lastEscalatedAt'] as const) {
+      if (!hasOwn(notification, field)) continue;
+      const value = normalizeDateInput(notification[field]);
+      if (value === undefined) {
+        delete normalized[field];
+      } else {
+        normalized[field] = value as any;
+      }
+    }
+
+    const updatePayload =
+      normalized as Partial<typeof notifications.$inferInsert>;
 
     const [updated] = await db
-
       .update(notifications)
-
-      .set(notification)
-
+      .set(updatePayload)
       .where(eq(notifications.id, id))
-
       .returning();
 
     return updated || undefined;
-
   }
 
 
@@ -6594,11 +6723,123 @@ export class DatabaseStorage implements IStorage {
 
 
   async deleteNotification(id: string): Promise<boolean> {
-
     const result = await db.delete(notifications).where(eq(notifications.id, id));
-
     return (result.rowCount ?? 0) > 0;
+  }
 
+  async getNotificationRoutingRules(): Promise<NotificationRoutingRuleWithSteps[]> {
+    return await db.query.notificationRoutingRules.findMany({
+      with: {
+        steps: {
+          orderBy: asc(notificationEscalationSteps.level),
+        },
+      },
+      orderBy: asc(notificationRoutingRules.name),
+    });
+  }
+
+  async upsertNotificationRoutingRule(
+    rule: UpsertNotificationRoutingRule,
+  ): Promise<NotificationRoutingRuleWithSteps> {
+    return await db.transaction(async tx => {
+      const { steps = [], id, ...rawRule } = rule;
+      const normalizedChannels =
+        normalizeDeliveryChannels(rawRule.deliveryChannels, true) ?? [];
+      const normalizedRule: InsertNotificationRoutingRule = {
+        ...rawRule,
+        deliveryChannels: [...normalizedChannels] as any,
+        metadata: rawRule.metadata ?? {},
+      };
+      const formattedSteps = steps.map((step, index) => ({
+        level: step.level ?? index + 1,
+        escalateAfterMinutes: step.escalateAfterMinutes ?? 0,
+        targetRole: step.targetRole,
+        channel: step.channel,
+        messageTemplate: step.messageTemplate ?? null,
+      }));
+      let savedRule: NotificationRoutingRule | undefined;
+
+      if (id) {
+        const updatePayload = {
+          ...normalizedRule,
+          updatedAt: new Date(),
+        } as Partial<typeof notificationRoutingRules.$inferInsert>;
+        const [updated] = await tx
+          .update(notificationRoutingRules)
+          .set(updatePayload)
+          .where(eq(notificationRoutingRules.id, id))
+          .returning();
+        savedRule = updated;
+      } else {
+        const insertPayload =
+          normalizedRule as typeof notificationRoutingRules.$inferInsert;
+        const [created] = await tx
+          .insert(notificationRoutingRules)
+          .values(insertPayload)
+          .returning();
+        savedRule = created;
+      }
+
+      if (!savedRule) {
+        throw new Error('Failed to persist notification routing rule');
+      }
+
+      await tx
+        .delete(notificationEscalationSteps)
+        .where(eq(notificationEscalationSteps.ruleId, savedRule.id));
+
+      if (formattedSteps.length > 0) {
+        await tx.insert(notificationEscalationSteps).values(
+          formattedSteps.map((step, index) => ({
+            ...step,
+            ruleId: savedRule!.id,
+            level: step.level ?? index + 1,
+          })),
+        );
+      }
+
+      const reloaded = await tx.query.notificationRoutingRules.findFirst({
+        where: eq(notificationRoutingRules.id, savedRule.id),
+        with: {
+          steps: {
+            orderBy: asc(notificationEscalationSteps.level),
+          },
+        },
+      });
+
+      if (!reloaded) {
+        throw new Error('Failed to load notification routing rule');
+      }
+
+      return reloaded;
+    });
+  }
+
+  async appendNotificationEscalationHistory(
+    id: string,
+    entry: NotificationEscalationHistoryEntry,
+    status?: NotificationEscalationStatus,
+  ): Promise<Notification | undefined> {
+    const existing = await db.query.notifications.findFirst({
+      where: eq(notifications.id, id),
+    });
+
+    if (!existing) return undefined;
+
+    const history = [...(existing.escalationHistory ?? []), entry];
+
+    const [updated] = await db
+      .update(notifications)
+      .set({
+        escalationHistory: history,
+        escalationLevel: entry.level,
+        lastEscalatedAt: new Date(entry.escalatedAt),
+        escalationStatus: status ?? entry.status ?? existing.escalationStatus,
+      })
+      .where(eq(notifications.id, id))
+      .returning();
+
+    return updated || undefined;
   }
 
 

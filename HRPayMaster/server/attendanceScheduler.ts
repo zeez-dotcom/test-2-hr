@@ -47,6 +47,8 @@ export async function processAttendanceAlerts(now: Date = new Date()): Promise<n
           expiryDate: scheduleDate,
           daysUntilExpiry: 0,
           emailSent: false,
+          deliveryChannels: ["email"],
+          escalationHistory: [],
         });
         created += 1;
       } catch (error) {
@@ -80,6 +82,8 @@ export async function processAttendanceAlerts(now: Date = new Date()): Promise<n
           expiryDate: scheduleDate,
           daysUntilExpiry: 0,
           emailSent: false,
+          deliveryChannels: ["email"],
+          escalationHistory: [],
         });
         created += 1;
       } catch (error) {
