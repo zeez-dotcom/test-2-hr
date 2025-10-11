@@ -249,7 +249,7 @@ function UsersCard() {
       payload.role = state.role;
     }
     if (Object.keys(payload).length === 0) {
-      toast({ title: t("settings.noChanges", "No changes to save"), variant: "outline" });
+      toast({ title: t("settings.noChanges", "No changes to save") });
       return;
     }
     updateUser.mutate({ id: user.id, data: payload });

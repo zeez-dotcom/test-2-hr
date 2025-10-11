@@ -78,11 +78,18 @@ import {
   type User,
   type SickLeaveTracking,
   type InsertSickLeaveTracking,
+  type EmployeeWorkflow,
+  type InsertEmployeeWorkflow,
+  type EmployeeWorkflowStep,
+  type InsertEmployeeWorkflowStep,
+  type EmployeeWorkflowWithSteps,
   departments,
   companies,
   employees,
   employeeCustomFields,
   employeeCustomValues,
+  employeeWorkflows,
+  employeeWorkflowSteps,
   payrollRuns,
   payrollEntries,
   vacationRequests,
@@ -301,6 +308,29 @@ export interface IStorage {
     value: Partial<InsertEmployeeCustomValue>
   ): Promise<EmployeeCustomValue | undefined>;
   deleteEmployeeCustomValue(id: string): Promise<boolean>;
+
+  // Employee workflow methods
+  getEmployeeWorkflows(
+    employeeId: string,
+    workflowType?: EmployeeWorkflow["workflowType"],
+  ): Promise<EmployeeWorkflowWithSteps[]>;
+  getEmployeeWorkflowById(id: string): Promise<EmployeeWorkflowWithSteps | undefined>;
+  getActiveEmployeeWorkflow(
+    employeeId: string,
+    workflowType: EmployeeWorkflow["workflowType"],
+  ): Promise<EmployeeWorkflowWithSteps | undefined>;
+  createEmployeeWorkflow(
+    workflow: InsertEmployeeWorkflow,
+    steps: Omit<InsertEmployeeWorkflowStep, "workflowId" | "id" | "createdAt" | "updatedAt" | "completedAt">[],
+  ): Promise<EmployeeWorkflowWithSteps>;
+  updateEmployeeWorkflow(
+    id: string,
+    workflow: Partial<InsertEmployeeWorkflow> & { completedAt?: Date | null },
+  ): Promise<EmployeeWorkflow | undefined>;
+  updateEmployeeWorkflowStep(
+    id: string,
+    step: Partial<InsertEmployeeWorkflowStep> & { completedAt?: Date | null },
+  ): Promise<EmployeeWorkflowStep | undefined>;
 
   // Payroll methods
   getPayrollRuns(): Promise<PayrollRunWithEntries[]>;
@@ -1587,6 +1617,355 @@ export class DatabaseStorage implements IStorage {
       .where(eq(employeeCustomValues.id, id));
 
     return (result.rowCount ?? 0) > 0;
+
+  }
+
+
+
+  async getEmployeeWorkflows(
+
+    employeeId: string,
+
+    workflowType?: EmployeeWorkflow["workflowType"],
+
+  ): Promise<EmployeeWorkflowWithSteps[]> {
+
+    const conditions: SQL<unknown>[] = [eq(employeeWorkflows.employeeId, employeeId)];
+
+    if (workflowType) {
+
+      conditions.push(eq(employeeWorkflows.workflowType, workflowType));
+
+    }
+
+    const workflows = await db.query.employeeWorkflows.findMany({
+
+      where: and(...conditions),
+
+      with: {
+
+        steps: {
+
+          orderBy: asc(employeeWorkflowSteps.orderIndex),
+
+        },
+
+      },
+
+      orderBy: desc(employeeWorkflows.startedAt),
+
+    });
+
+    return workflows.map(workflow => ({
+
+      ...workflow,
+
+      metadata: workflow.metadata ?? {},
+
+      steps: workflow.steps.map(step => ({
+
+        ...step,
+
+        metadata: step.metadata ?? {},
+
+      })),
+
+    }));
+
+  }
+
+
+
+  async getEmployeeWorkflowById(id: string): Promise<EmployeeWorkflowWithSteps | undefined> {
+
+    const workflow = await db.query.employeeWorkflows.findFirst({
+
+      where: eq(employeeWorkflows.id, id),
+
+      with: {
+
+        steps: {
+
+          orderBy: asc(employeeWorkflowSteps.orderIndex),
+
+        },
+
+      },
+
+    });
+
+    if (!workflow) return undefined;
+
+    return {
+
+      ...workflow,
+
+      metadata: workflow.metadata ?? {},
+
+      steps: workflow.steps.map(step => ({
+
+        ...step,
+
+        metadata: step.metadata ?? {},
+
+      })),
+
+    };
+
+  }
+
+
+
+  async getActiveEmployeeWorkflow(
+
+    employeeId: string,
+
+    workflowType: EmployeeWorkflow["workflowType"],
+
+  ): Promise<EmployeeWorkflowWithSteps | undefined> {
+
+    const workflow = await db.query.employeeWorkflows.findFirst({
+
+      where: and(
+
+        eq(employeeWorkflows.employeeId, employeeId),
+
+        eq(employeeWorkflows.workflowType, workflowType),
+
+        inArray(employeeWorkflows.status, ["pending", "in_progress"]),
+
+      ),
+
+      with: {
+
+        steps: {
+
+          orderBy: asc(employeeWorkflowSteps.orderIndex),
+
+        },
+
+      },
+
+      orderBy: desc(employeeWorkflows.startedAt),
+
+    });
+
+    if (!workflow) return undefined;
+
+    return {
+
+      ...workflow,
+
+      metadata: workflow.metadata ?? {},
+
+      steps: workflow.steps.map(step => ({
+
+        ...step,
+
+        metadata: step.metadata ?? {},
+
+      })),
+
+    };
+
+  }
+
+
+
+  async createEmployeeWorkflow(
+
+    workflow: InsertEmployeeWorkflow,
+
+    steps: Omit<InsertEmployeeWorkflowStep, "workflowId" | "id" | "createdAt" | "updatedAt" | "completedAt">[],
+
+  ): Promise<EmployeeWorkflowWithSteps> {
+
+    return await db.transaction(async tx => {
+
+      const [createdWorkflow] = await tx
+
+        .insert(employeeWorkflows)
+
+        .values({
+
+          ...workflow,
+
+          metadata: workflow.metadata ?? {},
+
+        })
+
+        .returning();
+
+      if (!createdWorkflow) {
+
+        throw new Error("Failed to create workflow");
+
+      }
+
+      if (steps.length > 0) {
+
+        await tx.insert(employeeWorkflowSteps).values(
+
+          steps.map((step, index) => ({
+
+            ...step,
+
+            workflowId: createdWorkflow.id,
+
+            orderIndex: step.orderIndex ?? index,
+
+            metadata: step.metadata ?? {},
+
+          })),
+
+        );
+
+      }
+
+      const created = await tx.query.employeeWorkflows.findFirst({
+
+        where: eq(employeeWorkflows.id, createdWorkflow.id),
+
+        with: {
+
+          steps: {
+
+            orderBy: asc(employeeWorkflowSteps.orderIndex),
+
+          },
+
+        },
+
+      });
+
+      if (!created) {
+
+        throw new Error("Failed to load workflow after creation");
+
+      }
+
+      return {
+
+        ...created,
+
+        metadata: created.metadata ?? {},
+
+        steps: created.steps.map(step => ({
+
+          ...step,
+
+          metadata: step.metadata ?? {},
+
+        })),
+
+      };
+
+    });
+
+  }
+
+
+
+  async updateEmployeeWorkflow(
+
+    id: string,
+
+    workflow: Partial<InsertEmployeeWorkflow> & { completedAt?: Date | null },
+
+  ): Promise<EmployeeWorkflow | undefined> {
+
+    const updates: Partial<InsertEmployeeWorkflow> & {
+      metadata?: Record<string, unknown> | null;
+      completedAt?: Date | null;
+    } = {
+
+      ...workflow,
+
+    };
+
+    if (workflow.metadata === undefined) {
+
+      delete updates.metadata;
+
+    } else {
+
+      updates.metadata = workflow.metadata ?? {};
+
+    }
+
+    const [updated] = await db
+
+      .update(employeeWorkflows)
+
+      .set(updates)
+
+      .where(eq(employeeWorkflows.id, id))
+
+      .returning();
+
+    if (!updated) return undefined;
+
+    return {
+
+      ...updated,
+
+      metadata: updated.metadata ?? {},
+
+    };
+
+  }
+
+
+
+  async updateEmployeeWorkflowStep(
+
+    id: string,
+
+    step: Partial<InsertEmployeeWorkflowStep> & { completedAt?: Date | null },
+
+  ): Promise<EmployeeWorkflowStep | undefined> {
+
+    const updates: Partial<InsertEmployeeWorkflowStep> & {
+      metadata?: Record<string, unknown> | null;
+      updatedAt?: Date;
+      completedAt?: Date | null;
+    } = {
+
+      ...step,
+
+      updatedAt: new Date(),
+
+    };
+
+    if (step.metadata === undefined) {
+
+      delete updates.metadata;
+
+    } else {
+
+      updates.metadata = step.metadata ?? {};
+
+    }
+
+    const [updated] = await db
+
+      .update(employeeWorkflowSteps)
+
+      .set(updates)
+
+      .where(eq(employeeWorkflowSteps.id, id))
+
+      .returning();
+
+    if (!updated) return undefined;
+
+    return {
+
+      ...updated,
+
+      metadata: updated.metadata ?? {},
+
+    };
 
   }
 

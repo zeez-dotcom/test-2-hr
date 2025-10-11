@@ -36,6 +36,7 @@ interface EmployeeTableProps {
   onEditEmployee: (employee: EmployeeWithDepartment) => void;
   isMutating: boolean;
   initialStatusFilter?: string;
+  onStartWorkflow: (employee: EmployeeWithDepartment, type: "onboarding" | "offboarding") => void;
 }
 
 export default function EmployeeTable({
@@ -43,6 +44,7 @@ export default function EmployeeTable({
   onEditEmployee,
   isMutating,
   initialStatusFilter,
+  onStartWorkflow,
 }: EmployeeTableProps) {
   const normalizedInitialStatus = (initialStatusFilter || "all").toLowerCase();
   const [nameFilter, setNameFilter] = useState("");
@@ -680,6 +682,24 @@ export default function EmployeeTable({
                     onClick={() => setViewEmployee(employee)}
                   >
                     <Eye size={16} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onStartWorkflow(employee, "onboarding")}
+                    className="text-emerald-600 hover:text-emerald-700"
+                    aria-label="Start onboarding workflow"
+                  >
+                    Onboard
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onStartWorkflow(employee, "offboarding")}
+                    className="text-amber-600 hover:text-amber-700"
+                    aria-label="Start offboarding workflow"
+                  >
+                    Offboard
                   </Button>
                   <Button
                     variant="ghost"
