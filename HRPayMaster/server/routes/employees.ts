@@ -1,4 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
+import { randomUUID } from "node:crypto";
 import { HttpError } from "../errorHandler";
 import { storage, DuplicateEmployeeCodeError, type EmployeeFilters } from "../storage";
 import { assetService } from "../assetService";
@@ -21,6 +22,8 @@ import {
   insertEmployeeCustomFieldSchema,
   employeeCustomValuePayloadSchema,
   insertEmployeeWorkflowSchema,
+  insertLeaveAccrualPolicySchema,
+  insertEmployeeLeavePolicySchema,
   type InsertEmployeeEvent,
   type InsertEmployee,
   type InsertCar,
@@ -29,6 +32,12 @@ import {
   type InsertSickLeaveTracking,
   type EmployeeCustomValueMap,
   type InsertEmployeeWorkflowStep,
+  type VacationApprovalStep,
+  type VacationAuditLogEntry,
+  type LeaveAccrualPolicy,
+  type LeaveBalance,
+  type EmployeeLeavePolicy,
+  type VacationRequestWithEmployee,
 } from "@shared/schema";
 import {
   sendEmail,
@@ -75,6 +84,9 @@ const IMAGE_FIELDS = [
   "otherDocs",
   "additionalDocs",
 ];
+
+const omitUndefined = <T extends Record<string, unknown>>(value: T): T =>
+  Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as T;
 
 async function optimizeImages(data: Record<string, any>) {
   if (!sharp) return;
@@ -145,6 +157,42 @@ async function getAddedBy(req: Request): Promise<string | undefined> {
 const upload = multer({ storage: multer.memoryStorage() });
 
 const DEFAULT_SICK_LEAVE_DAYS = 14;
+
+const vacationUpdateSchema = insertVacationRequestSchema.partial().extend({
+  approvalAction: z.enum(["approve", "reject", "delegate"]).optional(),
+  actingApproverId: z.string().optional(),
+  delegateToId: z.string().optional(),
+  approvalNote: z.string().optional(),
+});
+
+const leaveBalanceQuerySchema = z.object({
+  employeeId: z.string().optional(),
+  year: z
+    .union([z.string(), z.number()])
+    .optional()
+    .transform(value => {
+      if (value === undefined) return undefined;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? Math.trunc(parsed) : undefined;
+    }),
+});
+
+const leaveLedgerQuerySchema = z.object({
+  employeeId: z.string().optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+});
+
+const parseDateParam = (value: unknown): Date | undefined => {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? undefined : value;
+  }
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const parsed = new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+};
 
 const sickLeaveBalanceUpdateSchema = z
   .object({
@@ -1925,10 +1973,105 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
   // Vacation request routes
   employeesRouter.get("/api/vacations", async (req, res, next) => {
     try {
-      const vacationRequests = await storage.getVacationRequests();
+      const start = parseDateParam(req.query.startDate);
+      const end = parseDateParam(req.query.endDate);
+      const vacationRequests = await storage.getVacationRequests(start, end);
       res.json(vacationRequests);
     } catch (error) {
       next(new HttpError(500, "Failed to fetch vacation requests"));
+    }
+  });
+
+  employeesRouter.get("/api/vacations/balances", async (req, res, next) => {
+    try {
+      const { employeeId, year } = leaveBalanceQuerySchema.parse(req.query);
+      const balances = await storage.getLeaveBalances(
+        omitUndefined({ employeeId, year }),
+      );
+      res.json(balances);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return next(new HttpError(400, "Invalid balance filters", error.errors));
+      }
+      next(new HttpError(500, "Failed to fetch leave balances"));
+    }
+  });
+
+  employeesRouter.get("/api/vacations/policies", async (_req, res, next) => {
+    try {
+      const [policies, assignments, balances] = await Promise.all([
+        storage.getLeaveAccrualPolicies(),
+        storage.getEmployeeLeavePolicies(),
+        storage.getLeaveBalances(),
+      ]);
+      res.json({ policies, assignments, balances });
+    } catch (error) {
+      next(new HttpError(500, "Failed to fetch leave policies"));
+    }
+  });
+
+  employeesRouter.post("/api/vacations/policies", async (req, res, next) => {
+    try {
+      const payload = insertLeaveAccrualPolicySchema.parse(req.body);
+      const policy = await storage.createLeaveAccrualPolicy(payload);
+      res.status(201).json(policy);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return next(new HttpError(400, "Invalid leave policy data", error.errors));
+      }
+      next(new HttpError(500, "Failed to create leave policy"));
+    }
+  });
+
+  employeesRouter.put("/api/vacations/policies/:id", async (req, res, next) => {
+    try {
+      const payload = insertLeaveAccrualPolicySchema.partial().parse(req.body);
+      const policy = await storage.updateLeaveAccrualPolicy(req.params.id, payload);
+      if (!policy) {
+        return next(new HttpError(404, "Leave policy not found"));
+      }
+      res.json(policy);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return next(new HttpError(400, "Invalid leave policy data", error.errors));
+      }
+      next(new HttpError(500, "Failed to update leave policy"));
+    }
+  });
+
+  employeesRouter.post("/api/vacations/policies/:id/assignments", async (req, res, next) => {
+    try {
+      const payload = insertEmployeeLeavePolicySchema.parse({
+        ...req.body,
+        policyId: req.params.id,
+      });
+      const assignment = await storage.assignEmployeeLeavePolicy(payload);
+      res.status(201).json(assignment);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return next(new HttpError(400, "Invalid policy assignment", error.errors));
+      }
+      next(new HttpError(500, "Failed to assign leave policy"));
+    }
+  });
+
+  employeesRouter.get("/api/vacations/policies/:id/ledger", async (req, res, next) => {
+    try {
+      const { employeeId, startDate, endDate } = leaveLedgerQuerySchema.parse(req.query);
+      const ledger = await storage.getLeaveAccrualLedger(
+        omitUndefined({
+          policyId: req.params.id,
+          employeeId,
+          startDate,
+          endDate,
+        }),
+      );
+      res.json(ledger);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return next(new HttpError(400, "Invalid ledger filters", error.errors));
+      }
+      next(new HttpError(500, "Failed to fetch policy ledger"));
     }
   });
 
@@ -1959,50 +2102,298 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
 
   employeesRouter.put("/api/vacations/:id", async (req, res, next) => {
     try {
-      const updates = insertVacationRequestSchema.partial().parse(req.body);
-      // If approving a vacation, enforce department coverage threshold
-      if (updates.status === 'approved') {
-        const current = await storage.getVacationRequest(req.params.id);
-        if (!current) return next(new HttpError(404, "Vacation request not found"));
-        const employee = await storage.getEmployee(current.employeeId);
+      const parsed = vacationUpdateSchema.parse(req.body);
+      const { approvalAction, actingApproverId, delegateToId, approvalNote, ...rest } = parsed;
+
+      const before = await storage.getVacationRequest(req.params.id);
+      if (!before) {
+        return next(new HttpError(404, "Vacation request not found"));
+      }
+
+      const {
+        approvalChain: providedApprovalChain,
+        auditLog: providedAuditLog,
+        delegateApproverId: providedDelegate,
+        approvedBy: providedApprovedBy,
+        ...otherUpdates
+      } = rest;
+
+      const normalizeSteps = (steps: VacationApprovalStep[] | undefined | null): VacationApprovalStep[] => {
+        if (!Array.isArray(steps)) {
+          return [];
+        }
+        return steps.map(step => ({
+          approverId: step.approverId,
+          status: step.status ?? "pending",
+          actedAt: step.actedAt ?? null,
+          notes: step.notes ?? null,
+          delegatedToId: step.delegatedToId ?? null,
+        }));
+      };
+
+      let approvalChain: VacationApprovalStep[] = normalizeSteps(providedApprovalChain);
+      if (approvalChain.length === 0) {
+        approvalChain = normalizeSteps(before.approvalChain);
+      }
+
+      let auditLog: VacationAuditLogEntry[] = Array.isArray(providedAuditLog)
+        ? [...providedAuditLog]
+        : Array.isArray(before.auditLog)
+          ? [...before.auditLog]
+          : [];
+
+      let currentStep = before.currentApprovalStep ?? 0;
+      let delegateApproverId: string | null | undefined =
+        providedDelegate ?? before.delegateApproverId ?? undefined;
+      let approvedBy = providedApprovedBy ?? before.approvedBy ?? undefined;
+      let status = otherUpdates.status ?? before.status ?? "pending";
+
+      const normalizedActingId = actingApproverId ? normalizeBigId(actingApproverId) : undefined;
+      const normalizedDelegateTarget = delegateToId ? normalizeBigId(delegateToId) : undefined;
+      const requestActorId =
+        normalizedActingId ??
+        (typeof (req.user as any)?.employeeId === "string"
+          ? (req.user as any).employeeId
+          : (req.user as any)?.id ?? before.employeeId);
+
+      const appendAuditLog = (
+        action: VacationAuditLogEntry["action"],
+        actor: string,
+        notes?: string | null,
+        metadata?: Record<string, unknown> | null,
+      ) => {
+        auditLog.push({
+          id: randomUUID(),
+          actorId: actor,
+          action,
+          actionAt: new Date().toISOString(),
+          notes: notes ?? null,
+          metadata: metadata ?? null,
+        });
+      };
+
+      if (approvalAction) {
+        if (!normalizedActingId) {
+          return next(new HttpError(400, "actingApproverId is required for approval actions"));
+        }
+        if (approvalChain.length === 0) {
+          return next(new HttpError(400, "Approval chain is not configured for this request"));
+        }
+
+        currentStep = Math.min(currentStep, approvalChain.length - 1);
+        const stepIndex = currentStep;
+        const step = { ...approvalChain[stepIndex] };
+        const allowedApprovers = new Set(
+          [step.approverId, delegateApproverId ?? undefined, step.delegatedToId ?? undefined]
+            .filter((value): value is string => typeof value === "string" && value.length > 0),
+        );
+        if (!allowedApprovers.has(normalizedActingId)) {
+          return next(new HttpError(403, "Acting approver is not authorized for the current step"));
+        }
+
+        const nowIso = new Date().toISOString();
+
+        let nextStepIndex: number | null = null;
+
+        if (approvalAction === "delegate") {
+          if (!normalizedDelegateTarget) {
+            return next(new HttpError(400, "delegateToId is required to delegate a request"));
+          }
+          step.status = "delegated";
+          step.delegatedToId = normalizedDelegateTarget;
+          step.actedAt = nowIso;
+          step.notes = approvalNote ?? step.notes ?? null;
+          delegateApproverId = normalizedDelegateTarget;
+          status = "pending";
+          appendAuditLog("delegated", normalizedActingId, approvalNote ?? null, { step: currentStep });
+        } else if (approvalAction === "reject") {
+          step.status = "rejected";
+          step.delegatedToId = null;
+          step.actedAt = nowIso;
+          step.notes = approvalNote ?? step.notes ?? null;
+          delegateApproverId = null;
+          status = "rejected";
+          approvedBy = undefined;
+          appendAuditLog("rejected", normalizedActingId, approvalNote ?? null, { step: currentStep });
+        } else {
+          step.status = "approved";
+          step.delegatedToId = null;
+          step.actedAt = nowIso;
+          step.notes = approvalNote ?? step.notes ?? null;
+          delegateApproverId = null;
+          appendAuditLog("approved", normalizedActingId, approvalNote ?? null, { step: currentStep });
+
+          nextStepIndex = approvalChain.findIndex(
+            (candidate, index) => index > currentStep && candidate.status !== "approved",
+          );
+          if (nextStepIndex >= 0) {
+            status = otherUpdates.status ?? "pending";
+          } else {
+            status = "approved";
+            approvedBy = normalizedActingId;
+          }
+        }
+
+        approvalChain[stepIndex] = step;
+
+        if (approvalAction === "approve") {
+          if (nextStepIndex !== null && nextStepIndex !== undefined && nextStepIndex >= 0) {
+            currentStep = nextStepIndex;
+            if (approvalChain[currentStep].status === "delegated") {
+              approvalChain[currentStep] = { ...approvalChain[currentStep], status: "pending" };
+            }
+          } else {
+            currentStep = approvalChain.length > 0 ? approvalChain.length - 1 : 0;
+          }
+        }
+      } else if (providedApprovalChain) {
+        appendAuditLog("updated", requestActorId, approvalNote ?? null, { scope: "approval_chain" });
+      }
+
+      const startDate = parseDateParam(otherUpdates.startDate ?? before.startDate);
+      const endDate = parseDateParam(otherUpdates.endDate ?? before.endDate);
+
+      if (status === "approved" && before.status !== "approved" && startDate && endDate) {
+        const employee = await storage.getEmployee(before.employeeId);
         if (employee?.departmentId) {
-          const start = new Date(current.startDate);
-          const end = new Date(current.endDate);
-          const allVac = await storage.getVacationRequests(start, end);
-          const sameDeptApproved = allVac.filter(v => v.status === 'approved')
-            .filter(v => v.employee?.departmentId === employee.departmentId)
-            .filter(v => v.id !== current.id);
+          const overlapping = await storage.getVacationRequests(startDate, endDate);
+          const sameDeptApproved = overlapping
+            .filter(v => v.id !== before.id)
+            .filter(v => v.status === 'approved')
+            .filter(v => v.employee?.departmentId === employee.departmentId);
           const maxOverlap = Number(process.env.COVERAGE_MAX_OVERLAP_PER_DEPT || '999');
           if (sameDeptApproved.length >= maxOverlap) {
             return next(new HttpError(409, "Department coverage conflict: too many overlapping vacations"));
           }
         }
       }
-      const before = await storage.getVacationRequest(req.params.id);
-      const updatedVacationRequest = await storage.updateVacationRequest(req.params.id, updates);
+
+      const updatePayload = omitUndefined({
+        ...otherUpdates,
+        status,
+        approvalChain: approvalChain.length > 0 ? approvalChain : undefined,
+        currentApprovalStep: approvalChain.length > 0 ? currentStep : undefined,
+        delegateApproverId: delegateApproverId ?? null,
+        auditLog,
+        approvedBy,
+      });
+
+      const updatedVacationRequest = await storage.updateVacationRequest(req.params.id, updatePayload);
       if (!updatedVacationRequest) {
         return next(new HttpError(404, "Vacation request not found"));
       }
-      // Log events for vacation approvals/returns
-      try {
-        const after = updatedVacationRequest;
-        if (before?.status !== after.status && (after.status === 'approved' || after.status === 'completed')) {
-          const employeeId = after.employeeId;
-          const title = after.status === 'approved' ? `Vacation approved (${after.startDate} → ${after.endDate})` : `Vacation completed (${after.startDate} → ${after.endDate})`;
-          const event: InsertEmployeeEvent = {
-            employeeId,
-            eventType: 'vacation',
-            title,
-            description: title,
-            amount: '0',
-            eventDate: new Date().toISOString().split('T')[0],
-            affectsPayroll: true,
-            recurrenceType: 'none',
-          };
-          await storage.createEmployeeEvent(event);
+
+      const after = updatedVacationRequest;
+      const previousStatus = before.status ?? "pending";
+      const newStatus = after.status ?? status;
+
+      if (previousStatus !== newStatus) {
+        if (newStatus === "approved") {
+          const leaveDays = Number(after.days ?? otherUpdates.days ?? before.days ?? 0);
+          const leaveType = after.leaveType ?? otherUpdates.leaveType ?? before.leaveType ?? "annual";
+          const policyId = after.appliesPolicyId ?? otherUpdates.appliesPolicyId ?? before.appliesPolicyId ?? null;
+          const leaveYear = (parseDateParam(after.startDate ?? before.startDate) ?? new Date()).getUTCFullYear();
+
+          if (leaveDays > 0) {
+            try {
+              await storage.applyLeaveUsage({
+                employeeId: before.employeeId,
+                leaveType,
+                year: leaveYear,
+                days: leaveDays,
+                policyId: policyId ?? undefined,
+                allowNegativeBalance: after.autoPauseAllowances ?? before.autoPauseAllowances ?? false,
+              });
+            } catch (error) {
+              console.warn('Failed to apply leave usage:', error);
+            }
+          }
+
+          try {
+            await storage.updateEmployee(before.employeeId, { status: "on_leave" });
+          } catch (error) {
+            console.warn('Failed to update employee status for vacation approval:', error);
+          }
+
+          appendAuditLog("updated", requestActorId, approvalNote ?? null, { status: newStatus });
+
+          try {
+            const title = `Vacation approved (${after.startDate} -> ${after.endDate})`;
+            await storage.createEmployeeEvent({
+              employeeId: before.employeeId,
+              eventType: 'vacation',
+              title,
+              description: approvalNote ?? title,
+              amount: '0',
+              eventDate: new Date().toISOString().split('T')[0],
+              affectsPayroll: true,
+              recurrenceType: 'none',
+            });
+          } catch (error) {
+            console.warn('Failed to log vacation approval event:', error);
+          }
+
+          if (after.autoPauseAllowances ?? before.autoPauseAllowances) {
+            try {
+              const title = `Allowance paused for vacation (${after.startDate} -> ${after.endDate})`;
+              await storage.createEmployeeEvent({
+                employeeId: before.employeeId,
+                eventType: 'allowance',
+                title,
+                description: approvalNote ?? title,
+                amount: '0',
+                eventDate: new Date().toISOString().split('T')[0],
+                affectsPayroll: false,
+                recurrenceType: 'none',
+              });
+            } catch (error) {
+              console.warn('Failed to log allowance pause event:', error);
+            }
+          }
+        } else if (newStatus === "completed") {
+          try {
+            await storage.updateEmployee(before.employeeId, { status: "active" });
+          } catch (error) {
+            console.warn('Failed to update employee status for vacation completion:', error);
+          }
+          appendAuditLog("updated", requestActorId, approvalNote ?? null, { status: newStatus });
+          try {
+            const title = `Vacation completed (${after.startDate} -> ${after.endDate})`;
+            await storage.createEmployeeEvent({
+              employeeId: before.employeeId,
+              eventType: 'vacation',
+              title,
+              description: approvalNote ?? title,
+              amount: '0',
+              eventDate: new Date().toISOString().split('T')[0],
+              affectsPayroll: true,
+              recurrenceType: 'none',
+            });
+          } catch (error) {
+            console.warn('Failed to log vacation completion event:', error);
+          }
+
+          if (after.autoPauseAllowances ?? before.autoPauseAllowances) {
+            try {
+              const title = `Allowance resumed after vacation (${after.startDate} -> ${after.endDate})`;
+              await storage.createEmployeeEvent({
+                employeeId: before.employeeId,
+                eventType: 'allowance',
+                title,
+                description: approvalNote ?? title,
+                amount: '0',
+                eventDate: new Date().toISOString().split('T')[0],
+                affectsPayroll: false,
+                recurrenceType: 'none',
+              });
+            } catch (error) {
+              console.warn('Failed to log allowance resume event:', error);
+            }
+          }
         }
-      } catch {}
-      res.json(updatedVacationRequest);
+      }
+
+      res.json(after);
     } catch (error) {
       if (error instanceof z.ZodError) {
         return next(new HttpError(400, "Invalid vacation request data", error.errors));
