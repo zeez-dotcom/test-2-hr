@@ -324,10 +324,99 @@ export const loans = pgTable("loans", {
   startDate: date("start_date").notNull(),
   endDate: date("end_date"),
   status: text("status").notNull().default("pending"), // pending, active, completed, cancelled
+  approvalState: text("approval_state").notNull().default("draft"),
   reason: text("reason"),
   approvedBy: varchar("approved_by").references(() => employees.id),
+  policyMetadata: jsonb("policy_metadata")
+    .$type<
+      | {
+          lastCheckedAt?: string;
+          violations?: string[];
+          warnings?: string[];
+          approverNotes?: string[];
+        }
+      | null
+    >()
+    .default(sql`'{}'::jsonb`),
+  documentsMetadata: jsonb("documents_metadata")
+    .$type<
+      | {
+          required?: string[];
+          optional?: string[];
+        }
+      | null
+    >()
+    .default(sql`'{}'::jsonb`),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+export const loanApprovalStages = pgTable(
+  "loan_approval_stages",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    loanId: varchar("loan_id").references(() => loans.id).notNull(),
+    stageName: text("stage_name").notNull(),
+    stageOrder: integer("stage_order").notNull().default(0),
+    approverId: varchar("approver_id").references(() => employees.id),
+    status: text("status").notNull().default("pending"),
+    actedAt: timestamp("acted_at"),
+    notes: text("notes"),
+    metadata: jsonb("metadata")
+      .$type<Record<string, unknown> | null>()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  t => ({
+    loanIdx: index("loan_approval_stages_loan_idx").on(t.loanId),
+    stageOrderIdx: index("loan_approval_stages_order_idx").on(t.loanId, t.stageOrder),
+  }),
+);
+
+export const loanDocuments = pgTable(
+  "loan_documents",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    loanId: varchar("loan_id").references(() => loans.id).notNull(),
+    title: text("title").notNull(),
+    documentType: text("document_type"),
+    fileUrl: text("file_url").notNull(),
+    storageKey: text("storage_key"),
+    uploadedBy: varchar("uploaded_by").references(() => employees.id),
+    uploadedAt: timestamp("uploaded_at").defaultNow(),
+    metadata: jsonb("metadata")
+      .$type<Record<string, unknown> | null>()
+      .default(sql`'{}'::jsonb`),
+  },
+  t => ({
+    loanDocLoanIdx: index("loan_documents_loan_idx").on(t.loanId),
+    docTypeIdx: index("loan_documents_type_idx").on(t.documentType),
+  }),
+);
+
+export const loanAmortizationSchedules = pgTable(
+  "loan_amortization_schedules",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    loanId: varchar("loan_id").references(() => loans.id).notNull(),
+    installmentNumber: integer("installment_number").notNull(),
+    dueDate: date("due_date").notNull(),
+    principalAmount: numeric("principal_amount", { precision: 12, scale: 2 }).notNull(),
+    interestAmount: numeric("interest_amount", { precision: 12, scale: 2 }).notNull(),
+    paymentAmount: numeric("payment_amount", { precision: 12, scale: 2 }).notNull(),
+    remainingBalance: numeric("remaining_balance", { precision: 12, scale: 2 }).notNull(),
+    status: text("status").notNull().default("pending"),
+    payrollRunId: varchar("payroll_run_id").references(() => payrollRuns.id),
+    paidAt: date("paid_at"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  t => ({
+    loanScheduleLoanIdx: index("loan_amortization_schedules_loan_idx").on(t.loanId),
+    loanScheduleDueIdx: index("loan_amortization_schedules_due_idx").on(t.loanId, t.dueDate),
+  }),
+);
 
 export const cars = pgTable("cars", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -889,6 +978,7 @@ export const insertLoanSchema = createInsertSchema(loans)
       return val === null ? undefined : val;
     }, z.string().optional()),
     status: z.preprocess(v => emptyToUndef(v), z.string().optional()),
+    approvalState: z.preprocess(v => emptyToUndef(v), z.string().optional()),
     reason: z.preprocess(v => {
       const val = emptyToUndef(v);
       return val === undefined ? undefined : String(val);
@@ -896,6 +986,148 @@ export const insertLoanSchema = createInsertSchema(loans)
     approvedBy: z.preprocess(v => {
       const val = emptyToUndef(v);
       return val === undefined ? undefined : normalizeBigId(val);
+    }, z.string().optional()),
+    policyMetadata: z
+      .preprocess(v => {
+        if (v === undefined) return undefined;
+        if (v === null) return null;
+        if (typeof v === "string") {
+          try {
+            return JSON.parse(v);
+          } catch {
+            return undefined;
+          }
+        }
+        return v as Record<string, unknown>;
+      }, z.record(z.any()).nullable().optional()),
+    documentsMetadata: z
+      .preprocess(v => {
+        if (v === undefined) return undefined;
+        if (v === null) return null;
+        if (typeof v === "string") {
+          try {
+            return JSON.parse(v);
+          } catch {
+            return undefined;
+          }
+        }
+        return v as Record<string, unknown>;
+      }, z.record(z.any()).nullable().optional()),
+  });
+
+export const loanApprovalStageInputSchema = z.object({
+  stageName: z.string().min(1),
+  stageOrder: z.number().int().nonnegative().optional(),
+  approverId: z.string().optional(),
+  status: z
+    .enum(["pending", "approved", "rejected", "delegated", "skipped"])
+    .optional(),
+  actedAt: z.string().optional(),
+  notes: z.string().optional(),
+  metadata: z.record(z.any()).optional(),
+});
+
+export const insertLoanApprovalStageSchema = createInsertSchema(loanApprovalStages)
+  .omit({
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+  })
+  .extend({
+    loanId: z.preprocess(normalizeBigId, z.string()),
+    stageName: z.string().min(1),
+    stageOrder: z.preprocess(parseNumber, z.number().int().nonnegative().optional()),
+    approverId: z.preprocess(v => {
+      const val = emptyToUndef(v);
+      return val === undefined ? undefined : normalizeBigId(val);
+    }, z.string().optional()),
+    status: z
+      .enum(["pending", "approved", "rejected", "delegated", "skipped"])
+      .optional(),
+    actedAt: z.preprocess(v => {
+      const parsed = parseDate(v);
+      return parsed === null ? undefined : parsed;
+    }, z.string().optional()),
+    metadata: z
+      .preprocess(v => {
+        if (v === undefined) return undefined;
+        if (typeof v === "string") {
+          try {
+            return JSON.parse(v);
+          } catch {
+            return undefined;
+          }
+        }
+        return v as Record<string, unknown>;
+      }, z.record(z.any()).optional()),
+  });
+
+export const loanDocumentInputSchema = z.object({
+  id: z.string().optional(),
+  title: z.string().min(1),
+  documentType: z.string().optional(),
+  fileUrl: z.string().min(1),
+  storageKey: z.string().optional(),
+  uploadedBy: z.string().optional(),
+  metadata: z.record(z.any()).optional(),
+  remove: z.boolean().optional(),
+});
+
+export const insertLoanDocumentSchema = createInsertSchema(loanDocuments)
+  .omit({
+    id: true,
+    uploadedAt: true,
+  })
+  .extend({
+    loanId: z.preprocess(normalizeBigId, z.string()),
+    title: z.string().min(1),
+    documentType: z.preprocess(v => emptyToUndef(v), z.string().optional()),
+    fileUrl: z.string().min(1),
+    storageKey: z.preprocess(v => emptyToUndef(v), z.string().optional()),
+    uploadedBy: z.preprocess(v => {
+      const val = emptyToUndef(v);
+      return val === undefined ? undefined : normalizeBigId(val);
+    }, z.string().optional()),
+    metadata: z
+      .preprocess(v => {
+        if (v === undefined) return undefined;
+        if (typeof v === "string") {
+          try {
+            return JSON.parse(v);
+          } catch {
+            return undefined;
+          }
+        }
+        return v as Record<string, unknown>;
+      }, z.record(z.any()).optional()),
+  });
+
+export const insertLoanAmortizationScheduleSchema = createInsertSchema(
+  loanAmortizationSchedules,
+)
+  .omit({
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+  })
+  .extend({
+    loanId: z.preprocess(normalizeBigId, z.string()),
+    installmentNumber: z.preprocess(parseNumber, z.number().int().positive()),
+    dueDate: z.preprocess(parseDate, z.string()),
+    principalAmount: z.preprocess(parseNumber, z.number()),
+    interestAmount: z.preprocess(parseNumber, z.number()),
+    paymentAmount: z.preprocess(parseNumber, z.number()),
+    remainingBalance: z.preprocess(parseNumber, z.number()),
+    status: z
+      .enum(["pending", "paid", "paused", "skipped"])
+      .optional(),
+    payrollRunId: z.preprocess(v => {
+      const val = emptyToUndef(v);
+      return val === undefined ? undefined : normalizeBigId(val);
+    }, z.string().optional()),
+    paidAt: z.preprocess(v => {
+      const parsed = parseDate(v);
+      return parsed === null ? undefined : parsed;
     }, z.string().optional()),
   });
 
@@ -1152,10 +1384,36 @@ export type InsertLeaveBalance = z.infer<typeof insertLeaveBalanceSchema>;
 export type LeaveAccrualLedgerEntry = typeof leaveAccrualLedger.$inferSelect;
 export type InsertLeaveAccrualLedgerEntry = z.infer<typeof insertLeaveAccrualLedgerSchema>;
 
-export type Loan = typeof loans.$inferSelect;
+export type LoanAmortizationScheduleEntry =
+  typeof loanAmortizationSchedules.$inferSelect;
+export type InsertLoanAmortizationScheduleEntry = z.infer<
+  typeof insertLoanAmortizationScheduleSchema
+>;
+export type LoanScheduleStatus = LoanAmortizationScheduleEntry["status"];
+export type Loan = typeof loans.$inferSelect & {
+  dueAmountForPeriod?: number;
+  scheduleDueThisPeriod?: LoanAmortizationScheduleEntry[];
+};
 export type InsertLoan = z.infer<typeof insertLoanSchema>;
+export type LoanApprovalStage = typeof loanApprovalStages.$inferSelect;
+export type InsertLoanApprovalStage = z.infer<typeof insertLoanApprovalStageSchema>;
+export type LoanDocument = typeof loanDocuments.$inferSelect;
+export type InsertLoanDocument = z.infer<typeof insertLoanDocumentSchema>;
 export type LoanPayment = typeof loanPayments.$inferSelect;
 export type InsertLoanPayment = z.infer<typeof insertLoanPaymentSchema>;
+export type LoanStatement = {
+  loan: LoanWithEmployee;
+  schedule: LoanAmortizationScheduleEntry[];
+  payments: LoanPayment[];
+  documents: LoanDocument[];
+  totals: {
+    scheduledPrincipal: number;
+    scheduledInterest: number;
+    totalPaid: number;
+    outstandingBalance: number;
+  };
+  nextDue?: LoanAmortizationScheduleEntry | undefined;
+};
 
 export type Asset = typeof assets.$inferSelect;
 export type InsertAsset = z.infer<typeof insertAssetSchema>;
@@ -1346,6 +1604,9 @@ export type VacationRequestWithEmployee = VacationRequest & {
 export type LoanWithEmployee = Loan & {
   employee?: Employee;
   approver?: Employee;
+  approvalStages?: Array<LoanApprovalStage & { approver?: Employee | null }>;
+  documents?: Array<LoanDocument & { uploader?: Employee | null }>;
+  amortizationSchedule?: LoanAmortizationScheduleEntry[];
 };
 
 export type CarWithAssignment = Car & {
@@ -1481,8 +1742,47 @@ export const loansRelations = relations(loans, ({ one, many }) => ({
     fields: [loans.approvedBy],
     references: [employees.id],
   }),
+  approvalStages: many(loanApprovalStages),
+  documents: many(loanDocuments),
+  amortizationSchedule: many(loanAmortizationSchedules),
   payments: many(loanPayments),
 }));
+
+export const loanApprovalStagesRelations = relations(loanApprovalStages, ({ one }) => ({
+  loan: one(loans, {
+    fields: [loanApprovalStages.loanId],
+    references: [loans.id],
+  }),
+  approver: one(employees, {
+    fields: [loanApprovalStages.approverId],
+    references: [employees.id],
+  }),
+}));
+
+export const loanDocumentsRelations = relations(loanDocuments, ({ one }) => ({
+  loan: one(loans, {
+    fields: [loanDocuments.loanId],
+    references: [loans.id],
+  }),
+  uploader: one(employees, {
+    fields: [loanDocuments.uploadedBy],
+    references: [employees.id],
+  }),
+}));
+
+export const loanAmortizationSchedulesRelations = relations(
+  loanAmortizationSchedules,
+  ({ one }) => ({
+    loan: one(loans, {
+      fields: [loanAmortizationSchedules.loanId],
+      references: [loans.id],
+    }),
+    payrollRun: one(payrollRuns, {
+      fields: [loanAmortizationSchedules.payrollRunId],
+      references: [payrollRuns.id],
+    }),
+  }),
+);
 
 export const loanPaymentsRelations = relations(loanPayments, ({ one }) => ({
   loan: one(loans, {

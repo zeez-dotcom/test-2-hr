@@ -29,7 +29,15 @@ vi.mock('./storage', () => {
       createEmployeeCustomValue: vi.fn(),
       getPayrollRuns: vi.fn(),
       getLoans: vi.fn(),
+      getLoan: vi.fn(),
       createLoan: vi.fn(),
+      setLoanApprovalStages: vi.fn(),
+      getLoanApprovalStages: vi.fn(),
+      getLoanDocuments: vi.fn(),
+      getLoanAmortizationSchedule: vi.fn(),
+      replaceLoanAmortizationSchedule: vi.fn(),
+      createLoanDocument: vi.fn(),
+      updateLoan: vi.fn(),
       getAssets: vi.fn(),
       getAsset: vi.fn(),
       updateAsset: vi.fn(),
@@ -1026,6 +1034,14 @@ describe('employee routes', () => {
     };
     const created = { id: '1', remainingAmount: '1000', ...payload };
     (storage.createLoan as any).mockResolvedValue(created);
+    (storage.getLoan as any).mockResolvedValue({ ...created, policyMetadata: { warnings: [], violations: [] } });
+    (storage.getLoanApprovalStages as any).mockResolvedValue([]);
+    (storage.getLoanDocuments as any).mockResolvedValue([]);
+    (storage.getLoanAmortizationSchedule as any).mockResolvedValue([]);
+    (storage.getEmployee as any).mockResolvedValue({ id: '1', salary: '2000' });
+    (storage.replaceLoanAmortizationSchedule as any).mockResolvedValue([]);
+    (storage.updateLoan as any).mockResolvedValue({});
+    (storage.createEmployeeEvent as any).mockResolvedValue({});
 
     const res = await request(app).post('/api/loans').send({
       employeeId: payload.employeeId,
@@ -1039,7 +1055,7 @@ describe('employee routes', () => {
     expect(res.status).toBe(201);
     const loanArg = (storage.createLoan as any).mock.calls[0][0];
     expect(loanArg.remainingAmount).toBe(loanArg.amount);
-    expect(res.body.remainingAmount).toBe(res.body.amount);
+    expect(res.body.loan.remainingAmount).toBe(res.body.loan.amount);
   });
 
   it('POST /api/loans accepts UUID employeeId unchanged', async () => {
@@ -1059,13 +1075,21 @@ describe('employee routes', () => {
     };
 
     (storage.createLoan as any).mockResolvedValue(created);
+    (storage.getLoan as any).mockResolvedValue({ ...created, policyMetadata: { warnings: [], violations: [] } });
+    (storage.getLoanApprovalStages as any).mockResolvedValue([]);
+    (storage.getLoanDocuments as any).mockResolvedValue([]);
+    (storage.getLoanAmortizationSchedule as any).mockResolvedValue([]);
+    (storage.getEmployee as any).mockResolvedValue({ id: employeeId, salary: '1800' });
+    (storage.replaceLoanAmortizationSchedule as any).mockResolvedValue([]);
+    (storage.updateLoan as any).mockResolvedValue({});
+    (storage.createEmployeeEvent as any).mockResolvedValue({});
 
     const res = await request(app).post('/api/loans').send(payload);
 
     expect(res.status).toBe(201);
     const loanArg = (storage.createLoan as any).mock.calls[0][0];
     expect(loanArg.employeeId).toBe(employeeId);
-    expect(res.body.employeeId).toBe(employeeId);
+    expect(res.body.loan.employeeId).toBe(employeeId);
   });
 
   it('POST /api/loans includes database error message on constraint violation', async () => {

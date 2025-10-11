@@ -80,6 +80,31 @@ describe('calculateEmployeePayroll', () => {
     expect(entry.allowances).toEqual({ housing: 75, food: 50 });
     expect(entry.bonusAmount).toBeCloseTo(125);
   });
+
+  it('uses amortization schedule amounts when present', () => {
+    const employee = { id: 'e1', salary: '2000', status: 'active' };
+    const loans = [
+      {
+        employeeId: 'e1',
+        status: 'active',
+        remainingAmount: '400',
+        monthlyDeduction: '300',
+        dueAmountForPeriod: 150,
+        scheduleDueThisPeriod: [{ status: 'pending' }],
+      } as any,
+    ];
+
+    const entry = calculateEmployeePayroll({
+      employee,
+      loans,
+      vacationRequests: [],
+      employeeEvents: [],
+      ...baseDates,
+    });
+
+    expect(entry.loanDeduction).toBe(150);
+    expect(entry.adjustmentReason).toContain('Loan deduction');
+  });
 });
 
 describe('calculateTotals', () => {

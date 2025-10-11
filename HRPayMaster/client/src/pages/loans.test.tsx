@@ -8,6 +8,12 @@ import '@testing-library/jest-dom';
 const { toast } = vi.hoisted(() => ({ toast: vi.fn() }));
 const mutationMocks: any[] = [];
 
+vi.mock('@/lib/toastError', () => ({
+  toastApiError: vi.fn((_: unknown, fallback?: string) => {
+    toast({ title: fallback ?? 'Error', variant: 'destructive' });
+  }),
+}));
+
 vi.mock('@tanstack/react-query', async () => {
   const actual: any = await vi.importActual('@tanstack/react-query');
   return {
@@ -16,6 +22,7 @@ vi.mock('@tanstack/react-query', async () => {
       const mock = {
         shouldError: false,
         isPending: false,
+        successPayload: undefined as any,
         mutate: (vars: any) => {
           if (mock.shouldError) {
             const err = {
@@ -25,7 +32,7 @@ vi.mock('@tanstack/react-query', async () => {
             };
             options.onError?.(err, vars, null);
           } else {
-            options.onSuccess?.('success', vars, null);
+            options.onSuccess?.(mock.successPayload ?? 'success', vars, null);
           }
         }
       };
@@ -103,16 +110,22 @@ describe('Loans page', () => {
       {
         id: '1',
         employee: { firstName: 'Alice', lastName: 'Smith' },
+        employeeId: 'emp-1',
         amount: '100',
         monthlyDeduction: '10',
+        remainingAmount: '90',
         startDate: '2024-01-01',
         status: 'pending',
         interestRate: '0',
         reason: '',
+        policyMetadata: { warnings: [], violations: [] },
+        scheduleDueThisPeriod: [],
+        approvalStages: [],
       },
     ];
     queryClient.setQueryData(['/api/loans'], loans);
     queryClient.setQueryData(['/api/employees'], []);
+    queryClient.setQueryData(['/api/vacations'], []);
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -121,35 +134,42 @@ describe('Loans page', () => {
     );
 
     expect(screen.getByText('Alice Smith')).toBeInTheDocument();
+    expect(screen.getByText('Loan statement')).toBeInTheDocument();
 
-    // create success
+    mutationMocks[0].successPayload = {
+      loan: { id: '1' },
+      policy: { warnings: ['Check documentation'] },
+    };
     mutationMocks[0].mutate({});
-    expect(toast).toHaveBeenCalledWith({ title: 'Loan created successfully' });
+    expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Loan created successfully', description: 'Check documentation' }),
+    );
     toast.mockReset();
-    // create error
+
     mutationMocks[0].shouldError = true;
     mutationMocks[0].mutate({});
     await Promise.resolve();
-    expect(toast).toHaveBeenCalledWith({ title: 'Invalid loan data', variant: 'destructive' });
+    expect(toast).toHaveBeenCalledWith({ title: 'Failed to create loan', variant: 'destructive' });
     mutationMocks[0].shouldError = false;
     toast.mockReset();
 
-    // update success
-    mutationMocks[1].mutate({});
-    expect(toast).toHaveBeenCalledWith({ title: 'Loan updated successfully' });
+    mutationMocks[1].successPayload = {
+      response: { loan: { id: '1' }, policy: { warnings: [] } },
+    };
+    mutationMocks[1].mutate({ id: '1', data: {} });
+    expect(toast).toHaveBeenCalledWith({ title: 'Loan updated successfully', description: undefined });
     toast.mockReset();
-    // update error
+
     mutationMocks[1].shouldError = true;
-    mutationMocks[1].mutate({});
+    mutationMocks[1].mutate({ id: '1', data: {} });
     expect(toast).toHaveBeenCalledWith({ title: 'Failed to update loan', variant: 'destructive' });
     mutationMocks[1].shouldError = false;
     toast.mockReset();
 
-    // delete success
     mutationMocks[2].mutate('1');
     expect(toast).toHaveBeenCalledWith({ title: 'Loan deleted successfully' });
     toast.mockReset();
-    // delete error
+
     mutationMocks[2].shouldError = true;
     mutationMocks[2].mutate('1');
     expect(toast).toHaveBeenCalledWith({ title: 'Failed to delete loan', variant: 'destructive' });
