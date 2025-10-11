@@ -662,6 +662,10 @@ export function Chatbot() {
               grossAmount: "0",
               totalDeductions: "0",
               netAmount: "0",
+              status: "draft",
+              scenarioKey: "chatbot", 
+              scenarioToggles: {},
+              exportArtifacts: [],
             };
             try {
               const res = await apiPost("/api/payroll/generate", payroll);

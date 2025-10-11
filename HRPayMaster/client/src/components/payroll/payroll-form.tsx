@@ -25,9 +25,16 @@ interface PayrollFormProps {
   isSubmitting: boolean;
   canGenerate: boolean;
   submitLabel?: string;
+  children?: React.ReactNode;
 }
 
-export default function PayrollForm({ onSubmit, isSubmitting, canGenerate, submitLabel }: PayrollFormProps) {
+export default function PayrollForm({
+  onSubmit,
+  isSubmitting,
+  canGenerate,
+  submitLabel,
+  children,
+}: PayrollFormProps) {
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -37,7 +44,7 @@ export default function PayrollForm({ onSubmit, isSubmitting, canGenerate, submi
       taxDeduction: undefined,
       socialSecurityDeduction: undefined,
       healthInsuranceDeduction: undefined,
-      useAttendance: false,
+      useAttendance: undefined,
     },
     mode: "onChange",
   });
@@ -75,17 +82,20 @@ export default function PayrollForm({ onSubmit, isSubmitting, canGenerate, submi
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit((values) => {
-        const { period, startDate, endDate, taxDeduction, socialSecurityDeduction, healthInsuranceDeduction, useAttendance } = values as any;
-        const deductions: Record<string, number> = {};
-        if (typeof taxDeduction === 'number' && !Number.isNaN(taxDeduction)) deductions.taxDeduction = taxDeduction;
-        if (typeof socialSecurityDeduction === 'number' && !Number.isNaN(socialSecurityDeduction)) deductions.socialSecurityDeduction = socialSecurityDeduction;
-        if (typeof healthInsuranceDeduction === 'number' && !Number.isNaN(healthInsuranceDeduction)) deductions.healthInsuranceDeduction = healthInsuranceDeduction;
-        const payload: any = { period, startDate, endDate };
-        if (Object.keys(deductions).length > 0) payload.deductions = deductions;
-        if (useAttendance) payload.useAttendance = true;
-        onSubmit(payload);
-      })} className="space-y-6">
+      <form
+        onSubmit={form.handleSubmit((values) => {
+          const { period, startDate, endDate, taxDeduction, socialSecurityDeduction, healthInsuranceDeduction, useAttendance } = values as any;
+          const deductions: Record<string, number> = {};
+          if (typeof taxDeduction === 'number' && !Number.isNaN(taxDeduction)) deductions.taxDeduction = taxDeduction;
+          if (typeof socialSecurityDeduction === 'number' && !Number.isNaN(socialSecurityDeduction)) deductions.socialSecurityDeduction = socialSecurityDeduction;
+          if (typeof healthInsuranceDeduction === 'number' && !Number.isNaN(healthInsuranceDeduction)) deductions.healthInsuranceDeduction = healthInsuranceDeduction;
+          const payload: any = { period, startDate, endDate };
+          if (Object.keys(deductions).length > 0) payload.deductions = deductions;
+          if (useAttendance) payload.useAttendance = true;
+          onSubmit(payload);
+        })}
+        className="space-y-6"
+      >
         <div className="space-y-4">
           <FormField
             control={form.control}
@@ -172,10 +182,6 @@ export default function PayrollForm({ onSubmit, isSubmitting, canGenerate, submi
               )}
             />
           </div>
-          <div className="flex items-center gap-2 mb-4">
-            <input id="useAttendance" type="checkbox" {...(form.register('useAttendance') as any)} />
-            <label htmlFor="useAttendance">Use attendance for working days</label>
-          </div>
           <Button
             type="button"
             variant="outline"
@@ -186,6 +192,8 @@ export default function PayrollForm({ onSubmit, isSubmitting, canGenerate, submi
           </Button>
         </div>
         
+        {children}
+
         <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
           <Button
             type="submit"

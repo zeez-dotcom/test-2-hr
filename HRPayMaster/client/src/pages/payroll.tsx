@@ -10,6 +10,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -18,12 +24,22 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Calculator, DollarSign, FileText, Trash2, Eye, Edit, RefreshCcw, Printer } from "lucide-react";
+import {
+  Calculator,
+  DollarSign,
+  FileText,
+  Trash2,
+  Eye,
+  Edit,
+  RefreshCcw,
+  Printer,
+  Download,
+} from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import { apiPost, apiDelete, apiGet } from "@/lib/http";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import type { PayrollRun, User } from "@shared/schema";
+import type { Company, PayrollExportArtifact, PayrollRun, User } from "@shared/schema";
 import { useSearch, useLocation } from "wouter";
 import { toastApiError } from "@/lib/toastError";
 import { useTranslation } from "react-i18next";
@@ -95,18 +111,27 @@ export default function Payroll() {
     enabled: canGenerate,
   });
 
-  const generatePayrollMutation = useMutation({
+  const { data: companyConfig } = useQuery<Company>({
+    queryKey: ["/api/company"],
+    enabled: canGenerate,
+  });
+
+  const generatePayrollMutation = useMutation<string, unknown, PayrollGenerateRequest>({
     mutationFn: async (data: PayrollGenerateRequest) => {
       const res = await apiPost("/api/payroll/generate", data);
       if (!res.ok) throw res;
+      return data.status ?? "completed";
     },
-    onSuccess: () => {
+    onSuccess: (runStatus) => {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       setIsGenerateDialogOpen(false);
       toast({
         title: t('common.success','Success'),
-        description: t('payroll.generated','Payroll generated successfully'),
+        description:
+          runStatus === "draft"
+            ? t('payroll.draftSaved','Payroll draft saved')
+            : t('payroll.generated','Payroll generated successfully'),
       });
     },
     onError: (res: any) => {
@@ -221,7 +246,10 @@ export default function Payroll() {
   });
 
   const handleGeneratePayroll = (data: PayrollGenerateRequest) => {
-    const exists = payrollRuns?.some((run) => run.period === data.period);
+    const calendarKey = data.calendarId ?? "default";
+    const exists = payrollRuns?.some(
+      run => run.period === data.period && (run.calendarId ?? "default") === calendarKey,
+    );
     if (exists) {
       toast({
         title: t('errors.errorTitle','Error'),
@@ -322,6 +350,35 @@ export default function Payroll() {
     setPendingPrint(true);
   };
 
+  const handleDownloadArtifact = useCallback(
+    (artifact: PayrollExportArtifact) => {
+      try {
+        const binary = atob(artifact.data);
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index++) {
+          bytes[index] = binary.charCodeAt(index);
+        }
+        const blob = new Blob([bytes], { type: artifact.mimeType });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = artifact.filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } catch (error) {
+        console.error("Failed to download export artifact", error);
+        toast({
+          title: t('errors.errorTitle','Error'),
+          description: t('payroll.downloadFailed','Unable to download export file'),
+          variant: "destructive",
+        });
+      }
+    },
+    [toast, t],
+  );
+
   useEffect(() => {
     if (pendingPrint && printHandler) {
       printHandler();
@@ -370,6 +427,8 @@ export default function Payroll() {
     switch (status) {
       case 'completed':
         return 'bg-success text-white';
+      case 'draft':
+        return 'bg-blue-200 text-blue-900 dark:bg-blue-900/60 dark:text-blue-100';
       case 'pending':
         return 'bg-warning text-white';
       case 'cancelled':
@@ -479,6 +538,9 @@ export default function Payroll() {
                         onSubmit={handleGeneratePayroll}
                         isSubmitting={generatePayrollMutation.isPending}
                         canGenerate={canGenerate}
+                        calendars={companyConfig?.payrollCalendars ?? []}
+                        frequencies={companyConfig?.payrollFrequencies ?? []}
+                        exportFormats={companyConfig?.payrollExportFormats ?? []}
                       />
                     </DialogContent>
                   </Dialog>
@@ -509,6 +571,9 @@ export default function Payroll() {
                             onSubmit={handleGeneratePayroll}
                             isSubmitting={generatePayrollMutation.isPending}
                             canGenerate={canGenerate}
+                            calendars={companyConfig?.payrollCalendars ?? []}
+                            frequencies={companyConfig?.payrollFrequencies ?? []}
+                            exportFormats={companyConfig?.payrollExportFormats ?? []}
                           />
                         </DialogContent>
                       </Dialog>
@@ -542,8 +607,12 @@ export default function Payroll() {
                       <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
                         {payrollRuns.map((payroll) => (
                           <tr key={payroll.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
-                              {payroll.period}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                              <div className="font-medium">{payroll.period}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {(payroll.cycleLabel ?? t('payroll.defaultCycle','Default cycle'))} ·{' '}
+                                {payroll.scenarioKey ?? 'baseline'}
+                              </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                               {formatDate(payroll.startDate)} - {formatDate(payroll.endDate)}
@@ -561,6 +630,29 @@ export default function Payroll() {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                               <div className="flex items-center justify-end space-x-2">
+                                {payroll.exportArtifacts && payroll.exportArtifacts.length > 0 && (
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="outline" size="sm">
+                                        <Download className="mr-1" size={14} />
+                                        {t('payroll.exports','Exports')}
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      {payroll.exportArtifacts.map(artifact => (
+                                        <DropdownMenuItem
+                                          key={artifact.id}
+                                          onSelect={(event: Event) => {
+                                            event.preventDefault();
+                                            handleDownloadArtifact(artifact);
+                                          }}
+                                        >
+                                          {artifact.filename}
+                                        </DropdownMenuItem>
+                                      ))}
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                )}
                                 <Button
                                   variant="outline"
                                   size="sm"

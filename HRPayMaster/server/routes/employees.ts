@@ -24,6 +24,9 @@ import {
   insertEmployeeWorkflowSchema,
   insertLeaveAccrualPolicySchema,
   insertEmployeeLeavePolicySchema,
+  payrollFrequencyConfigSchema,
+  payrollCalendarConfigSchema,
+  payrollExportFormatConfigSchema,
   type InsertEmployeeEvent,
   type InsertEmployee,
   type InsertCar,
@@ -38,6 +41,9 @@ import {
   type LeaveBalance,
   type EmployeeLeavePolicy,
   type VacationRequestWithEmployee,
+  type PayrollFrequencyConfig,
+  type PayrollCalendarConfig,
+  type PayrollExportFormatConfig,
 } from "@shared/schema";
 import {
   sendEmail,
@@ -153,6 +159,148 @@ async function getAddedBy(req: Request): Promise<string | undefined> {
   const existing = await storage.getEmployee(addedById);
   return existing ? addedById : undefined;
 }
+
+const createJsonArrayParser = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess(value => {
+    if (value === undefined || value === null || value === "") {
+      return undefined;
+    }
+    if (typeof value === "string") {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return undefined;
+      }
+    }
+    return value;
+  }, schema.array());
+
+const payrollFrequenciesParser = createJsonArrayParser(payrollFrequencyConfigSchema);
+const payrollCalendarsParser = createJsonArrayParser(payrollCalendarConfigSchema);
+const payrollExportFormatsParser = createJsonArrayParser(payrollExportFormatConfigSchema);
+
+const parsePayrollFrequenciesInput = (
+  value: unknown,
+): PayrollFrequencyConfig[] | undefined => {
+  const parsed = payrollFrequenciesParser.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+};
+
+const parsePayrollCalendarsInput = (
+  value: unknown,
+): PayrollCalendarConfig[] | undefined => {
+  const parsed = payrollCalendarsParser.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+};
+
+const parsePayrollExportFormatsInput = (
+  value: unknown,
+): PayrollExportFormatConfig[] | undefined => {
+  const parsed = payrollExportFormatsParser.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+};
+
+const defaultFrequency: PayrollFrequencyConfig = {
+  id: "default",
+  name: "Monthly Cycle",
+  cadence: "monthly",
+};
+
+const defaultCalendars: PayrollCalendarConfig[] = [
+  { id: "default", frequencyId: defaultFrequency.id, name: "Default Calendar" },
+];
+
+const defaultExportFormats: PayrollExportFormatConfig[] = [
+  { id: "bank-default", type: "bank", format: "csv", name: "Default Bank Export", enabled: true },
+  { id: "gl-default", type: "gl", format: "xlsx", name: "Default GL Export", enabled: true },
+  { id: "statutory-default", type: "statutory", format: "pdf", name: "Default Statutory Export", enabled: true },
+];
+
+const capitalize = (value: string): string => {
+  if (!value) return value;
+  return value.charAt(0).toUpperCase() + value.slice(1);
+};
+
+const normalizeLegacyPayrollSettings = (
+  raw: unknown,
+):
+  | {
+      frequencies: PayrollFrequencyConfig[];
+      calendars: PayrollCalendarConfig[];
+      exportFormats: PayrollExportFormatConfig[];
+    }
+  | undefined => {
+  if (raw === undefined || raw === null || raw === "") {
+    return undefined;
+  }
+
+  let parsedValue: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      parsedValue = JSON.parse(raw);
+    } catch {
+      return undefined;
+    }
+  }
+
+  if (typeof parsedValue !== "object" || parsedValue === null) {
+    return undefined;
+  }
+
+  const legacy = parsedValue as Record<string, unknown>;
+
+  let frequencies = parsePayrollFrequenciesInput(legacy.frequencies);
+  if (!frequencies || frequencies.length === 0) {
+    const rawCadence =
+      typeof legacy.frequency === "string" && legacy.frequency.trim() !== ""
+        ? legacy.frequency.trim()
+        : defaultFrequency.cadence;
+    const cadenceResult = payrollFrequencyConfigSchema.shape.cadence.safeParse(rawCadence);
+    const cadence = cadenceResult.success ? cadenceResult.data : defaultFrequency.cadence;
+    const freqId =
+      typeof legacy.frequencyId === "string" && legacy.frequencyId.trim() !== ""
+        ? legacy.frequencyId.trim()
+        : defaultFrequency.id;
+    const label =
+      typeof legacy.frequencyLabel === "string" && legacy.frequencyLabel.trim() !== ""
+        ? legacy.frequencyLabel.trim()
+        : defaultFrequency.name;
+    frequencies = [
+      {
+        id: freqId,
+        name: label,
+        cadence: cadence as PayrollFrequencyConfig["cadence"],
+      },
+    ];
+  }
+
+  let calendars = parsePayrollCalendarsInput(legacy.calendars);
+  if (!calendars || calendars.length === 0) {
+    const calendarId =
+      typeof legacy.calendarId === "string" && legacy.calendarId.trim() !== ""
+        ? legacy.calendarId.trim()
+        : defaultCalendars[0]?.id ?? "default";
+    const calendarName =
+      typeof legacy.calendarName === "string" && legacy.calendarName.trim() !== ""
+        ? legacy.calendarName.trim()
+        : defaultCalendars[0]?.name ?? "Default Calendar";
+    const frequencyId = frequencies[0]?.id ?? defaultCalendars[0]?.frequencyId ?? defaultFrequency.id;
+    calendars = [
+      {
+        id: calendarId,
+        frequencyId,
+        name: calendarName,
+      },
+    ];
+  }
+
+  let exportFormats = parsePayrollExportFormatsInput(legacy.exportFormats);
+  if (!exportFormats || exportFormats.length === 0) {
+    exportFormats = defaultExportFormats;
+  }
+
+  return { frequencies, calendars, exportFormats };
+};
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -522,7 +670,13 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
       const list = await storage.getCompanies();
       if (list.length === 0) {
         // create default company if none exists
-        const created = await storage.createCompany({ name: 'Company' });
+        const created = await storage.createCompany({
+          name: 'Company',
+          payrollFrequencies: [{ ...defaultFrequency }],
+          payrollCalendars: defaultCalendars.map(calendar => ({ ...calendar })),
+          payrollExportFormats: defaultExportFormats.map(format => ({ ...format })),
+          useAttendanceForDeductions: false,
+        });
         return res.json(created);
       }
       res.json(list[0]);
@@ -543,12 +697,43 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
       if (typeof req.body?.phone === 'string') data.phone = req.body.phone;
       if (typeof req.body?.website === 'string') data.website = req.body.website;
       if (typeof req.body?.address === 'string') data.address = req.body.address;
-      if (typeof req.body?.payrollSettings === 'object' || typeof req.body?.payrollSettings === 'string') {
-        try {
-          data.payrollSettings = typeof req.body.payrollSettings === 'string' ? req.body.payrollSettings : JSON.stringify(req.body.payrollSettings);
-        } catch {}
+      const parsedFrequencies = parsePayrollFrequenciesInput(req.body?.payrollFrequencies);
+      if (parsedFrequencies) {
+        data.payrollFrequencies = parsedFrequencies;
+      }
+
+      const parsedCalendars = parsePayrollCalendarsInput(req.body?.payrollCalendars);
+      if (parsedCalendars) {
+        data.payrollCalendars = parsedCalendars;
+      }
+
+      const parsedExportFormats = parsePayrollExportFormatsInput(req.body?.payrollExportFormats);
+      if (parsedExportFormats) {
+        data.payrollExportFormats = parsedExportFormats;
+      }
+
+      const legacyPayroll = normalizeLegacyPayrollSettings(req.body?.payrollSettings);
+      if (legacyPayroll) {
+        if (!data.payrollFrequencies) {
+          data.payrollFrequencies = legacyPayroll.frequencies;
+        }
+        if (!data.payrollCalendars) {
+          data.payrollCalendars = legacyPayroll.calendars;
+        }
+        if (!data.payrollExportFormats) {
+          data.payrollExportFormats = legacyPayroll.exportFormats;
+        }
       }
       if (!id) {
+        if (!data.payrollFrequencies) {
+          data.payrollFrequencies = [{ ...defaultFrequency }];
+        }
+        if (!data.payrollCalendars) {
+          data.payrollCalendars = defaultCalendars.map(calendar => ({ ...calendar }));
+        }
+        if (!data.payrollExportFormats) {
+          data.payrollExportFormats = defaultExportFormats.map(format => ({ ...format }));
+        }
         const created = await storage.createCompany(data);
         res.json(created);
       } else {

@@ -25,6 +25,90 @@ import {
 
 const parseDate = (v: unknown) => parseDateToISO(v).value;
 
+const parseJsonInput = <T>(schema: z.ZodType<T>) =>
+  z.preprocess(value => {
+    if (value === undefined || value === null || value === "") {
+      return undefined;
+    }
+    if (typeof value === "string") {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return undefined;
+      }
+    }
+    return value;
+  }, schema);
+
+export const payrollScenarioToggleSchema = z.object({
+  key: z.string().min(1),
+  label: z.string().min(1),
+  enabled: z.boolean().default(true),
+  description: z.string().optional().nullable(),
+});
+
+export type PayrollScenarioToggle = z.infer<typeof payrollScenarioToggleSchema>;
+
+const payrollScenarioToggleArraySchema = z.array(payrollScenarioToggleSchema);
+
+export const payrollFrequencyConfigSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  cadence: z.enum([
+    "weekly",
+    "biweekly",
+    "semiMonthly",
+    "monthly",
+    "quarterly",
+    "annual",
+    "custom",
+  ]),
+  periodDays: z.number().int().positive().optional(),
+  description: z.string().optional().nullable(),
+  defaultScenarios: payrollScenarioToggleArraySchema.optional(),
+});
+
+export type PayrollFrequencyConfig = z.infer<typeof payrollFrequencyConfigSchema>;
+
+export const payrollCalendarConfigSchema = z.object({
+  id: z.string().min(1),
+  frequencyId: z.string().min(1),
+  name: z.string().min(1),
+  anchorDate: z.string().optional().nullable(),
+  cutoffDay: z.number().int().min(1).max(31).optional(),
+  payDateOffsetDays: z.number().int().optional(),
+  scenarioOverrides: payrollScenarioToggleArraySchema.optional(),
+});
+
+export type PayrollCalendarConfig = z.infer<typeof payrollCalendarConfigSchema>;
+
+export const payrollExportFormatConfigSchema = z.object({
+  id: z.string().min(1),
+  type: z.enum(["bank", "gl", "statutory"]),
+  format: z.enum(["pdf", "csv", "xlsx"]),
+  name: z.string().min(1),
+  templateId: z.string().optional().nullable(),
+  enabled: z.boolean().optional().default(true),
+  description: z.string().optional().nullable(),
+  options: z.record(z.unknown()).optional(),
+});
+
+export type PayrollExportFormatConfig = z.infer<typeof payrollExportFormatConfigSchema>;
+
+export const payrollExportArtifactSchema = z.object({
+  id: z.string().min(1),
+  type: z.enum(["bank", "gl", "statutory"]),
+  format: z.enum(["pdf", "csv", "xlsx"]),
+  filename: z.string().min(1),
+  mimeType: z.string().min(1),
+  data: z.string().min(1),
+  createdAt: z.string().min(1),
+  scenarioKey: z.string().optional(),
+  description: z.string().optional().nullable(),
+});
+
+export type PayrollExportArtifact = z.infer<typeof payrollExportArtifactSchema>;
+
 export type VacationApprovalStep = {
   approverId: string;
   status: "pending" | "approved" | "rejected" | "delegated";
@@ -68,7 +152,18 @@ export const companies = pgTable("companies", {
   website: text("website"),
   address: text("address"),
   useAttendanceForDeductions: boolean("use_attendance_for_deductions").notNull().default(false),
-  payrollSettings: text("payroll_settings"),
+  payrollFrequencies: jsonb("payroll_frequencies")
+    .$type<PayrollFrequencyConfig[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
+  payrollCalendars: jsonb("payroll_calendars")
+    .$type<PayrollCalendarConfig[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
+  payrollExportFormats: jsonb("payroll_export_formats")
+    .$type<PayrollExportFormatConfig[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
 });
 
 export const employees = pgTable("employees", {
@@ -548,6 +643,17 @@ export const payrollRuns = pgTable("payroll_runs", {
   totalDeductions: numeric("total_deductions", { precision: 12, scale: 2 }).notNull(),
   netAmount: numeric("net_amount", { precision: 12, scale: 2 }).notNull(),
   status: text("status").notNull().default("pending"), // pending, completed, cancelled
+  calendarId: text("calendar_id"),
+  cycleLabel: text("cycle_label"),
+  scenarioKey: text("scenario_key"),
+  scenarioToggles: jsonb("scenario_toggles")
+    .$type<Record<string, boolean>>()
+    .notNull()
+    .default(sql`'{}'::jsonb`),
+  exportArtifacts: jsonb("export_artifacts")
+    .$type<PayrollExportArtifact[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -652,9 +758,21 @@ export const insertDepartmentSchema = createInsertSchema(departments).omit({
   id: true,
 });
 
-export const insertCompanySchema = createInsertSchema(companies).omit({
-  id: true,
-});
+export const insertCompanySchema = createInsertSchema(companies)
+  .omit({
+    id: true,
+  })
+  .extend({
+    payrollFrequencies: parseJsonInput(
+      z.array(payrollFrequencyConfigSchema),
+    ).default([]),
+    payrollCalendars: parseJsonInput(
+      z.array(payrollCalendarConfigSchema),
+    ).default([]),
+    payrollExportFormats: parseJsonInput(
+      z.array(payrollExportFormatConfigSchema),
+    ).default([]),
+  });
 
 export const insertEmployeeSchema = createInsertSchema(employees)
   .omit({ id: true })
@@ -796,10 +914,17 @@ export type EmployeeCustomValuePayload = z.infer<
   typeof employeeCustomValuePayloadSchema
 >;
 
-export const insertPayrollRunSchema = createInsertSchema(payrollRuns).omit({
-  id: true,
-  createdAt: true,
-});
+export const insertPayrollRunSchema = createInsertSchema(payrollRuns)
+  .omit({
+    id: true,
+    createdAt: true,
+  })
+  .extend({
+    scenarioToggles: parseJsonInput(z.record(z.boolean())).default({}),
+    exportArtifacts: parseJsonInput(
+      z.array(payrollExportArtifactSchema),
+    ).default([]),
+  });
 
 export const insertPayrollEntrySchema = createInsertSchema(payrollEntries)
   .omit({
