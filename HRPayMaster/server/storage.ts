@@ -234,8 +234,11 @@ export interface IStorage {
   // User methods
   getUserById(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUsers(): Promise<User[]>;
   createUser(user: typeof users.$inferInsert): Promise<User>;
   updateUser(id: string, user: Partial<typeof users.$inferInsert>): Promise<User | undefined>;
+  countActiveAdmins(excludeId?: string): Promise<number>;
+  getFirstActiveAdmin(): Promise<User | undefined>;
 
   // Department methods
   getDepartments(): Promise<Department[]>;
@@ -452,6 +455,16 @@ export class DatabaseStorage implements IStorage {
 
 
 
+  async getUsers(): Promise<User[]> {
+
+    const rows = await db.select().from(users).orderBy(asc(users.username));
+
+    return rows;
+
+  }
+
+
+
   async getUserByUsername(username: string): Promise<User | undefined> {
 
     const [row] = await db.select().from(users).where(eq(users.username, username));
@@ -482,7 +495,49 @@ export class DatabaseStorage implements IStorage {
 
 
 
+  async countActiveAdmins(excludeId?: string): Promise<number> {
 
+    const conditions: SQL<unknown>[] = [eq(users.role, "admin"), eq(users.active, true)];
+
+    if (excludeId) {
+
+      conditions.push(ne(users.id, excludeId));
+
+    }
+
+    const [row] = await db
+
+      .select({ value: sql<number>`count(*)::int` })
+
+      .from(users)
+
+      .where(and(...conditions));
+
+    return Number(row?.value ?? 0);
+
+  }
+
+
+
+  async getFirstActiveAdmin(): Promise<User | undefined> {
+
+    const [row] = await db
+
+      .select()
+
+      .from(users)
+
+      .where(and(eq(users.role, "admin"), eq(users.active, true)))
+
+      .limit(1);
+
+    return row || undefined;
+
+  }
+
+
+
+  
   private buildEmployeeOrder(
     sort?: EmployeeFilters["sort"],
     order: EmployeeFilters["order"] = "asc",

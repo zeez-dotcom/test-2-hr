@@ -12,6 +12,13 @@ vi.mock('./storage', () => {
   class DuplicateEmployeeCodeError extends Error {}
   return {
     storage: {
+      getUsers: vi.fn(),
+      getUserById: vi.fn(),
+      getUserByUsername: vi.fn(),
+      countActiveAdmins: vi.fn(),
+      getFirstActiveAdmin: vi.fn(),
+      createUser: vi.fn(),
+      updateUser: vi.fn(),
       getEmployees: vi.fn(),
       createEmployee: vi.fn(),
       createEmployeesBulk: vi.fn(),

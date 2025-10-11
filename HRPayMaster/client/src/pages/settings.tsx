@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useEffect } from "react";
-import { apiGet, apiPut } from "@/lib/http";
+import { apiGet, apiPost, apiPut } from "@/lib/http";
 import { defaultTemplates } from "@/lib/default-templates";
 import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -106,9 +106,300 @@ export default function Settings() {
         </CardContent>
       </Card>
 
+      <UsersCard />
+
       {/* Templates management */}
       <TemplatesCard templates={templates} />
     </div>
+  );
+}
+
+function UsersCard() {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const { data: users = [], refetch } = useQuery<any[]>({ queryKey: ["/api/users"] });
+  const [newUser, setNewUser] = useState({ username: "", email: "", password: "", role: "viewer" });
+  const [editState, setEditState] = useState<Record<string, { username: string; email: string; role: string }>>({});
+
+  useEffect(() => {
+    const next: Record<string, { username: string; email: string; role: string }> = {};
+    for (const user of users) {
+      next[user.id] = {
+        username: user.username || "",
+        email: user.email || "",
+        role: user.role || "viewer",
+      };
+    }
+    setEditState(next);
+  }, [users]);
+
+  const createUser = useMutation({
+    mutationFn: async (payload: typeof newUser) => {
+      const trimmed = {
+        username: payload.username.trim(),
+        email: payload.email.trim(),
+        password: payload.password,
+        role: payload.role,
+      };
+      const res = await apiPost("/api/users", trimmed);
+      if (!res.ok) throw new Error(res.error || "Failed to create user");
+      return res.data;
+    },
+    onSuccess: () => {
+      toast({ title: t("settings.userCreated", "User created") });
+      setNewUser({ username: "", email: "", password: "", role: "viewer" });
+      refetch();
+    },
+    onError: (error: any) => {
+      toast({
+        title: t("errors.errorTitle", "Error"),
+        description: error?.message || t("settings.userCreateFailed", "Could not create user"),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateUser = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Record<string, any> }) => {
+      const res = await apiPut(`/api/users/${id}`, data);
+      if (!res.ok) throw new Error(res.error || "Failed to update user");
+      return res.data;
+    },
+    onSuccess: () => {
+      toast({ title: t("settings.userUpdated", "User updated") });
+      refetch();
+    },
+    onError: (error: any) => {
+      toast({
+        title: t("errors.errorTitle", "Error"),
+        description: error?.message || t("settings.userUpdateFailed", "Could not update user"),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: async ({ id, active }: { id: string; active: boolean }) => {
+      const endpoint = active ? `/api/users/${id}/reactivate` : `/api/users/${id}/deactivate`;
+      const res = await apiPost(endpoint, {});
+      if (!res.ok) throw new Error(res.error || "Failed to update status");
+      return res.data;
+    },
+    onSuccess: (_, variables) => {
+      toast({
+        title: variables.active
+          ? t("settings.userReactivated", "User reactivated")
+          : t("settings.userDeactivated", "User deactivated"),
+      });
+      refetch();
+    },
+    onError: (error: any) => {
+      toast({
+        title: t("errors.errorTitle", "Error"),
+        description: error?.message || t("settings.userStatusFailed", "Could not update status"),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const resetPassword = useMutation({
+    mutationFn: async ({ id, password }: { id: string; password: string }) => {
+      const res = await apiPost(`/api/users/${id}/reset-password`, { password });
+      if (!res.ok) throw new Error(res.error || "Failed to reset password");
+      return res.data;
+    },
+    onSuccess: () => {
+      toast({ title: t("settings.userPasswordReset", "Password reset") });
+    },
+    onError: (error: any) => {
+      toast({
+        title: t("errors.errorTitle", "Error"),
+        description: error?.message || t("settings.userPasswordFailed", "Could not reset password"),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleCreate = () => {
+    if (!newUser.username.trim() || !newUser.email.trim() || !newUser.password) {
+      toast({
+        title: t("errors.errorTitle", "Error"),
+        description: t("settings.userValidation", "Please provide username, email, password, and role."),
+        variant: "destructive",
+      });
+      return;
+    }
+    createUser.mutate(newUser);
+  };
+
+  const handleSave = (user: any) => {
+    const state = editState[user.id];
+    if (!state) return;
+    const payload: Record<string, any> = {};
+    if (state.username.trim() && state.username.trim() !== user.username) {
+      payload.username = state.username.trim();
+    }
+    if (state.email.trim() && state.email.trim() !== user.email) {
+      payload.email = state.email.trim();
+    }
+    if (state.role !== user.role) {
+      payload.role = state.role;
+    }
+    if (Object.keys(payload).length === 0) {
+      toast({ title: t("settings.noChanges", "No changes to save"), variant: "outline" });
+      return;
+    }
+    updateUser.mutate({ id: user.id, data: payload });
+  };
+
+  const handleReset = (user: any) => {
+    const password = window.prompt(
+      t("settings.promptNewPassword", "Enter a new password for {{username}}", { username: user.username }),
+    );
+    if (!password) return;
+    resetPassword.mutate({ id: user.id, password });
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t("settings.userManagement", "User Management")}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <h3 className="font-medium text-sm text-muted-foreground">{t("settings.addUser", "Add user")}</h3>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+            <Input
+              placeholder={t("settings.username", "Username")}
+              value={newUser.username}
+              onChange={(e) => setNewUser((prev) => ({ ...prev, username: e.target.value }))}
+            />
+            <Input
+              type="email"
+              placeholder={t("settings.email", "Email")}
+              value={newUser.email}
+              onChange={(e) => setNewUser((prev) => ({ ...prev, email: e.target.value }))}
+            />
+            <Input
+              type="password"
+              placeholder={t("settings.password", "Password")}
+              value={newUser.password}
+              onChange={(e) => setNewUser((prev) => ({ ...prev, password: e.target.value }))}
+            />
+            <select
+              className="border rounded px-2 py-2 text-sm"
+              value={newUser.role}
+              onChange={(e) => setNewUser((prev) => ({ ...prev, role: e.target.value }))}
+            >
+              <option value="admin">{t("roles.admin", "Admin")}</option>
+              <option value="hr">{t("roles.hr", "HR")}</option>
+              <option value="viewer">{t("roles.viewer", "Viewer")}</option>
+              <option value="employee">{t("roles.employee", "Employee")}</option>
+            </select>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={handleCreate} disabled={createUser.isPending}>
+              {t("settings.addUserCta", "Create user")}
+            </Button>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <h3 className="font-medium text-sm text-muted-foreground">{t("settings.manageUsers", "Existing users")}</h3>
+          {users.length === 0 ? (
+            <div className="text-sm text-muted-foreground">{t("settings.noUsers", "No users found.")}</div>
+          ) : (
+            <div className="space-y-3">
+              {users.map((user: any) => {
+                const state = editState[user.id] || { username: "", email: "", role: "viewer" };
+                const hasChanges =
+                  state.username.trim() !== (user.username || "") ||
+                  state.email.trim() !== (user.email || "") ||
+                  state.role !== (user.role || "viewer");
+                return (
+                  <div
+                    key={user.id}
+                    className="border rounded-lg p-3 space-y-3 md:space-y-0 md:grid md:grid-cols-[1.5fr,1.5fr,1fr,auto] md:items-center md:gap-3"
+                  >
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">{t("settings.username", "Username")}</label>
+                      <Input
+                        value={state.username}
+                        onChange={(e) =>
+                          setEditState((prev) => ({
+                            ...prev,
+                            [user.id]: { ...state, username: e.target.value },
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">{t("settings.email", "Email")}</label>
+                      <Input
+                        type="email"
+                        value={state.email}
+                        onChange={(e) =>
+                          setEditState((prev) => ({
+                            ...prev,
+                            [user.id]: { ...state, email: e.target.value },
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">{t("settings.role", "Role")}</label>
+                      <select
+                        className="border rounded px-2 py-2 text-sm w-full"
+                        value={state.role}
+                        onChange={(e) =>
+                          setEditState((prev) => ({
+                            ...prev,
+                            [user.id]: { ...state, role: e.target.value },
+                          }))
+                        }
+                      >
+                        <option value="admin">{t("roles.admin", "Admin")}</option>
+                        <option value="hr">{t("roles.hr", "HR")}</option>
+                        <option value="viewer">{t("roles.viewer", "Viewer")}</option>
+                        <option value="employee">{t("roles.employee", "Employee")}</option>
+                      </select>
+                    </div>
+                    <div className="flex flex-wrap gap-2 items-center justify-end">
+                      <span className="text-xs px-2 py-1 rounded-full border text-muted-foreground">
+                        {user.active ? t("settings.userActive", "Active") : t("settings.userInactive", "Inactive")}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => statusMutation.mutate({ id: user.id, active: !user.active })}
+                        disabled={statusMutation.isPending}
+                      >
+                        {user.active ? t("settings.deactivate", "Deactivate") : t("settings.reactivate", "Reactivate")}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleReset(user)}
+                        disabled={resetPassword.isPending}
+                      >
+                        {t("settings.resetPassword", "Reset password")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => handleSave(user)}
+                        disabled={!hasChanges || updateUser.isPending}
+                      >
+                        {t("actions.save", "Save")}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

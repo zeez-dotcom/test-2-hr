@@ -12,10 +12,6 @@ import { storage } from "./storage";
 import { generateExpiryWarningEmail, shouldSendAlert, sendEmail } from "./emailService";
 import { processVacationReturnAlerts } from "./vacationReturnScheduler";
 import type { User } from "@shared/schema";
-import { users } from "@shared/schema";
-
-type InsertUser = typeof users.$inferInsert;
-
 type AuthUser = Omit<User, "passwordHash">;
 
 const toAuthUser = (user: User): AuthUser => {
@@ -29,63 +25,63 @@ declare global {
   }
 }
 
-const resolveAdminConfig = () => {
-  const nodeEnv = process.env.NODE_ENV ?? 'development';
-  const isProduction = nodeEnv === 'production';
-  const username = process.env.ADMIN_USERNAME ?? (isProduction ? undefined : 'admin');
-  const password = process.env.ADMIN_PASSWORD ?? (isProduction ? undefined : 'admin');
-  const email = process.env.ADMIN_EMAIL ?? (isProduction ? undefined : 'admin@example.com');
-  if (!username || !password || !email) {
-    throw new Error('ADMIN_USERNAME, ADMIN_PASSWORD, and ADMIN_EMAIL environment variables must be configured');
+type AdminSeedConfig = { username: string; password: string; email: string } | undefined;
+
+const resolveAdminSeed = (): AdminSeedConfig => {
+  const nodeEnv = process.env.NODE_ENV ?? "development";
+  const isProduction = nodeEnv === "production";
+  const username = process.env.ADMIN_USERNAME;
+  const password = process.env.ADMIN_PASSWORD;
+  const email = process.env.ADMIN_EMAIL;
+
+  if (username && password && email) {
+    return { username, password, email };
   }
-  if (!process.env.ADMIN_USERNAME && !isProduction) {
+
+  if (isProduction) {
+    return undefined;
+  }
+
+  if (!username) {
     log("warning: ADMIN_USERNAME not set; using development default 'admin'");
   }
-  if (!process.env.ADMIN_PASSWORD && !isProduction) {
+  if (!password) {
     log("warning: ADMIN_PASSWORD not set; using development default 'admin'");
   }
-  if (!process.env.ADMIN_EMAIL && !isProduction) {
+  if (!email) {
     log("warning: ADMIN_EMAIL not set; using development default 'admin@example.com'");
   }
-  return { username, password, email };
+
+  return {
+    username: username ?? "admin",
+    password: password ?? "admin",
+    email: email ?? "admin@example.com",
+  };
 };
 
 const ensureAdminUser = async (): Promise<User> => {
-  const { username, password, email } = resolveAdminConfig();
-  const existing = await storage.getUserByUsername(username);
-  if (!existing) {
-    const passwordHash = await bcrypt.hash(password, 12);
-    const created = await storage.createUser({
-      username,
-      email,
-      passwordHash,
-      role: 'admin',
-    });
-    log(`bootstrap admin user '${username}' created`);
-    return created;
+  const existing = await storage.getFirstActiveAdmin();
+  if (existing) {
+    return existing;
   }
 
-  const updates: Partial<InsertUser> = {};
-  const passwordMatches = await bcrypt.compare(password, existing.passwordHash);
-  if (!passwordMatches) {
-    updates.passwordHash = await bcrypt.hash(password, 12);
-  }
-  if (existing.email !== email) {
-    updates.email = email;
-  }
-  if (existing.role !== 'admin') {
-    updates.role = 'admin';
+  const seed = resolveAdminSeed();
+  if (!seed) {
+    throw new Error(
+      "No active admin user exists and ADMIN_USERNAME, ADMIN_PASSWORD, and ADMIN_EMAIL environment variables are not configured",
+    );
   }
 
-  if (Object.keys(updates).length > 0) {
-    const updated = await storage.updateUser(existing.id, updates);
-    if (updated) {
-      log(`bootstrap admin user '${username}' updated from environment configuration`);
-      return updated;
-    }
-  }
-
-  return existing;
+  const passwordHash = await bcrypt.hash(seed.password, 12);
+  const created = await storage.createUser({
+    username: seed.username,
+    email: seed.email,
+    passwordHash,
+    role: "admin",
+    active: true,
+  });
+  log(`bootstrap admin user '${seed.username}' created`);
+  return created;
 };
 
 const adminBootstrap = ensureAdminUser();
@@ -95,7 +91,7 @@ passport.use(
     try {
       await adminBootstrap;
       const userRecord = await storage.getUserByUsername(username);
-      if (!userRecord) {
+      if (!userRecord || userRecord.active === false) {
         return done(null, false);
       }
       const matches = await bcrypt.compare(password, userRecord.passwordHash);
@@ -117,7 +113,7 @@ passport.deserializeUser(async (id: string, done) => {
   try {
     await adminBootstrap;
     const userRecord = await storage.getUserById(id);
-    if (!userRecord) {
+    if (!userRecord || userRecord.active === false) {
       return done(null, false);
     }
     return done(null, toAuthUser(userRecord));
