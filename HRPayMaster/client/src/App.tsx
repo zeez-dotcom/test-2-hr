@@ -18,13 +18,14 @@ import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import Chatbot from "@/components/chatbot";
-import type { User } from "@shared/schema";
+import type { SessionUser } from "@shared/schema";
 import { apiGet } from "@/lib/http";
+import Security from "@/pages/security";
 
 function Router() {
-  const { data: user, isLoading } = useQuery<User | null>({
+  const { data: user, isLoading } = useQuery<SessionUser | null>({
     queryKey: ["/api/me"],
-    queryFn: getQueryFn<User | null>({ on401: "returnNull" }),
+    queryFn: getQueryFn<SessionUser | null>({ on401: "returnNull" }),
   });
   const [location, navigate] = useLocation();
 
@@ -70,6 +71,7 @@ function Router() {
         <Route path="/reports" component={Reports} />
         <Route path="/assets-fleet" component={AssetsFleet} />
         <Route path="/compliance" component={Compliance} />
+        <Route path="/security" component={Security} />
         <Route path="/employee-file" component={EmployeeFile} />
         <Route path="/asset-file" component={AssetFile} />
         <Route path="/settings" component={Settings} />

@@ -12,6 +12,7 @@ import { templatesRouter } from "./routes/templates";
 import { usersRouter } from "./routes/users";
 import { attendanceRouter } from "./routes/attendance";
 import { documentsRouter } from "./routes/documents";
+import { securityRouter } from "./routes/security";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/healthz", (_req, res) => {
@@ -30,6 +31,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(documentsRouter);
   app.use(templatesRouter);
   app.use(chatbotRouter);
+  app.use(securityRouter);
   const httpServer = createServer(app);
   return httpServer;
 }

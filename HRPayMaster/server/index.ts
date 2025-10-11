@@ -12,10 +12,10 @@ import { storage } from "./storage";
 import { generateExpiryWarningEmail, shouldSendAlert, sendEmail } from "./emailService";
 import { processVacationReturnAlerts } from "./vacationReturnScheduler";
 import { processAttendanceAlerts } from "./attendanceScheduler";
-import type { User } from "@shared/schema";
-type AuthUser = Omit<User, "passwordHash">;
+import type { SessionUser, UserWithPermissions } from "@shared/schema";
+type AuthUser = SessionUser;
 
-const toAuthUser = (user: User): AuthUser => {
+const toAuthUser = (user: UserWithPermissions): AuthUser => {
   const { passwordHash, ...safe } = user;
   return safe;
 };
@@ -60,7 +60,7 @@ const resolveAdminSeed = (): AdminSeedConfig => {
   };
 };
 
-const ensureAdminUser = async (): Promise<User> => {
+const ensureAdminUser = async (): Promise<UserWithPermissions> => {
   const existing = await storage.getFirstActiveAdmin();
   if (existing) {
     return existing;
@@ -91,7 +91,7 @@ passport.use(
   new LocalStrategy(async (username, password, done) => {
     try {
       await adminBootstrap;
-      const userRecord = await storage.getUserByUsername(username);
+    const userRecord = await storage.getUserByUsername(username);
       if (!userRecord || userRecord.active === false) {
         return done(null, false);
       }

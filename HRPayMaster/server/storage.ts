@@ -14,11 +14,24 @@ import {
   type AnyColumn,
   type SQL,
 } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { randomUUID } from "node:crypto";
 import { db } from "./db";
 import { normalizeAllowanceTitle } from "./utils/payroll";
 
 type TransactionClient = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+export type BasicUserInfo = Pick<User, "id" | "username" | "email" | "role">;
+
+export type AccessRequestDetail = AccessRequest & {
+  permissionSet?: PermissionSet | null;
+  requester?: BasicUserInfo | null;
+  reviewer?: BasicUserInfo | null;
+};
+
+export type SecurityAuditEventDetail = SecurityAuditEvent & {
+  actor?: BasicUserInfo | null;
+};
 import {
   type Department,
   type InsertDepartment,
@@ -101,6 +114,18 @@ import {
   type EmployeeSchedule,
   type InsertEmployeeSchedule,
   type User,
+  type UserWithPermissions,
+  type PermissionSet,
+  type PermissionKey,
+  type UserPermissionGrant,
+  type InsertUserPermissionGrant,
+  type AccessRequest,
+  type InsertAccessRequest,
+  type SecurityAuditEvent,
+  type InsertSecurityAuditEvent,
+  type SessionUser,
+  type UserPermissionGrantWithSet,
+  defaultRolePermissions,
   type SickLeaveTracking,
   type InsertSickLeaveTracking,
   type EmployeeWorkflow,
@@ -152,6 +177,10 @@ import {
   shiftTemplates,
   employeeSchedules,
   users,
+  permissionSets,
+  userPermissionGrants,
+  accessRequests,
+  securityAuditEvents,
   allowanceTypes,
   sickLeaveTracking,
 } from "@shared/schema";
@@ -571,13 +600,47 @@ export interface GenericDocumentFilters {
 
 export interface IStorage {
   // User methods
-  getUserById(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  getUsers(): Promise<User[]>;
-  createUser(user: typeof users.$inferInsert): Promise<User>;
-  updateUser(id: string, user: Partial<typeof users.$inferInsert>): Promise<User | undefined>;
+  getUserById(id: string): Promise<UserWithPermissions | undefined>;
+  getUserByUsername(username: string): Promise<UserWithPermissions | undefined>;
+  getUsers(): Promise<UserWithPermissions[]>;
+  createUser(user: typeof users.$inferInsert): Promise<UserWithPermissions>;
+  updateUser(
+    id: string,
+    user: Partial<typeof users.$inferInsert>,
+  ): Promise<UserWithPermissions | undefined>;
+  getSessionUser(id: string): Promise<SessionUser | undefined>;
+  getPermissionSets(): Promise<PermissionSet[]>;
+  getPermissionSetByKey(key: string): Promise<PermissionSet | undefined>;
+  getActivePermissionGrants(
+    userId: string,
+    options?: { includeExpired?: boolean },
+  ): Promise<UserPermissionGrantWithSet[]>;
+  grantPermissionSet(
+    grant: InsertUserPermissionGrant,
+  ): Promise<UserPermissionGrantWithSet>;
+  revokePermissionGrant(id: string, revokedAt?: Date): Promise<boolean>;
+  createAccessRequest(request: InsertAccessRequest): Promise<AccessRequest>;
+  updateAccessRequest(
+    id: string,
+    updates: Partial<InsertAccessRequest> & {
+      status?: AccessRequest["status"];
+      reviewerId?: string | null;
+      reviewedAt?: Date | null;
+    },
+  ): Promise<AccessRequest | undefined>;
+  getAccessRequests(options?: {
+    id?: string;
+    status?: AccessRequest["status"] | "all";
+    requesterId?: string;
+    reviewerId?: string;
+    includeResolved?: boolean;
+  }): Promise<AccessRequestDetail[]>;
+  logSecurityEvent(event: InsertSecurityAuditEvent): Promise<SecurityAuditEvent>;
+  getSecurityAuditEvents(
+    options?: { limit?: number },
+  ): Promise<SecurityAuditEventDetail[]>;
   countActiveAdmins(excludeId?: string): Promise<number>;
-  getFirstActiveAdmin(): Promise<User | undefined>;
+  getFirstActiveAdmin(): Promise<UserWithPermissions | undefined>;
 
   // Department methods
   getDepartments(): Promise<Department[]>;
@@ -957,52 +1020,258 @@ export class DatabaseStorage implements IStorage {
 
   private loggedMissingRecurringEventColumns = false;
 
-  async getUserById(id: string): Promise<User | undefined> {
+  private async fetchPermissionGrants(
+    userId: string,
+    { includeExpired = false }: { includeExpired?: boolean } = {},
+  ): Promise<UserPermissionGrantWithSet[]> {
+    const conditions: SQL<unknown>[] = [eq(userPermissionGrants.userId, userId)];
+    const now = new Date();
+    if (!includeExpired) {
+      conditions.push(lte(userPermissionGrants.startsAt, now));
+      const expirationCondition = or(
+        isNull(userPermissionGrants.expiresAt),
+        gte(userPermissionGrants.expiresAt, now),
+      );
+      if (expirationCondition) {
+        conditions.push(expirationCondition);
+      }
+      conditions.push(isNull(userPermissionGrants.revokedAt));
+    }
 
+    const rows = await db
+      .select({
+        grant: userPermissionGrants,
+        permissionSet: permissionSets,
+      })
+      .from(userPermissionGrants)
+      .leftJoin(permissionSets, eq(userPermissionGrants.permissionSetId, permissionSets.id))
+      .where(and(...conditions))
+      .orderBy(desc(userPermissionGrants.createdAt));
+
+    return rows.map(row => ({
+      ...row.grant,
+      permissionSet: row.permissionSet ?? null,
+    }));
+  }
+
+  private async hydrateUser(
+    user: User | undefined,
+  ): Promise<UserWithPermissions | undefined> {
+    if (!user) return undefined;
+    const activeGrants = await this.fetchPermissionGrants(user.id);
+    const base = defaultRolePermissions[user.role] ?? [];
+    const permissionsSet = new Set<PermissionKey>(base);
+    for (const grant of activeGrants) {
+      const perms = grant.permissionSet?.permissions ?? [];
+      for (const perm of perms) {
+        permissionsSet.add(perm);
+      }
+    }
+    return {
+      ...user,
+      permissions: Array.from(permissionsSet) as PermissionKey[],
+      activeGrants,
+    };
+  }
+
+  private toBasicUserInfo(user: User | undefined): BasicUserInfo | null {
+    if (!user) return null;
+    const { id, username, email, role } = user;
+    return { id, username, email, role };
+  }
+
+  private toSessionUser(user: UserWithPermissions): SessionUser {
+    const { passwordHash, ...rest } = user;
+    return rest;
+  }
+
+  async getUserById(id: string): Promise<UserWithPermissions | undefined> {
     const [row] = await db.select().from(users).where(eq(users.id, id));
-
-    return row || undefined;
-
+    return this.hydrateUser(row);
   }
 
-
-
-  async getUsers(): Promise<User[]> {
-
+  async getUsers(): Promise<UserWithPermissions[]> {
     const rows = await db.select().from(users).orderBy(asc(users.username));
-
-    return rows;
-
+    const hydrated = await Promise.all(rows.map(row => this.hydrateUser(row)));
+    return hydrated.filter((user): user is UserWithPermissions => Boolean(user));
   }
 
-
-
-  async getUserByUsername(username: string): Promise<User | undefined> {
-
+  async getUserByUsername(username: string): Promise<UserWithPermissions | undefined> {
     const [row] = await db.select().from(users).where(eq(users.username, username));
-
-    return row || undefined;
-
+    return this.hydrateUser(row);
   }
 
-
-
-  async createUser(user: typeof users.$inferInsert): Promise<User> {
-
+  async createUser(user: typeof users.$inferInsert): Promise<UserWithPermissions> {
     const [created] = await db.insert(users).values(user).returning();
-
-    return created;
-
-
-
+    const hydrated = await this.hydrateUser(created);
+    if (!hydrated) {
+      throw new Error("Failed to hydrate created user");
+    }
+    return hydrated;
   }
 
-  async updateUser(id: string, user: Partial<typeof users.$inferInsert>): Promise<User | undefined> {
-
+  async updateUser(
+    id: string,
+    user: Partial<typeof users.$inferInsert>,
+  ): Promise<UserWithPermissions | undefined> {
     const [updated] = await db.update(users).set(user).where(eq(users.id, id)).returning();
+    return this.hydrateUser(updated);
+  }
 
-    return updated || undefined;
+  async getSessionUser(id: string): Promise<SessionUser | undefined> {
+    const user = await this.getUserById(id);
+    return user ? this.toSessionUser(user) : undefined;
+  }
 
+  async getPermissionSets(): Promise<PermissionSet[]> {
+    return db.select().from(permissionSets).orderBy(asc(permissionSets.name));
+  }
+
+  async getPermissionSetByKey(key: string): Promise<PermissionSet | undefined> {
+    const [row] = await db.select().from(permissionSets).where(eq(permissionSets.key, key));
+    return row ?? undefined;
+  }
+
+  async getActivePermissionGrants(
+    userId: string,
+    options: { includeExpired?: boolean } = {},
+  ): Promise<UserPermissionGrantWithSet[]> {
+    return this.fetchPermissionGrants(userId, options);
+  }
+
+  async grantPermissionSet(
+    grant: InsertUserPermissionGrant,
+  ): Promise<UserPermissionGrantWithSet> {
+    const [created] = await db.insert(userPermissionGrants).values(grant).returning();
+    const [row] = await db
+      .select({
+        grant: userPermissionGrants,
+        permissionSet: permissionSets,
+      })
+      .from(userPermissionGrants)
+      .leftJoin(permissionSets, eq(userPermissionGrants.permissionSetId, permissionSets.id))
+      .where(eq(userPermissionGrants.id, created.id));
+    if (!row) {
+      throw new Error("Failed to load permission grant");
+    }
+    return {
+      ...row.grant,
+      permissionSet: row.permissionSet ?? null,
+    };
+  }
+
+  async revokePermissionGrant(id: string, revokedAt: Date = new Date()): Promise<boolean> {
+    const [updated] = await db
+      .update(userPermissionGrants)
+      .set({ revokedAt })
+      .where(eq(userPermissionGrants.id, id))
+      .returning({ id: userPermissionGrants.id });
+    return Boolean(updated);
+  }
+
+  async createAccessRequest(request: InsertAccessRequest): Promise<AccessRequest> {
+    const [created] = await db.insert(accessRequests).values(request).returning();
+    return created;
+  }
+
+  async updateAccessRequest(
+    id: string,
+    updates: Partial<InsertAccessRequest> & {
+      status?: AccessRequest["status"];
+      reviewerId?: string | null;
+      reviewedAt?: Date | null;
+    },
+  ): Promise<AccessRequest | undefined> {
+    const [updated] = await db
+      .update(accessRequests)
+      .set(updates)
+      .where(eq(accessRequests.id, id))
+      .returning();
+    return updated ?? undefined;
+  }
+
+  async getAccessRequests(options: {
+    id?: string;
+    status?: AccessRequest["status"] | "all";
+    requesterId?: string;
+    reviewerId?: string;
+    includeResolved?: boolean;
+  } = {}): Promise<AccessRequestDetail[]> {
+    const requesterAlias = alias(users, "requester");
+    const reviewerAlias = alias(users, "reviewer");
+    const conditions: SQL<unknown>[] = [];
+
+    if (options.id) {
+      conditions.push(eq(accessRequests.id, options.id));
+    }
+    if (options.requesterId) {
+      conditions.push(eq(accessRequests.requesterId, options.requesterId));
+    }
+    if (options.reviewerId) {
+      conditions.push(eq(accessRequests.reviewerId, options.reviewerId));
+    }
+    if (options.status && options.status !== "all") {
+      conditions.push(eq(accessRequests.status, options.status));
+    } else if (!options.includeResolved) {
+      conditions.push(eq(accessRequests.status, "pending"));
+    }
+
+    const whereClause = conditions.length ? and(...conditions) : undefined;
+
+    const rows = await db
+      .select({
+        request: accessRequests,
+        permissionSet: permissionSets,
+        requester: requesterAlias,
+        reviewer: reviewerAlias,
+      })
+      .from(accessRequests)
+      .leftJoin(permissionSets, eq(accessRequests.permissionSetId, permissionSets.id))
+      .leftJoin(requesterAlias, eq(accessRequests.requesterId, requesterAlias.id))
+      .leftJoin(reviewerAlias, eq(accessRequests.reviewerId, reviewerAlias.id))
+      .where(whereClause)
+      .orderBy(desc(accessRequests.requestedAt));
+
+    return rows.map(row => ({
+      ...row.request,
+      permissionSet: row.permissionSet ?? null,
+      requester: row.requester ? this.toBasicUserInfo(row.requester) : null,
+      reviewer: row.reviewer ? this.toBasicUserInfo(row.reviewer) : null,
+    }));
+  }
+
+  async logSecurityEvent(event: InsertSecurityAuditEvent): Promise<SecurityAuditEvent> {
+    const payload: typeof securityAuditEvents.$inferInsert = {
+      actorId: event.actorId ?? null,
+      eventType: event.eventType,
+      entityType: event.entityType ?? null,
+      entityId: event.entityId ?? null,
+      summary: event.summary ?? null,
+      metadata: (event.metadata ?? null) as Record<string, unknown> | null,
+    };
+    const [created] = await db.insert(securityAuditEvents).values(payload).returning();
+    return created;
+  }
+
+  async getSecurityAuditEvents(
+    options: { limit?: number } = {},
+  ): Promise<SecurityAuditEventDetail[]> {
+    const actorAlias = alias(users, "actor");
+    const limit = options.limit ?? 100;
+    const rows = await db
+      .select({
+        event: securityAuditEvents,
+        actor: actorAlias,
+      })
+      .from(securityAuditEvents)
+      .leftJoin(actorAlias, eq(securityAuditEvents.actorId, actorAlias.id))
+      .orderBy(desc(securityAuditEvents.createdAt))
+      .limit(limit);
+
+    return rows.map(row => ({
+      ...row.event,
+      actor: row.actor ? this.toBasicUserInfo(row.actor) : null,
+    }));
   }
 
 
@@ -1031,20 +1300,13 @@ export class DatabaseStorage implements IStorage {
 
 
 
-  async getFirstActiveAdmin(): Promise<User | undefined> {
-
+  async getFirstActiveAdmin(): Promise<UserWithPermissions | undefined> {
     const [row] = await db
-
       .select()
-
       .from(users)
-
       .where(and(eq(users.role, "admin"), eq(users.active, true)))
-
       .limit(1);
-
-    return row || undefined;
-
+    return this.hydrateUser(row);
   }
 
 

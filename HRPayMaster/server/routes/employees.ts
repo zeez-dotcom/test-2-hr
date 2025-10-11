@@ -38,6 +38,7 @@ import {
   type VacationApprovalStep,
   type VacationAuditLogEntry,
   type LeaveAccrualPolicy,
+  type SessionUser,
   type LeaveBalance,
   type EmployeeLeavePolicy,
   type VacationRequestWithEmployee,
@@ -66,7 +67,7 @@ import {
   normalizeBigId,
   mapHeader,
 } from "../utils/normalize";
-import { requireRole } from "./auth";
+import { requireRole, requirePermission } from "./auth";
 
 export const employeesRouter = Router();
 
@@ -965,13 +966,38 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
     }
   });
 
+  const logCustomFieldAudit = async (
+    req: Request,
+    summary: string,
+    fieldId: string | null,
+    metadata?: Record<string, unknown>,
+  ) => {
+    const actorId = (req.user as SessionUser | undefined)?.id;
+    if (!actorId) return;
+    try {
+      await storage.logSecurityEvent({
+        actorId,
+        eventType: "custom_field_edit",
+        entityType: "employee_custom_field",
+        entityId: fieldId,
+        summary,
+        metadata: metadata ?? null,
+      });
+    } catch (error) {
+      console.error("Failed to log custom field audit", error);
+    }
+  };
+
   employeesRouter.post(
     "/api/employees/custom-fields",
-    requireRole(["admin", "hr"]),
+    requirePermission("employees:custom-field"),
     async (req, res, next) => {
       try {
         const payload = employeeCustomFieldSchema.parse(req.body);
         const created = await storage.createEmployeeCustomField(payload);
+        await logCustomFieldAudit(req, "Created custom field", created.id, {
+          name: created.name,
+        });
         res.status(201).json(created);
       } catch (error) {
         if (error instanceof z.ZodError) {
@@ -987,7 +1013,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
 
   employeesRouter.put(
     "/api/employees/custom-fields/:id",
-    requireRole(["admin", "hr"]),
+    requirePermission("employees:custom-field"),
     async (req, res, next) => {
       try {
         const payload = employeeCustomFieldSchema.parse(req.body);
@@ -995,6 +1021,9 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
         if (!updated) {
           return next(new HttpError(404, "Custom field not found"));
         }
+        await logCustomFieldAudit(req, "Updated custom field", updated.id, {
+          name: updated.name,
+        });
         res.json(updated);
       } catch (error) {
         if (error instanceof z.ZodError) {
@@ -1010,13 +1039,14 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
 
   employeesRouter.delete(
     "/api/employees/custom-fields/:id",
-    requireRole(["admin", "hr"]),
+    requirePermission("employees:custom-field"),
     async (req, res, next) => {
       try {
         const deleted = await storage.deleteEmployeeCustomField(req.params.id);
         if (!deleted) {
           return next(new HttpError(404, "Custom field not found"));
         }
+        await logCustomFieldAudit(req, "Deleted custom field", req.params.id);
         res.status(204).send();
       } catch (error) {
         next(new HttpError(500, "Failed to delete custom field"));
@@ -2621,7 +2651,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
   });
 
   // Asset routes
-  employeesRouter.get("/api/assets", async (req, res, next) => {
+  employeesRouter.get("/api/assets", requirePermission("assets:view"), async (req, res, next) => {
     try {
       const assets = await assetService.getAssets();
       res.json(assets);
@@ -2631,7 +2661,10 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
   });
 
   // Asset documents
-  employeesRouter.get("/api/assets/:id/documents", async (req, res, next) => {
+  employeesRouter.get(
+    "/api/assets/:id/documents",
+    requirePermission("assets:view"),
+    async (req, res, next) => {
     try {
       const docs = await storage.getAssetDocuments(req.params.id);
       res.json(docs);
@@ -2639,7 +2672,10 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
       next(new HttpError(500, "Failed to fetch asset documents"));
     }
   });
-  employeesRouter.post("/api/assets/:id/documents", async (req, res, next) => {
+  employeesRouter.post(
+    "/api/assets/:id/documents",
+    requirePermission("assets:manage"),
+    async (req, res, next) => {
     try {
       const { title, description, documentUrl } = req.body as any;
       if (!title || !documentUrl) return next(new HttpError(400, 'title and documentUrl are required'));
@@ -2651,13 +2687,19 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
   });
 
   // Asset repairs
-  employeesRouter.get("/api/assets/:id/repairs", async (req, res, next) => {
+  employeesRouter.get(
+    "/api/assets/:id/repairs",
+    requirePermission("assets:view"),
+    async (req, res, next) => {
     try {
       const rows = await storage.getAssetRepairs(req.params.id);
       res.json(rows);
     } catch (error) { next(new HttpError(500, 'Failed to fetch asset repairs')); }
   });
-  employeesRouter.post("/api/assets/:id/repairs", async (req, res, next) => {
+  employeesRouter.post(
+    "/api/assets/:id/repairs",
+    requirePermission("assets:manage"),
+    async (req, res, next) => {
     try {
       const { repairDate, description, cost, vendor, documentUrl } = req.body as any;
       if (!repairDate || !description) return next(new HttpError(400, 'repairDate and description required'));
@@ -2670,7 +2712,10 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
     } catch (error) { next(new HttpError(500, 'Failed to create repair')); }
   });
 
-  employeesRouter.get("/api/assets/:id", async (req, res, next) => {
+  employeesRouter.get(
+    "/api/assets/:id",
+    requirePermission("assets:view"),
+    async (req, res, next) => {
     try {
       const asset = await assetService.getAsset(req.params.id);
       if (!asset) {
@@ -2682,7 +2727,10 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
     }
   });
 
-  employeesRouter.post("/api/assets", async (req, res, next) => {
+  employeesRouter.post(
+    "/api/assets",
+    requirePermission("assets:manage"),
+    async (req, res, next) => {
     try {
       const asset = insertAssetSchema.parse(req.body);
       const newAsset = await assetService.createAsset(asset);
@@ -2695,7 +2743,10 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
     }
   });
 
-  employeesRouter.put("/api/assets/:id", async (req, res, next) => {
+  employeesRouter.put(
+    "/api/assets/:id",
+    requirePermission("assets:manage"),
+    async (req, res, next) => {
     try {
       const updates = insertAssetSchema.partial().parse(req.body);
       const updated = await assetService.updateAsset(req.params.id, updates);
@@ -2713,7 +2764,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
 
   employeesRouter.delete(
     "/api/assets/:id",
-    requireRole(["admin"]),
+    requirePermission("assets:manage"),
     async (req, res, next) => {
       try {
         const deleted = await assetService.deleteAsset(req.params.id);
@@ -2728,7 +2779,10 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
   );
 
   // Asset assignment routes
-  employeesRouter.get("/api/asset-assignments", async (req, res, next) => {
+  employeesRouter.get(
+    "/api/asset-assignments",
+    requirePermission("assets:view"),
+    async (req, res, next) => {
     try {
       const assignments = await assetService.getAssignments();
       res.json(assignments);
@@ -2737,7 +2791,10 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
     }
   });
 
-  employeesRouter.get("/api/asset-assignments/:id", async (req, res, next) => {
+  employeesRouter.get(
+    "/api/asset-assignments/:id",
+    requirePermission("assets:view"),
+    async (req, res, next) => {
     try {
       const assignment = await storage.getAssetAssignment(req.params.id);
       if (!assignment) {
@@ -2749,7 +2806,10 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
     }
   });
 
-  employeesRouter.post("/api/asset-assignments", async (req, res, next) => {
+  employeesRouter.post(
+    "/api/asset-assignments",
+    requirePermission("assets:manage"),
+    async (req, res, next) => {
     try {
       const assignment = insertAssetAssignmentSchema.parse(req.body);
       if (assignment.assignedDate) {
@@ -2803,7 +2863,10 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
     }
   });
 
-  employeesRouter.put("/api/asset-assignments/:id", async (req, res, next) => {
+  employeesRouter.put(
+    "/api/asset-assignments/:id",
+    requirePermission("assets:manage"),
+    async (req, res, next) => {
     try {
       const updates = updateAssetAssignmentSchema.parse(req.body);
       const updated = await assetService.updateAssignment(req.params.id, updates);
@@ -2843,7 +2906,10 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
     }
   });
 
-  employeesRouter.delete("/api/asset-assignments/:id", async (req, res, next) => {
+  employeesRouter.delete(
+    "/api/asset-assignments/:id",
+    requirePermission("assets:manage"),
+    async (req, res, next) => {
     try {
       const existing = await storage.getAssetAssignment(req.params.id);
       const deleted = await assetService.deleteAssignment(req.params.id);
@@ -2874,7 +2940,10 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
     }
   });
 
-  employeesRouter.post("/api/assets/:id/status", async (req, res, next) => {
+  employeesRouter.post(
+    "/api/assets/:id/status",
+    requirePermission("assets:manage"),
+    async (req, res, next) => {
     try {
       const { status } = statusUpdateSchema.parse(req.body);
       const existing = await assetService.getAsset(req.params.id);

@@ -7,6 +7,7 @@ import type {
   NotificationChannel,
   ReportSchedule,
 } from "@shared/schema";
+import { requirePermission } from "./auth";
 
 export const reportsRouter = Router();
 
@@ -170,7 +171,10 @@ const resolveUpdateSchedulePayload = (
 // Employee and company report routes
 
 // Employee report route
-reportsRouter.get("/api/reports/employees/:id", async (req, res, next) => {
+reportsRouter.get(
+  "/api/reports/employees/:id",
+  requirePermission("reports:view"),
+  async (req, res, next) => {
   try {
     const { startDate, endDate, groupBy } = reportQuerySchema.parse(req.query);
     const report = await storage.getEmployeeReport(req.params.id, {
@@ -232,12 +236,16 @@ reportsRouter.get("/api/reports/employees/:id", async (req, res, next) => {
     }
     next(new HttpError(500, "Failed to fetch employee report", error));
   }
-});
+  },
+);
 
 // Company-level report routes
 
 // Payroll summary
-reportsRouter.get("/api/reports/payroll", async (req, res, next) => {
+reportsRouter.get(
+  "/api/reports/payroll",
+  requirePermission("reports:finance"),
+  async (req, res, next) => {
   try {
     const { startDate, endDate, groupBy } = reportQuerySchema.parse(req.query);
     const report = await storage.getCompanyPayrollSummary({
@@ -268,10 +276,14 @@ reportsRouter.get("/api/reports/payroll", async (req, res, next) => {
     }
     next(new HttpError(500, "Failed to fetch payroll summary", error));
   }
-});
+  },
+);
 
 // Loan balances / loan repayment details
-reportsRouter.get("/api/reports/loan-balances", async (req, res, next) => {
+reportsRouter.get(
+  "/api/reports/loan-balances",
+  requirePermission("reports:finance"),
+  async (req, res, next) => {
   try {
     const { startDate, endDate } = reportQuerySchema.parse(req.query);
     const report = await storage.getLoanReportDetails({ startDate, endDate });
@@ -283,10 +295,14 @@ reportsRouter.get("/api/reports/loan-balances", async (req, res, next) => {
     }
     next(new HttpError(500, "Failed to fetch loan balances", error));
   }
-});
+  },
+);
 
 // Asset usage
-reportsRouter.get("/api/reports/asset-usage", async (req, res, next) => {
+reportsRouter.get(
+  "/api/reports/asset-usage",
+  requirePermission("reports:view"),
+  async (req, res, next) => {
   try {
     const { startDate, endDate } = reportQuerySchema.parse(req.query);
     const report = await storage.getAssetUsageDetails({ startDate, endDate });
@@ -298,10 +314,14 @@ reportsRouter.get("/api/reports/asset-usage", async (req, res, next) => {
     }
     next(new HttpError(500, "Failed to fetch asset usage", error));
   }
-});
+  },
+);
 
 // Fleet usage
-reportsRouter.get("/api/reports/fleet-usage", async (req, res, next) => {
+reportsRouter.get(
+  "/api/reports/fleet-usage",
+  requirePermission("reports:view"),
+  async (req, res, next) => {
   try {
     const rawStartDate =
       typeof req.query.startDate === "string" ? req.query.startDate : undefined;
@@ -329,10 +349,14 @@ reportsRouter.get("/api/reports/fleet-usage", async (req, res, next) => {
     }
     next(new HttpError(500, "Failed to fetch fleet usage", error));
   }
-});
+  },
+);
 
 // Payroll by department
-reportsRouter.get("/api/reports/payroll-by-department", async (req, res, next) => {
+reportsRouter.get(
+  "/api/reports/payroll-by-department",
+  requirePermission("reports:finance"),
+  async (req, res, next) => {
   try {
     const { startDate, endDate, groupBy } = reportQuerySchema.parse(req.query);
     const rows = await storage.getCompanyPayrollByDepartment({ startDate, endDate, groupBy });
@@ -353,9 +377,13 @@ reportsRouter.get("/api/reports/payroll-by-department", async (req, res, next) =
     }
     next(new HttpError(500, "Failed to fetch payroll by department", error));
   }
-});
+  },
+);
 
-reportsRouter.get("/api/reports/department-costs", async (req, res, next) => {
+reportsRouter.get(
+  "/api/reports/department-costs",
+  requirePermission("reports:finance"),
+  async (req, res, next) => {
   try {
     const { startDate, endDate, groupBy, departmentIds } = analyticsQuerySchema.parse(req.query);
     const data = await storage.getDepartmentCostAnalytics({ startDate, endDate, groupBy, departmentIds });
@@ -367,9 +395,13 @@ reportsRouter.get("/api/reports/department-costs", async (req, res, next) => {
     }
     next(new HttpError(500, "Failed to compute department cost analytics", error));
   }
-});
+  },
+);
 
-reportsRouter.get("/api/reports/department-overtime", async (req, res, next) => {
+reportsRouter.get(
+  "/api/reports/department-overtime",
+  requirePermission("reports:view"),
+  async (req, res, next) => {
   try {
     const { startDate, endDate, departmentIds } = analyticsQuerySchema.parse(req.query);
     const data = await storage.getDepartmentOvertimeMetrics({ startDate, endDate, departmentIds });
@@ -381,9 +413,13 @@ reportsRouter.get("/api/reports/department-overtime", async (req, res, next) => 
     }
     next(new HttpError(500, "Failed to compute overtime metrics", error));
   }
-});
+  },
+);
 
-reportsRouter.get("/api/reports/loan-exposure", async (req, res, next) => {
+reportsRouter.get(
+  "/api/reports/loan-exposure",
+  requirePermission("reports:finance"),
+  async (req, res, next) => {
   try {
     const { startDate, endDate, departmentIds } = analyticsQuerySchema.parse(req.query);
     const data = await storage.getDepartmentLoanExposure({ startDate, endDate, departmentIds });
@@ -395,9 +431,13 @@ reportsRouter.get("/api/reports/loan-exposure", async (req, res, next) => {
     }
     next(new HttpError(500, "Failed to compute loan exposure", error));
   }
-});
+  },
+);
 
-reportsRouter.get("/api/reports/attendance-forecast", async (req, res, next) => {
+reportsRouter.get(
+  "/api/reports/attendance-forecast",
+  requirePermission("reports:view"),
+  async (req, res, next) => {
   try {
     const { startDate, endDate, departmentIds } = analyticsQuerySchema.parse(req.query);
     const data = await storage.getAttendanceForecast({ startDate, endDate, departmentIds });
@@ -409,9 +449,13 @@ reportsRouter.get("/api/reports/attendance-forecast", async (req, res, next) => 
     }
     next(new HttpError(500, "Failed to compute attendance forecast", error));
   }
-});
+  },
+);
 
-reportsRouter.get("/api/reports/schedules", async (_req, res, next) => {
+reportsRouter.get(
+  "/api/reports/schedules",
+  requirePermission("reports:finance"),
+  async (_req, res, next) => {
   try {
     const schedules = await storage.getReportSchedules();
     res.json(schedules.map(toScheduleResponse));
@@ -419,9 +463,13 @@ reportsRouter.get("/api/reports/schedules", async (_req, res, next) => {
     console.error(error);
     next(new HttpError(500, "Failed to load report schedules", error));
   }
-});
+  },
+);
 
-reportsRouter.post("/api/reports/schedules", async (req, res, next) => {
+reportsRouter.post(
+  "/api/reports/schedules",
+  requirePermission("reports:finance"),
+  async (req, res, next) => {
   try {
     const parsed = reportScheduleCreateSchema.parse(req.body);
     const payload = resolveCreateSchedulePayload(parsed);
@@ -434,9 +482,13 @@ reportsRouter.post("/api/reports/schedules", async (req, res, next) => {
     }
     next(new HttpError(500, "Failed to create report schedule", error));
   }
-});
+  },
+);
 
-reportsRouter.get("/api/reports/schedules/:id", async (req, res, next) => {
+reportsRouter.get(
+  "/api/reports/schedules/:id",
+  requirePermission("reports:finance"),
+  async (req, res, next) => {
   try {
     const schedule = await storage.getReportSchedule(req.params.id);
     if (!schedule) {
@@ -447,9 +499,13 @@ reportsRouter.get("/api/reports/schedules/:id", async (req, res, next) => {
     console.error(error);
     next(new HttpError(500, "Failed to load report schedule", error));
   }
-});
+  },
+);
 
-reportsRouter.put("/api/reports/schedules/:id", async (req, res, next) => {
+reportsRouter.put(
+  "/api/reports/schedules/:id",
+  requirePermission("reports:finance"),
+  async (req, res, next) => {
   try {
     const parsed = reportScheduleUpdateSchema.parse(req.body);
     const payload = resolveUpdateSchedulePayload(parsed);
@@ -465,9 +521,13 @@ reportsRouter.put("/api/reports/schedules/:id", async (req, res, next) => {
     }
     next(new HttpError(500, "Failed to update report schedule", error));
   }
-});
+  },
+);
 
-reportsRouter.post("/api/reports/schedules/:id/run", async (req, res, next) => {
+reportsRouter.post(
+  "/api/reports/schedules/:id/run",
+  requirePermission("reports:finance"),
+  async (req, res, next) => {
   try {
     const updated = await storage.updateReportSchedule(req.params.id, {
       nextRunAt: new Date(),
@@ -482,7 +542,8 @@ reportsRouter.post("/api/reports/schedules/:id/run", async (req, res, next) => {
     console.error(error);
     next(new HttpError(500, "Failed to queue report schedule", error));
   }
-});
+  },
+);
 
 // allow both named and default imports of this router
 export default reportsRouter;
