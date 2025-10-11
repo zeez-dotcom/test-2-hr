@@ -2302,7 +2302,6 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
                 year: leaveYear,
                 days: leaveDays,
                 policyId: policyId ?? undefined,
-                allowNegativeBalance: after.autoPauseAllowances ?? before.autoPauseAllowances ?? false,
               });
             } catch (error) {
               console.warn('Failed to apply leave usage:', error);
