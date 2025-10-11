@@ -10,6 +10,8 @@ import {
   integer,
   index,
   jsonb,
+  time,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -973,13 +975,72 @@ export const attendance = pgTable("attendance", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const shiftTemplates = pgTable("shift_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  startTime: time("start_time").notNull(),
+  endTime: time("end_time").notNull(),
+  breakMinutes: integer("break_minutes").notNull().default(60),
+  expectedMinutes: integer("expected_minutes").notNull().default(480),
+  overtimeLimitMinutes: integer("overtime_limit_minutes").notNull().default(120),
+  color: text("color"),
+  isDefault: boolean("is_default").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const employeeSchedules = pgTable(
+  "employee_schedules",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    employeeId: varchar("employee_id").references(() => employees.id).notNull(),
+    scheduleDate: date("schedule_date").notNull(),
+    shiftTemplateId: varchar("shift_template_id").references(() => shiftTemplates.id),
+    customStartTime: time("custom_start_time"),
+    customEndTime: time("custom_end_time"),
+    customBreakMinutes: integer("custom_break_minutes"),
+    expectedMinutes: integer("expected_minutes").notNull().default(480),
+    overtimeMinutes: integer("overtime_minutes").notNull().default(0),
+    lateApprovalStatus: text("late_approval_status").notNull().default("pending"),
+    absenceApprovalStatus: text("absence_approval_status").notNull().default("pending"),
+    overtimeApprovalStatus: text("overtime_approval_status").notNull().default("pending"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    employeeDateIdx: uniqueIndex("employee_schedules_employee_date_idx").on(
+      table.employeeId,
+      table.scheduleDate,
+    ),
+    scheduleDateIdx: index("employee_schedules_date_idx").on(table.scheduleDate),
+    employeeIdx: index("employee_schedules_employee_idx").on(table.employeeId),
+  }),
+);
+
 export const insertAttendanceSchema = createInsertSchema(attendance).omit({
   id: true,
   createdAt: true,
 });
 
+export const insertShiftTemplateSchema = createInsertSchema(shiftTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEmployeeScheduleSchema = createInsertSchema(employeeSchedules).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export type Attendance = typeof attendance.$inferSelect;
 export type InsertAttendance = z.infer<typeof insertAttendanceSchema>;
+export type ShiftTemplate = typeof shiftTemplates.$inferSelect;
+export type InsertShiftTemplate = z.infer<typeof insertShiftTemplateSchema>;
+export type EmployeeSchedule = typeof employeeSchedules.$inferSelect;
+export type InsertEmployeeSchedule = z.infer<typeof insertEmployeeScheduleSchema>;
 
 export type EmployeeEvent = typeof employeeEvents.$inferSelect;
 export type InsertEmployeeEvent = z.infer<typeof insertEmployeeEventSchema>;
@@ -1223,6 +1284,21 @@ export const notificationsRelations = relations(notifications, ({ one, many }) =
     references: [employees.id],
   }),
   emailAlerts: many(emailAlerts),
+}));
+
+export const shiftTemplatesRelations = relations(shiftTemplates, ({ many }) => ({
+  schedules: many(employeeSchedules),
+}));
+
+export const employeeSchedulesRelations = relations(employeeSchedules, ({ one }) => ({
+  employee: one(employees, {
+    fields: [employeeSchedules.employeeId],
+    references: [employees.id],
+  }),
+  shiftTemplate: one(shiftTemplates, {
+    fields: [employeeSchedules.shiftTemplateId],
+    references: [shiftTemplates.id],
+  }),
 }));
 
 export const emailAlertsRelations = relations(emailAlerts, ({ one }) => ({

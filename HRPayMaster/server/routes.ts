@@ -10,6 +10,7 @@ import { chatbotRouter } from "./routes/chatbot";
 import { metricsRouter } from "./metrics";
 import { templatesRouter } from "./routes/templates";
 import { usersRouter } from "./routes/users";
+import { attendanceRouter } from "./routes/attendance";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/healthz", (_req, res) => {
@@ -19,6 +20,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(metricsRouter);
   app.use("/api", ensureAuth);
   app.use("/api/users", usersRouter);
+  app.use("/api/attendance", attendanceRouter);
   app.use(employeesRouter);
   app.use(reportsRouter);
   app.use("/api/payroll", payrollRouter);

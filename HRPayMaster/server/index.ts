@@ -11,6 +11,7 @@ import { errorHandler } from "./errorHandler";
 import { storage } from "./storage";
 import { generateExpiryWarningEmail, shouldSendAlert, sendEmail } from "./emailService";
 import { processVacationReturnAlerts } from "./vacationReturnScheduler";
+import { processAttendanceAlerts } from "./attendanceScheduler";
 import type { User } from "@shared/schema";
 type AuthUser = Omit<User, "passwordHash">;
 
@@ -357,4 +358,15 @@ app.use((req, res, next) => {
   // Run once after start and then every 6 hours to catch return deadlines quickly
   runVacationReturnAlerts();
   setInterval(runVacationReturnAlerts, 6 * 60 * 60 * 1000);
+
+  const runAttendanceAlerts = async () => {
+    try {
+      await processAttendanceAlerts();
+    } catch (err) {
+      log(`warning: failed processing attendance alerts: ${String(err)}`);
+    }
+  };
+
+  runAttendanceAlerts();
+  setInterval(runAttendanceAlerts, 60 * 60 * 1000);
 })();
