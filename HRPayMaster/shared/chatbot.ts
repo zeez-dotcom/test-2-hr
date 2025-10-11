@@ -14,6 +14,7 @@ export type ChatIntent =
   | "employeeDocuments"
   | "returnAsset"
   | "runPayroll"
+  | "acknowledgeDocument"
   | "help"
   | "loanStatus"
   | "reportSummary"
@@ -57,6 +58,9 @@ export function parseIntent(message: string): ParsedIntent {
   }
   if ((lower.includes("return") || lower.includes("handover")) && lower.includes("asset")) {
     return { type: "returnAsset" };
+  }
+  if (lower.includes("acknowledge") && lower.includes("document")) {
+    return { type: "acknowledgeDocument" };
   }
   if (lower.includes("assign") && lower.includes("car")) {
     return { type: "assignCar" };

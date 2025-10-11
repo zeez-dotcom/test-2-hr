@@ -13,6 +13,7 @@ import { generateExpiryWarningEmail, shouldSendAlert, sendEmail } from "./emailS
 import { processVacationReturnAlerts } from "./vacationReturnScheduler";
 import { processAttendanceAlerts } from "./attendanceScheduler";
 import type { SessionUser, UserWithPermissions } from "@shared/schema";
+import { setupChatbotPush } from "./chatbotPush";
 type AuthUser = SessionUser;
 
 const toAuthUser = (user: UserWithPermissions): AuthUser => {
@@ -196,14 +197,14 @@ if (!sessionSecret) {
   }
 }
 
-app.use(
-  session({
-    secret: sessionSecret || "secret",
-    resave: false,
-    saveUninitialized: false,
-    store: new MemoryStore({ checkPeriod: 86400000 }),
-  }),
-);
+const sessionMiddleware = session({
+  secret: sessionSecret || "secret",
+  resave: false,
+  saveUninitialized: false,
+  store: new MemoryStore({ checkPeriod: 86400000 }),
+});
+
+app.use(sessionMiddleware);
 
 app.use(passport.initialize());
 app.use(passport.session());
@@ -242,6 +243,8 @@ app.use((req, res, next) => {
 (async () => {
   await adminBootstrap;
   const server = await registerRoutes(app);
+
+  setupChatbotPush(server, sessionMiddleware);
 
   app.use(errorHandler);
 
