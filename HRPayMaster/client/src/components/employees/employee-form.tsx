@@ -14,7 +14,15 @@ import { queryClient } from "@/lib/queryClient";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/http";
 import { useToast } from "@/hooks/use-toast";
 import { toastApiError } from "@/lib/toastError";
-import type { Company, Department, InsertEmployee, InsertEmployeeEvent, EmployeeEvent } from "@shared/schema";
+import type {
+  Company,
+  Department,
+  InsertEmployee,
+  InsertEmployeeEvent,
+  EmployeeEvent,
+  EmployeeCustomField,
+  EmployeeCustomValueMap,
+} from "@shared/schema";
 import { z } from "zod";
 import AllowanceRecurringFields from "@/components/employees/allowance-recurring-fields";
 import AllowanceTypeCombobox from "@/components/employees/allowance-type-combobox";
@@ -22,6 +30,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Plus, Edit, Trash2 } from "lucide-react";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
+import { Label } from "@/components/ui/label";
 
 const formSchema = insertEmployeeSchema.extend({
   firstName: z.string().trim().min(1, "First name is required"),
@@ -54,13 +63,16 @@ const allowanceFormSchema = z.object({
 
 type FormData = z.infer<typeof formSchema>;
 type AllowanceFormValues = z.infer<typeof allowanceFormSchema>;
+type EmployeeFormSubmission = InsertEmployee & {
+  customFieldValues?: EmployeeCustomValueMap;
+};
 
 interface EmployeeFormProps {
   departments: Department[];
   companies?: Company[];
-  onSubmit: (employee: InsertEmployee) => void;
+  onSubmit: (employee: EmployeeFormSubmission) => void;
   isSubmitting: boolean;
-  initialData?: Partial<InsertEmployee>;
+  initialData?: Partial<EmployeeFormSubmission>;
   employeeId?: string;
 }
 
@@ -189,11 +201,101 @@ export default function EmployeeForm({
 
   const allowanceRecurrenceType = allowanceForm.watch("recurrenceType");
 
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
+  const [initialCustomFieldValues, setInitialCustomFieldValues] = useState<EmployeeCustomValueMap>({});
+
+  const {
+    data: customFields = [],
+    isLoading: customFieldsLoading,
+    error: customFieldsError,
+  } = useQuery<EmployeeCustomField[]>({
+    queryKey: ["/api/employees/custom-fields"],
+    queryFn: async () => {
+      const res = await apiGet("/api/employees/custom-fields");
+      if (!res.ok) {
+        throw new Error(res.error || "Failed to load custom fields");
+      }
+      return res.data as EmployeeCustomField[];
+    },
+  });
+
+  const {
+    data: employeeCustomFieldsResponse,
+    isLoading: employeeCustomFieldsLoading,
+    isFetched: employeeCustomFieldsFetched,
+    error: employeeCustomFieldsError,
+  } = useQuery<{ fields: EmployeeCustomField[]; values: EmployeeCustomValueMap }>({
+    queryKey: ["/api/employees", employeeId ?? "", "custom-fields"],
+    enabled: !!employeeId,
+    queryFn: async () => {
+      if (!employeeId) {
+        return { fields: [], values: {} };
+      }
+      const res = await apiGet(`/api/employees/${employeeId}/custom-fields`);
+      if (!res.ok) {
+        throw new Error(res.error || "Failed to load custom field values");
+      }
+      const payload = (res.data || {}) as {
+        fields?: EmployeeCustomField[];
+        values?: EmployeeCustomValueMap;
+      };
+      return {
+        fields: payload.fields ?? [],
+        values: payload.values ?? {},
+      };
+    },
+  });
+
   useEffect(() => {
     if (allowanceRecurrenceType !== "monthly") {
       allowanceForm.setValue("recurrenceEndDate", null);
     }
   }, [allowanceRecurrenceType, allowanceForm]);
+
+  useEffect(() => {
+    if (initialData?.customFieldValues) {
+      setInitialCustomFieldValues(initialData.customFieldValues);
+      setCustomFieldValues(prev => {
+        const next = { ...prev };
+        for (const [fieldId, value] of Object.entries(initialData.customFieldValues ?? {})) {
+          next[fieldId] = value ?? "";
+        }
+        return next;
+      });
+    }
+  }, [initialData]);
+
+  useEffect(() => {
+    if (employeeId && employeeCustomFieldsFetched) {
+      if (employeeCustomFieldsResponse?.fields?.length) {
+        queryClient.setQueryData(["/api/employees/custom-fields"], employeeCustomFieldsResponse.fields);
+      }
+      const values = employeeCustomFieldsResponse?.values ?? {};
+      setInitialCustomFieldValues(values);
+      setCustomFieldValues(prev => {
+        const next = { ...prev };
+        for (const [fieldId, value] of Object.entries(values)) {
+          next[fieldId] = value ?? "";
+        }
+        return next;
+      });
+    }
+  }, [employeeId, employeeCustomFieldsFetched, employeeCustomFieldsResponse]);
+
+  useEffect(() => {
+    if (customFields.length === 0) return;
+    setCustomFieldValues(prev => {
+      const next = { ...prev };
+      let changed = false;
+      for (const field of customFields) {
+        if (!(field.id in next)) {
+          next[field.id] = "";
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [customFields]);
 
   const {
     data: allowanceEvents = [],
@@ -363,7 +465,7 @@ export default function EmployeeForm({
     residencyOnCompany,
     ...rest
   }) => {
-    const payload: any = {
+    const payload: EmployeeFormSubmission = {
       ...rest,
       transferable: transferable ?? false,
       residencyOnCompany: residencyOnCompany ?? false,
@@ -371,6 +473,30 @@ export default function EmployeeForm({
     };
     if (workLocation && workLocation.trim() !== "") {
       payload.workLocation = workLocation.trim();
+    }
+    if (customFields.length > 0) {
+      const nextValues: EmployeeCustomValueMap = {};
+      for (const field of customFields) {
+        const raw = customFieldValues[field.id];
+        if (raw === undefined) {
+          continue;
+        }
+        const trimmed = raw.trim();
+        const initial = initialCustomFieldValues[field.id];
+        if (trimmed === "") {
+          if (initial !== undefined && initial !== null) {
+            nextValues[field.id] = null;
+          }
+          continue;
+        }
+        if (initial !== undefined && initial !== null && trimmed === initial) {
+          continue;
+        }
+        nextValues[field.id] = trimmed;
+      }
+      if (Object.keys(nextValues).length > 0) {
+        payload.customFieldValues = nextValues;
+      }
     }
     onSubmit(payload);
   };
@@ -966,6 +1092,53 @@ export default function EmployeeForm({
             )}
           />
         </div>
+
+        {customFieldsLoading ? (
+          <p className="text-sm text-muted-foreground">Loading custom fields...</p>
+        ) : customFieldsError ? (
+          <p className="text-sm text-red-500">
+            {customFieldsError instanceof Error
+              ? customFieldsError.message
+              : "Failed to load custom fields."}
+          </p>
+        ) : customFields.length > 0 ? (
+          <div className="space-y-4 rounded-lg bg-gray-50 p-6">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Custom Fields</h3>
+              <p className="text-sm text-muted-foreground">
+                Capture additional employee details configured in settings.
+              </p>
+            </div>
+            {employeeId && employeeCustomFieldsLoading ? (
+              <p className="text-sm text-muted-foreground">Loading custom field values...</p>
+            ) : employeeCustomFieldsError ? (
+              <p className="text-sm text-red-500">
+                {employeeCustomFieldsError instanceof Error
+                  ? employeeCustomFieldsError.message
+                  : "Failed to load custom field values."}
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {customFields.map(field => (
+                  <div key={field.id} className="space-y-2">
+                    <Label htmlFor={`custom-field-${field.id}`}>{field.name}</Label>
+                    <Input
+                      id={`custom-field-${field.id}`}
+                      value={customFieldValues[field.id] ?? ""}
+                      onChange={event =>
+                        setCustomFieldValues(prev => ({
+                          ...prev,
+                          [field.id]: event.target.value,
+                        }))
+                      }
+                      placeholder={field.name}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
 
         {employeeId && (
           <div className="space-y-4 rounded-lg bg-gray-50 p-6">

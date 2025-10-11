@@ -526,6 +526,18 @@ export const insertEmployeeCustomFieldSchema = createInsertSchema(employeeCustom
   id: true,
 });
 
+const customFieldValueInput = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.null(),
+]);
+
+export const employeeCustomValuePayloadSchema = z.record(
+  z.string(),
+  customFieldValueInput,
+);
+
 export const insertAllowanceTypeSchema = createInsertSchema(allowanceTypes)
   .omit({
     id: true,
@@ -542,6 +554,10 @@ export const insertAllowanceTypeSchema = createInsertSchema(allowanceTypes)
 export const insertEmployeeCustomValueSchema = createInsertSchema(employeeCustomValues).omit({
   id: true,
 });
+
+export type EmployeeCustomValuePayload = z.infer<
+  typeof employeeCustomValuePayloadSchema
+>;
 
 export const insertPayrollRunSchema = createInsertSchema(payrollRuns).omit({
   id: true,
@@ -814,6 +830,7 @@ export type InsertAllowanceType = z.infer<typeof insertAllowanceTypeSchema>;
 
 export type EmployeeCustomValue = typeof employeeCustomValues.$inferSelect;
 export type InsertEmployeeCustomValue = z.infer<typeof insertEmployeeCustomValueSchema>;
+export type EmployeeCustomValueMap = Record<string, string | null>;
 
 export type PayrollRun = typeof payrollRuns.$inferSelect;
 export type InsertPayrollRun = z.infer<typeof insertPayrollRunSchema>;
@@ -949,6 +966,10 @@ export type FleetExpiryCheck = {
 export type EmployeeWithDepartment = Employee & {
   department?: Department;
   company?: Company;
+};
+
+export type EmployeeWithDepartmentAndCustomValues = EmployeeWithDepartment & {
+  customFieldValues?: EmployeeCustomValueMap;
 };
 
 export type PayrollRunWithEntries = PayrollRun & {
