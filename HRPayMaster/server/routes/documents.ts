@@ -4,6 +4,8 @@ import {
   insertGenericDocumentSchema,
   documentSignatureStatusSchema,
   type DocumentSignatureStatus,
+  type GenericDocument,
+  type InsertGenericDocument,
 } from "@shared/schema";
 import { storage } from "../storage";
 import { HttpError } from "../errorHandler";
@@ -132,46 +134,115 @@ documentsRouter.get("/api/documents", async (req, res, next) => {
 const buildInsertPayload = (
   body: Record<string, unknown>,
   currentUserId?: string | null,
-): { payload: unknown; baseDocumentId?: string | null } => {
+): { payload: Record<string, unknown>; baseDocumentId?: string | null } => {
   const documentUrl = toOptionalString(body.documentUrl) ?? toOptionalString(body.pdfDataUrl);
-  const tagsValue = normalizeTagsInput(body.tags ?? body.tag);
-
+  const title = toOptionalString(body.title);
   const baseDocumentId = toOptionalString(body.baseDocumentId);
 
-  const payload: Record<string, unknown> = {
-    title: toOptionalString(body.title),
-    description: toNullableString(body.description),
-    documentUrl,
-    category: toNullableString(body.category),
-    tags: tagsValue ?? undefined,
-    referenceNumber: toNullableString(body.referenceNumber),
-    controllerNumber: toNullableString(body.controllerNumber),
-    expiryDate: toNullableString(body.expiryDate),
-    alertDays: toNullableNumber(body.alertDays),
-    employeeId: toOptionalString(body.employeeId) ?? null,
-    metadata: parseMetadataInput(body.metadata),
-    signatureMetadata: parseMetadataInput(body.signatureMetadata),
-    signatureStatus: toOptionalString(body.signatureStatus),
-    signatureProvider: toNullableString(body.signatureProvider),
-    signatureEnvelopeId: toNullableString(body.signatureEnvelopeId),
-    signatureRecipientEmail: toNullableString(body.signatureRecipientEmail),
-    signatureRequestedAt: toNullableString(body.signatureRequestedAt),
-    signatureCompletedAt: toNullableString(body.signatureCompletedAt),
-    signatureDeclinedAt: toNullableString(body.signatureDeclinedAt),
-    signatureCancelledAt: toNullableString(body.signatureCancelledAt),
-    generatedFromTemplateKey: toNullableString(body.generatedFromTemplateKey),
-    generatedByUserId: currentUserId ?? toNullableString(body.generatedByUserId),
-  };
-
-  if (tagsValue === null) {
-    payload.tags = null;
-  }
-
-  if (!payload.title || !documentUrl) {
+  if (!title || !documentUrl) {
     throw new HttpError(400, "title and documentUrl are required");
   }
 
+  const payload: Record<string, unknown> = {
+    title,
+    documentUrl,
+  };
+
+  const setIfPresent = (
+    key: string,
+    valueFactory: () => string | number | Record<string, unknown> | null | undefined,
+  ) => {
+    if (Object.prototype.hasOwnProperty.call(body, key)) {
+      payload[key] = valueFactory();
+    }
+  };
+
+  setIfPresent("description", () => toNullableString(body.description));
+  setIfPresent("category", () => toNullableString(body.category));
+  setIfPresent("referenceNumber", () => toNullableString(body.referenceNumber));
+  setIfPresent("controllerNumber", () => toNullableString(body.controllerNumber));
+  setIfPresent("expiryDate", () => toNullableString(body.expiryDate));
+  setIfPresent("alertDays", () => toNullableNumber(body.alertDays));
+  setIfPresent("employeeId", () => toOptionalString(body.employeeId) ?? null);
+
+  const hasTagsInput =
+    Object.prototype.hasOwnProperty.call(body, "tags") ||
+    Object.prototype.hasOwnProperty.call(body, "tag");
+  if (hasTagsInput) {
+    const tagsValue = normalizeTagsInput(body.tags ?? body.tag);
+    payload.tags = tagsValue ?? null;
+  }
+
+  setIfPresent("metadata", () => parseMetadataInput(body.metadata) ?? null);
+  setIfPresent("signatureMetadata", () => parseMetadataInput(body.signatureMetadata) ?? null);
+
+  if (Object.prototype.hasOwnProperty.call(body, "signatureStatus")) {
+    const value = toOptionalString(body.signatureStatus);
+    if (value) {
+      const parsed = documentSignatureStatusSchema.safeParse(value);
+      if (!parsed.success) {
+        throw new HttpError(400, "Invalid signature status");
+      }
+      payload.signatureStatus = parsed.data;
+    } else {
+      payload.signatureStatus = null;
+    }
+  }
+
+  setIfPresent("signatureProvider", () => toNullableString(body.signatureProvider));
+  setIfPresent("signatureEnvelopeId", () => toNullableString(body.signatureEnvelopeId));
+  setIfPresent("signatureRecipientEmail", () => toNullableString(body.signatureRecipientEmail));
+  setIfPresent("signatureRequestedAt", () => toNullableString(body.signatureRequestedAt));
+  setIfPresent("signatureCompletedAt", () => toNullableString(body.signatureCompletedAt));
+  setIfPresent("signatureDeclinedAt", () => toNullableString(body.signatureDeclinedAt));
+  setIfPresent("signatureCancelledAt", () => toNullableString(body.signatureCancelledAt));
+  setIfPresent("generatedFromTemplateKey", () => toNullableString(body.generatedFromTemplateKey));
+
+  if (currentUserId) {
+    payload.generatedByUserId = currentUserId;
+  } else {
+    setIfPresent("generatedByUserId", () => toNullableString(body.generatedByUserId));
+  }
+
   return { payload, baseDocumentId };
+};
+
+const inheritableVersionFields: Array<keyof InsertGenericDocument> = [
+  "employeeId",
+  "description",
+  "category",
+  "tags",
+  "referenceNumber",
+  "controllerNumber",
+  "expiryDate",
+  "alertDays",
+  "metadata",
+  "generatedFromTemplateKey",
+  "generatedByUserId",
+  "signatureStatus",
+  "signatureProvider",
+  "signatureEnvelopeId",
+  "signatureRecipientEmail",
+  "signatureRequestedAt",
+  "signatureCompletedAt",
+  "signatureDeclinedAt",
+  "signatureCancelledAt",
+  "signatureMetadata",
+];
+
+const mergeWithBaseDocument = (
+  baseDocument: GenericDocument,
+  payload: Record<string, unknown>,
+): Record<string, unknown> => {
+  const merged: Record<string, unknown> = {};
+
+  for (const key of inheritableVersionFields) {
+    if (!Object.prototype.hasOwnProperty.call(payload, key) || payload[key] === undefined) {
+      merged[key] = baseDocument[key as keyof GenericDocument];
+    }
+  }
+
+  return { ...merged, ...payload };
 };
 
 documentsRouter.post("/api/documents", async (req, res, next) => {
@@ -190,8 +261,13 @@ documentsRouter.post("/api/documents", async (req, res, next) => {
 
 documentsRouter.post("/api/documents/:id/versions", async (req, res, next) => {
   try {
+    const baseDocument = await storage.getGenericDocument(req.params.id);
+    if (!baseDocument) {
+      throw new HttpError(404, "Document not found");
+    }
     const { payload } = buildInsertPayload(req.body ?? {}, (req.user as any)?.id ?? null);
-    const parsed = insertGenericDocumentSchema.safeParse(payload);
+    const mergedPayload = mergeWithBaseDocument(baseDocument, payload);
+    const parsed = insertGenericDocumentSchema.safeParse(mergedPayload);
     if (!parsed.success) {
       throw new HttpError(400, "Invalid document payload");
     }
