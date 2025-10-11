@@ -5,19 +5,23 @@ const {
   transactionMock,
   insertMock,
   updateMock,
+  deleteMock,
   loanPaymentsFindManyMock,
   carAssignmentsFindManyMock,
   employeeEventsFindManyMock,
   sickLeaveTrackingFindFirstMock,
+  loanAmortizationSchedulesFindManyMock,
 } = vi.hoisted(() => ({
   selectMock: vi.fn(),
   transactionMock: vi.fn(),
   insertMock: vi.fn(),
   updateMock: vi.fn(),
+  deleteMock: vi.fn(),
   loanPaymentsFindManyMock: vi.fn(),
   carAssignmentsFindManyMock: vi.fn(),
   employeeEventsFindManyMock: vi.fn(),
   sickLeaveTrackingFindFirstMock: vi.fn(),
+  loanAmortizationSchedulesFindManyMock: vi.fn(),
 }));
 
 vi.mock('./db', () => ({
@@ -26,23 +30,37 @@ vi.mock('./db', () => ({
     transaction: transactionMock,
     insert: insertMock,
     update: updateMock,
+    delete: deleteMock,
     query: {
       loanPayments: { findMany: loanPaymentsFindManyMock },
       carAssignments: { findMany: carAssignmentsFindManyMock },
       employeeEvents: { findMany: employeeEventsFindManyMock },
       sickLeaveTracking: { findFirst: sickLeaveTrackingFindFirstMock },
+      loanAmortizationSchedules: { findMany: loanAmortizationSchedulesFindManyMock },
     },
   },
 }));
 
 import { storage } from './storage';
-import { loanPayments, sickLeaveTracking } from '@shared/schema';
+import { loanPayments, sickLeaveTracking, loanAmortizationSchedules } from '@shared/schema';
 
 describe('getMonthlyEmployeeSummary', () => {
   beforeEach(() => {
     selectMock.mockReset();
     transactionMock.mockReset();
-    transactionMock.mockImplementation(async cb => cb({ select: selectMock }));
+    deleteMock.mockReset();
+    loanAmortizationSchedulesFindManyMock.mockReset();
+    transactionMock.mockImplementation(async cb =>
+      cb({
+        select: selectMock,
+        insert: insertMock,
+        update: updateMock,
+        delete: deleteMock.mockReturnValue({ where: vi.fn() }),
+        query: {
+          loanAmortizationSchedules: { findMany: loanAmortizationSchedulesFindManyMock },
+        },
+      }),
+    );
     updateMock.mockReset();
     sickLeaveTrackingFindFirstMock.mockReset();
   });
@@ -329,6 +347,87 @@ describe('loan payment helpers', () => {
       expect.objectContaining({ where: expect.anything(), orderBy: expect.anything() }),
     );
     expect(byRun).toEqual([{ id: 'lp2' }]);
+  });
+});
+
+describe('replaceLoanAmortizationSchedule', () => {
+  beforeEach(() => {
+    transactionMock.mockReset();
+    insertMock.mockReset();
+    deleteMock.mockReset();
+    loanAmortizationSchedulesFindManyMock.mockReset();
+  });
+
+  it('preserves paid entries and inserts sanitized schedule', async () => {
+    const preservedEntry: any = {
+      loanId: 'loan-1',
+      installmentNumber: 1,
+      dueDate: '2024-01-01',
+      principalAmount: '50',
+      interestAmount: '0',
+      paymentAmount: '50',
+      remainingBalance: '150',
+      status: 'paid',
+    };
+    const pendingEntry: any = {
+      loanId: 'loan-1',
+      installmentNumber: 2,
+      dueDate: '2024-02-01',
+      principalAmount: '60',
+      interestAmount: '0',
+      paymentAmount: '60',
+      remainingBalance: '90',
+      status: 'pending',
+    };
+    loanAmortizationSchedulesFindManyMock.mockResolvedValue([preservedEntry, pendingEntry]);
+
+    const deleteWhere = vi.fn();
+    deleteMock.mockReturnValue({ where: deleteWhere });
+
+    const insertValues = vi.fn();
+    insertMock.mockImplementation((table) => {
+      expect(table).toBe(loanAmortizationSchedules);
+      return { values: insertValues };
+    });
+
+    transactionMock.mockImplementation(async (cb) =>
+      cb({
+        query: { loanAmortizationSchedules: { findMany: loanAmortizationSchedulesFindManyMock } },
+        delete: deleteMock,
+        insert: insertMock,
+      }),
+    );
+
+    await storage.replaceLoanAmortizationSchedule('loan-1', [
+      {
+        loanId: 'loan-1',
+        installmentNumber: 1,
+        dueDate: '2024-01-01',
+        principalAmount: 55,
+        interestAmount: 5,
+        paymentAmount: 60,
+        remainingBalance: 140,
+      },
+      {
+        loanId: 'loan-1',
+        installmentNumber: 3,
+        dueDate: '2024-03-01',
+        principalAmount: 70,
+        interestAmount: 5,
+        paymentAmount: 75,
+        remainingBalance: 65,
+      },
+    ]);
+
+    expect(deleteWhere).toHaveBeenCalled();
+    expect(insertValues).toHaveBeenCalled();
+    const inserted = insertValues.mock.calls[0][0];
+    expect(inserted).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ installmentNumber: 1, status: 'paid' }),
+        expect.objectContaining({ installmentNumber: 3, status: 'pending' }),
+      ]),
+    );
   });
 });
 

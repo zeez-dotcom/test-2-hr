@@ -130,9 +130,24 @@ export function calculateEmployeePayroll({
     );
   });
 
-  const loanDeduction = employee.status === 'active'
+  const loanMismatches: string[] = [];
+
+  const loanDeduction = employee.status === "active"
     ? employeeLoans.reduce((total, loan) => {
-        return total + Math.min(parseFloat(loan.monthlyDeduction), parseFloat(loan.remainingAmount));
+        const scheduledAmount = Number((loan as any).dueAmountForPeriod ?? 0);
+        const remaining = parseFloat(loan.remainingAmount);
+        const monthlyCap = parseFloat(loan.monthlyDeduction);
+        const cappedAmount = Number.isFinite(monthlyCap) && monthlyCap > 0 ? monthlyCap : remaining;
+        let effective = Math.min(cappedAmount, remaining);
+        if (scheduledAmount > 0) {
+          effective = Math.min(scheduledAmount, remaining, cappedAmount);
+          if (Math.abs(scheduledAmount - cappedAmount) > 0.05) {
+            loanMismatches.push(
+              `${loan.id}: scheduled ${scheduledAmount.toFixed(2)} vs cap ${cappedAmount.toFixed(2)}`,
+            );
+          }
+        }
+        return total + (effective > 0 ? effective : 0);
       }, 0)
     : 0;
 
@@ -242,6 +257,9 @@ export function calculateEmployeePayroll({
   }
   if (loanDeduction > 0) {
     adjustmentReason += `Loan deduction: ${loanDeduction.toFixed(2)} KWD. `;
+    if (loanMismatches.length > 0) {
+      adjustmentReason += `Schedule variance (${loanMismatches.join(", ")}). `;
+    }
   }
 
   return {

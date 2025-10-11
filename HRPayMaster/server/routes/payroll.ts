@@ -24,6 +24,7 @@ import {
   calculateTotals,
   type PayrollCalculationOverrides,
 } from "../utils/payroll";
+import { shouldPauseLoanForLeave } from "../utils/loans";
 
 export const payrollRouter = Router();
 
@@ -656,6 +657,93 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
       return next(new HttpError(400, "No active employees found"));
     }
 
+    const vacationsByEmployee = new Map<string, VacationRequestWithEmployee[]>();
+    for (const vacation of vacationRequests) {
+      const list = vacationsByEmployee.get(vacation.employeeId);
+      if (list) {
+        list.push(vacation);
+      } else {
+        vacationsByEmployee.set(vacation.employeeId, [vacation]);
+      }
+    }
+
+    const loanScheduleContext = new Map<
+      string,
+      { entries: Array<{ installmentNumber: number; paymentAmount: unknown }>; amount: number }
+    >();
+
+    const scheduleStatusPromises: Array<Promise<void>> = [];
+
+    for (const loan of loans) {
+      if (!loan) continue;
+      const isActiveLoan = loan.status === "active" || loan.status === "approved";
+      if (!isActiveLoan) {
+        (loan as any).dueAmountForPeriod = 0;
+        continue;
+      }
+      if (overrideSets?.skippedLoanIds?.has(loan.id)) {
+        (loan as any).dueAmountForPeriod = 0;
+        continue;
+      }
+
+      const dueEntries = ((loan as any).scheduleDueThisPeriod ?? []) as Array<{
+        installmentNumber: number;
+        paymentAmount: unknown;
+        status: string;
+      }>;
+
+      const pauseLoan = shouldPauseLoanForLeave({
+        vacations: vacationsByEmployee.get(loan.employeeId) ?? [],
+        start,
+        end,
+      });
+
+      const pendingEntries = dueEntries.filter(entry => entry.status === "pending");
+      const pausedEntries = dueEntries.filter(entry => entry.status === "paused");
+
+      if (pauseLoan && pendingEntries.length > 0) {
+        scheduleStatusPromises.push(
+          storage.updateLoanScheduleStatuses(
+            loan.id,
+            pendingEntries.map(entry => entry.installmentNumber),
+            "paused",
+          ),
+        );
+      }
+
+      if (!pauseLoan && pausedEntries.length > 0) {
+        scheduleStatusPromises.push(
+          storage.updateLoanScheduleStatuses(
+            loan.id,
+            pausedEntries.map(entry => entry.installmentNumber),
+            "pending",
+          ),
+        );
+      }
+
+      const activeEntries = pauseLoan
+        ? []
+        : dueEntries.filter(entry => entry.status === "pending" || entry.status === "paused");
+
+      const dueAmount = activeEntries.reduce(
+        (sum, entry) => sum + parseAmount(entry.paymentAmount),
+        0,
+      );
+      const roundedDueAmount = Number(dueAmount.toFixed(2));
+
+      (loan as any).dueAmountForPeriod = roundedDueAmount;
+      (loan as any).scheduleDueThisPeriod = activeEntries;
+
+      loanScheduleContext.set(loan.id, {
+        entries: activeEntries,
+        amount: roundedDueAmount,
+      });
+    }
+
+    if (scheduleStatusPromises.length > 0) {
+      await Promise.all(scheduleStatusPromises);
+    }
+
     const payrollEntries = await Promise.all(
       activeEmployees.map(employee => {
         const employeeWorkingDays = employee.standardWorkingDays ||
@@ -857,11 +945,18 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
             if (!Number.isFinite(remainingAmount) || remainingAmount <= 0) {
               continue;
             }
-            if (!Number.isFinite(monthlyCap) || monthlyCap <= 0) {
-              continue;
-            }
 
-            const appliedAmount = Math.min(remainingAmount, monthlyCap, remainingDeduction);
+            const scheduleContext = loanScheduleContext.get(loan.id);
+            const scheduledAmount = scheduleContext?.amount ?? 0;
+
+            const capAmount = Number.isFinite(monthlyCap) && monthlyCap > 0 ? monthlyCap : Infinity;
+            const targetAmount = scheduledAmount > 0 ? scheduledAmount : capAmount;
+            const appliedAmount = Math.min(
+              remainingAmount,
+              targetAmount,
+              remainingDeduction,
+              capAmount,
+            );
             if (!(appliedAmount > 0)) {
               continue;
             }
@@ -889,6 +984,30 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
             loan.remainingAmount = newRemaining.toFixed(2) as any;
             if (newRemaining <= 0) {
               loan.status = "completed" as any;
+            }
+
+            if (
+              scheduleContext &&
+              scheduleContext.entries.length > 0 &&
+              scheduleContext.amount > 0 &&
+              appliedAmount > 0
+            ) {
+              const installments = scheduleContext.entries.map(
+                entry => entry.installmentNumber,
+              );
+              const scheduledTotal = scheduleContext.amount;
+              if (Math.abs(scheduledTotal - appliedAmount) <= 0.05) {
+                await storage.updateLoanScheduleStatuses(
+                  loan.id,
+                  installments,
+                  "paid",
+                  {
+                    payrollRunId: newRun.id,
+                    paidAt: endDate,
+                    tx,
+                  },
+                );
+              }
             }
           }
 

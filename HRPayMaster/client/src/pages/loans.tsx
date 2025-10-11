@@ -19,9 +19,9 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 
-import { insertLoanSchema, type LoanWithEmployee } from "@shared/schema";
+import { insertLoanSchema, type LoanStatement, type LoanWithEmployee } from "@shared/schema";
 import { queryClient } from "@/lib/queryClient";
-import { apiPost, apiPut, apiDelete } from "@/lib/http";
+import { apiPost, apiPut, apiDelete, apiGet } from "@/lib/http";
 import { toastApiError } from "@/lib/toastError";
 
 const schema = insertLoanSchema
@@ -35,9 +35,43 @@ const schema = insertLoanSchema
     message: "Monthly deduction must be ≤ amount",
   });
 
+const moneyFormatter = new Intl.NumberFormat(undefined, {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+const formatMoney = (value: number) => moneyFormatter.format(value);
+
+type StageStatus = "pending" | "approved" | "rejected" | "delegated" | "skipped";
+
+const stageStatusLabels: Record<StageStatus, string> = {
+  pending: "Pending",
+  approved: "Approved",
+  rejected: "Rejected",
+  delegated: "Delegated",
+  skipped: "Skipped",
+};
+
+const stageStatusClasses: Record<StageStatus, string> = {
+  pending: "bg-amber-100 text-amber-800",
+  approved: "bg-green-100 text-green-800",
+  rejected: "bg-red-100 text-red-800",
+  delegated: "bg-blue-100 text-blue-800",
+  skipped: "bg-slate-200 text-slate-800",
+};
+
+const getStageStatusLabel = (status: string) =>
+  stageStatusLabels[(status?.toLowerCase?.() ?? "pending") as StageStatus] ?? status;
+
+const getStageStatusClass = (status: string) =>
+  stageStatusClasses[(status?.toLowerCase?.() ?? "pending") as StageStatus] ??
+  "bg-slate-200 text-slate-800";
+
 export default function Loans() {
   const { t } = useTranslation();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isStatementDialogOpen, setIsStatementDialogOpen] = useState(false);
+  const [statementLoanId, setStatementLoanId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const {
@@ -68,6 +102,18 @@ export default function Loans() {
     queryKey: ["/api/vacations"],
   });
 
+  const { data: loanStatement, isLoading: isStatementLoading } = useQuery<LoanStatement | null>({
+    queryKey: ["/api/loans", statementLoanId, "statement"],
+    queryFn: async () => {
+      if (!statementLoanId) return null;
+      const res = await apiGet(`/api/loans/${statementLoanId}/statement`);
+      if (!res.ok) throw res;
+      return res.data;
+    },
+    enabled: Boolean(statementLoanId && isStatementDialogOpen),
+    staleTime: 1000 * 60,
+  });
+
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiPost("/api/loans", data);
@@ -76,11 +122,16 @@ export default function Loans() {
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/loans"] });
-      if (data?.id) {
-        queryClient.invalidateQueries({ queryKey: ["/api/loans", data.id] });
+      const loanId = data?.loan?.id ?? data?.id;
+      if (loanId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/loans", loanId] });
       }
       setIsCreateDialogOpen(false);
-      toast({ title: "Loan created successfully" });
+      const warningText = data?.policy?.warnings?.join?.(" \u2022 ");
+      toast({
+        title: "Loan created successfully",
+        description: warningText,
+      });
     },
     onError: (err) => {
       toastApiError(err as any, "Failed to create loan");
@@ -91,12 +142,15 @@ export default function Loans() {
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
       const res = await apiPut(`/api/loans/${id}`, data);
       if (!res.ok) throw res;
-      return id;
+      return { response: res.data, id };
     },
-    onSuccess: (_, { id }) => {
+    onSuccess: (payload, { id }) => {
+      const data = payload?.response;
       queryClient.invalidateQueries({ queryKey: ["/api/loans"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/loans", id] });
-      toast({ title: "Loan updated successfully" });
+      const loanId = data?.loan?.id ?? id;
+      queryClient.invalidateQueries({ queryKey: ["/api/loans", loanId] });
+      const warningText = data?.policy?.warnings?.join?.(" \u2022 ");
+      toast({ title: "Loan updated successfully", description: warningText });
     },
     onError: () => {
       // For update errors, show a generic failure title per tests
@@ -178,10 +232,15 @@ export default function Loans() {
   };
 
   const handleReject = (id: string) => {
-    updateMutation.mutate({ 
-      id, 
+    updateMutation.mutate({
+      id,
       data: { status: "rejected" }
     });
+  };
+
+  const openStatementDialog = (loanId: string) => {
+    setStatementLoanId(loanId);
+    setIsStatementDialogOpen(true);
   };
 
   const getStatusBadge = (status: string) => {
@@ -432,147 +491,303 @@ export default function Loans() {
               </CardContent>
             </Card>
           ) : (
-            filteredLoans.map((loan) => (
-              <Card key={loan.id}>
-                <CardHeader className="pb-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <DollarSign className="w-5 h-5 text-green-600" />
-                      <div>
-                        <CardTitle className="text-lg">
-                          {loan.employee?.firstName} {loan.employee?.lastName}
-                        </CardTitle>
-                        <CardDescription>
-                          ${parseFloat(loan.amount).toLocaleString()} loan • ${parseFloat(loan.monthlyDeduction).toLocaleString()}/month
-                        </CardDescription>
+            filteredLoans.map((loan) => {
+              const dueAmount = Number(loan.dueAmountForPeriod ?? 0);
+              const scheduleRaw = Array.isArray((loan as any).scheduleDueThisPeriod)
+                ? ((loan as any).scheduleDueThisPeriod as Array<Record<string, any>>)
+                : [];
+              const dueEntries = scheduleRaw.filter(Boolean);
+              const pendingCount = dueEntries.filter(
+                (entry) => String(entry.status || "").toLowerCase() === "pending",
+              ).length;
+              const pausedCount = dueEntries.filter(
+                (entry) => String(entry.status || "").toLowerCase() === "paused",
+              ).length;
+              const dueSummaryParts: string[] = [];
+              if (pendingCount > 0) {
+                dueSummaryParts.push(
+                  `${pendingCount} ${pendingCount === 1 ? "installment due" : "installments due"}`,
+                );
+              }
+              if (pausedCount > 0) {
+                dueSummaryParts.push(
+                  `${pausedCount} ${pausedCount === 1 ? "installment paused" : "installments paused"}`,
+                );
+              }
+              const dueSummary = dueSummaryParts.join(" • ");
+              const warnings = Array.isArray((loan as any)?.policyMetadata?.warnings)
+                ? ((loan as any).policyMetadata.warnings as string[]).filter(Boolean)
+                : [];
+              const violations = Array.isArray((loan as any)?.policyMetadata?.violations)
+                ? ((loan as any).policyMetadata.violations as string[]).filter(Boolean)
+                : [];
+              const parseNumber = (value: unknown) => {
+                const parsed = Number.parseFloat(String(value ?? 0));
+                return Number.isFinite(parsed) ? parsed : 0;
+              };
+              const amountValue = parseNumber(loan.amount);
+              const monthlyDeductionValue = parseNumber(loan.monthlyDeduction);
+              const interestRateValue = parseNumber(loan.interestRate);
+              const startDateLabel = loan.startDate
+                ? (() => {
+                    const parsed = new Date(loan.startDate);
+                    return Number.isNaN(parsed.getTime()) ? undefined : format(parsed, "MMM d, yyyy");
+                  })()
+                : undefined;
+              const nextPendingEntry = dueEntries.find(
+                (entry) => String(entry.status || "").toLowerCase() === "pending",
+              );
+              const nextDueDateLabel = nextPendingEntry?.dueDate
+                ? (() => {
+                    const parsed = new Date(nextPendingEntry.dueDate as string);
+                    return Number.isNaN(parsed.getTime()) ? undefined : format(parsed, "MMM d, yyyy");
+                  })()
+                : undefined;
+              const monthsRemainingValue =
+                loan.status === "active" || loan.status === "approved"
+                  ? calculateMonthsRemaining(
+                      loan.remainingAmount ?? loan.amount,
+                      loan.monthlyDeduction,
+                    )
+                  : null;
+              const totalPayments = monthlyDeductionValue > 0
+                ? Math.ceil(amountValue / monthlyDeductionValue)
+                : null;
+              const forecastMeta = loanForecastMeta(loan);
+              const dueDetails = (() => {
+                if (nextDueDateLabel && dueSummary) {
+                  return `${t('loansPage.nextDue', 'Next due')}: ${nextDueDateLabel} • ${dueSummary}`;
+                }
+                if (nextDueDateLabel) {
+                  return `${t('loansPage.nextDue', 'Next due')}: ${nextDueDateLabel}`;
+                }
+                if (dueSummary) {
+                  return dueSummary;
+                }
+                return null;
+              })();
+              return (
+                <Card key={loan.id}>
+                  <CardHeader className="pb-4">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                      <div className="flex items-start gap-3">
+                        <DollarSign className="w-5 h-5 text-green-600" />
+                        <div>
+                          <CardTitle className="text-lg">
+                            {loan.employee?.firstName} {loan.employee?.lastName}
+                          </CardTitle>
+                          <CardDescription>
+                            {formatMoney(amountValue)} KWD • {formatMoney(monthlyDeductionValue)} KWD/{t('loansPage.perMonth', 'month')}
+                          </CardDescription>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        {getStatusBadge(loan.status)}
+                        {loan.status === "paused" && (
+                          <Badge variant="secondary" className="flex items-center gap-1">
+                            <PauseCircle className="w-3 h-3" />
+                            {t('loansPage.paused', 'Paused')}
+                          </Badge>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openStatementDialog(loan.id)}
+                          className="flex items-center gap-1"
+                        >
+                          <TrendingUp className="w-3 h-3" />
+                          {t('loansPage.statement', 'Statement')}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setEditingLoan(loan as any);
+                            editForm.reset({
+                              employeeId: loan.employeeId,
+                              amount: Number(loan.amount),
+                              monthlyDeduction: Number(loan.monthlyDeduction),
+                              remainingAmount: loan.remainingAmount
+                                ? Number(loan.remainingAmount)
+                                : undefined,
+                              startDate: loan.startDate,
+                              endDate: loan.endDate || "",
+                              interestRate: loan.interestRate
+                                ? Number(loan.interestRate)
+                                : undefined,
+                              reason: loan.reason || "",
+                              status: loan.status,
+                            } as any);
+                            setIsEditDialogOpen(true);
+                          }}
+                          className="text-blue-600 hover:text-blue-700"
+                        >
+                          <Edit className="w-3 h-3" />
+                        </Button>
+                        {loan.status === "pending" && (
+                          <div className="flex space-x-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleApprove(loan.id)}
+                              disabled={updateMutation.isPending}
+                            >
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              {t('common.approve', 'Approve')}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleReject(loan.id)}
+                              disabled={updateMutation.isPending}
+                            >
+                              <XCircle className="w-3 h-3 mr-1" />
+                              {t('common.reject', 'Reject')}
+                            </Button>
+                          </div>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => deleteMutation.mutate(loan.id)}
+                          disabled={deleteMutation.isPending}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      {getStatusBadge(loan.status)}
-                      {loan.status === 'paused' && (
-                        <Badge variant="secondary" className="flex items-center gap-1">
-                          <PauseCircle className="w-3 h-3" /> Paused
-                        </Badge>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          setEditingLoan(loan as any);
-                          editForm.reset({
-                            employeeId: loan.employeeId,
-                            amount: Number(loan.amount),
-                            monthlyDeduction: Number(loan.monthlyDeduction),
-                            remainingAmount: loan.remainingAmount ? Number(loan.remainingAmount) : undefined,
-                            startDate: loan.startDate,
-                            endDate: loan.endDate || '',
-                            interestRate: loan.interestRate ? Number(loan.interestRate) : undefined,
-                            reason: loan.reason || '',
-                            status: loan.status,
-                          } as any);
-                          setIsEditDialogOpen(true);
-                        }}
-                        className="text-blue-600 hover:text-blue-700"
-                      >
-                        <Edit className="w-3 h-3" />
-                      </Button>
-                      {loan.status === "pending" && (
-                        <div className="flex space-x-1">
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => handleApprove(loan.id)}
-                            disabled={updateMutation.isPending}
-                          >
-                            <CheckCircle className="w-3 h-3 mr-1" />
-                            Approve
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => handleReject(loan.id)}
-                            disabled={updateMutation.isPending}
-                          >
-                            <XCircle className="w-3 h-3 mr-1" />
-                            Reject
-                          </Button>
-                        </div>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => deleteMutation.mutate(loan.id)}
-                        disabled={deleteMutation.isPending}
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 text-sm">
+                      <div>
+                        <span className="text-muted-foreground flex items-center gap-1">
+                          <TrendingUp className="w-3.5 h-3.5" />
+                          {t('loansPage.dueThisPeriod', 'Due this period')}
+                        </span>
+                        <p className="font-medium">
+                          {dueAmount > 0
+                            ? `${formatMoney(dueAmount)} KWD`
+                            : t('loansPage.noDeduction', 'No deduction scheduled this period')}
+                        </p>
+                        {dueDetails && (
+                          <p className="text-xs text-muted-foreground">{dueDetails}</p>
+                        )}
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">{t('loansPage.startDate', 'Start Date')}</span>
+                        <p className="font-medium">{startDateLabel ?? '—'}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">{t('loansPage.interestRate', 'Interest Rate')}</span>
+                        <p className="font-medium">{interestRateValue.toFixed(2)}%</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">{t('loansPage.totalPayments', 'Total payments')}</span>
+                        <p className="font-medium">
+                          {totalPayments !== null
+                            ? `${totalPayments} ${t('loansPage.months', 'months')}`
+                            : t('common.notApplicable', 'N/A')}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">Start Date</span>
-                      <p className="font-medium">{format(new Date(loan.startDate), "MMM d, yyyy")}</p>
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">{t('loansPage.monthsRemaining', 'Months remaining')}</span>
+                        <p className="font-medium">
+                          {monthsRemainingValue !== null
+                            ? monthsRemainingValue
+                            : t('common.notApplicable', 'N/A')}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground flex items-center gap-1">
+                          {t('loansPage.forecastPayoff', 'Forecast payoff')}
+                          <TooltipProvider delayDuration={100}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <div className="max-w-xs space-y-1">
+                                  <div><strong>{t('loansPage.forecastNow', 'Now')}:</strong> {forecastMeta.adjustedLabel} {forecastMeta.willCompleteThisMonth ? `(${t('loansPage.thisMonth', 'this month')})` : ''}</div>
+                                  <div><strong>{t('loansPage.forecastBaseline', 'Baseline')}:</strong> {forecastMeta.baselineLabel}</div>
+                                  <div><strong>{t('loansPage.forecastMonthsRemaining', 'Months remaining')}:</strong> {forecastMeta.monthsRemaining} {forecastMeta.pausedMonths > 0 ? `(+${forecastMeta.pausedMonths} ${t('loansPage.pausedShort', 'paused')})` : ''}</div>
+                                  <div className="text-xs text-muted-foreground">{t('loansPage.forecastTooltip', 'Adds one month for each approved vacation that requested loan pause.')}</div>
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </span>
+                        <p className="font-medium">{forecastMeta.adjustedLabel}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {forecastMeta.monthsRemaining} {t('loansPage.months', 'months')} {forecastMeta.pausedMonths > 0 ? `(+${forecastMeta.pausedMonths} ${t('loansPage.pausedShort', 'paused')})` : ''}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-muted-foreground">Interest Rate</span>
-                      <p className="font-medium">{parseFloat(loan.interestRate || "0")}%</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Months Remaining</span>
-                      <p className="font-medium">
-                        {(loan.status === "active" || loan.status === "approved") 
-                          ? calculateMonthsRemaining(loan.remainingAmount ?? loan.amount, loan.monthlyDeduction)
-                          : "N/A"
-                        }
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Total Payments</span>
-                      <p className="font-medium">
-                        {Math.ceil(parseFloat(loan.amount) / parseFloat(loan.monthlyDeduction))} months
-                      </p>
-                    </div>
-                    {(() => {
-                      const meta = loanForecastMeta(loan);
-                      return (
-                        <div>
-                          <span className="text-muted-foreground flex items-center gap-1">
-                            Forecast Payoff
-                            <TooltipProvider delayDuration={100}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <div className="max-w-xs space-y-1">
-                                    <div><strong>Now:</strong> {meta.adjustedLabel} {meta.willCompleteThisMonth ? '(this month)' : ''}</div>
-                                    <div><strong>Before:</strong> {meta.baselineLabel}</div>
-                                    <div><strong>Months remaining:</strong> {meta.monthsRemaining} {meta.pausedMonths > 0 ? `(+${meta.pausedMonths} paused)` : ''}</div>
-                                    <div className="text-xs text-muted-foreground">Adds one month for each approved vacation that requested loan pause.</div>
-                                  </div>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </span>
-                          <p className="font-medium">
-                            {meta.adjustedLabel}
-                          </p>
-                          <p className="text-xs text-muted-foreground">{meta.monthsRemaining} months {meta.pausedMonths > 0 ? `(+${meta.pausedMonths} paused)` : ''}</p>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                  {loan.reason && (
-                    <div className="mt-4 pt-4 border-t">
-                      <span className="text-muted-foreground text-sm">Purpose:</span>
-                      <p className="text-sm mt-1">{loan.reason}</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))
+                    {loan.reason && (
+                      <div className="mt-4 pt-4 border-t">
+                        <span className="text-muted-foreground text-sm">{t('loansPage.purpose', 'Purpose')}</span>
+                        <p className="text-sm mt-1">{loan.reason}</p>
+                      </div>
+                    )}
+                    {(violations.length > 0 || warnings.length > 0) && (
+                      <div className={`${loan.reason ? 'pt-4 border-t mt-4' : 'mt-4'} space-y-3`}>
+                        {violations.length > 0 && (
+                          <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+                            <p className="font-semibold">{t('loansPage.policyViolations', 'Policy violations')}</p>
+                            <ul className="mt-2 list-disc space-y-1 pl-4">
+                              {violations.map((item, index) => (
+                                <li key={`${loan.id}-violation-${index}`}>{item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {warnings.length > 0 && (
+                          <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                            <p className="font-semibold">{t('loansPage.policyWarnings', 'Policy warnings')}</p>
+                            <ul className="mt-2 list-disc space-y-1 pl-4">
+                              {warnings.map((item, index) => (
+                                <li key={`${loan.id}-warning-${index}`}>{item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {loan.approvalStages && loan.approvalStages.length > 0 && (
+                      <div className="mt-4 pt-4 border-t space-y-2">
+                        <h4 className="text-sm font-medium text-muted-foreground">
+                          {t('loansPage.approvalProgress', 'Approval progress')}
+                        </h4>
+                        <ul className="space-y-3">
+                          {loan.approvalStages.map((stage) => {
+                            const key = stage.id ?? `${loan.id}-${stage.stageOrder ?? stage.stageName}`;
+                            return (
+                              <li key={key} className="flex items-start justify-between gap-3">
+                                <div className="space-y-1">
+                                  <p className="font-medium leading-tight">{stage.stageName}</p>
+                                  {stage.approver && (
+                                    <p className="text-xs text-muted-foreground">
+                                      {t('loansPage.approver', 'Approver')}: {stage.approver.firstName} {stage.approver.lastName}
+                                    </p>
+                                  )}
+                                  {stage.notes && (
+                                    <p className="text-xs text-muted-foreground">{stage.notes}</p>
+                                  )}
+                                </div>
+                                <Badge className={`${getStageStatusClass(stage.status)} whitespace-nowrap`}>
+                                  {getStageStatusLabel(stage.status)}
+                                </Badge>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })
           )}
         </div>
       )}
@@ -666,6 +881,181 @@ export default function Loans() {
         </Form>
       </DialogContent>
     </Dialog>
+
+    <LoanStatementDialog
+      open={isStatementDialogOpen}
+      onOpenChange={(open) => {
+        setIsStatementDialogOpen(open);
+        if (!open) {
+          setStatementLoanId(null);
+        }
+      }}
+      statement={loanStatement ?? null}
+      isLoading={isStatementLoading}
+    />
     </>
+  );
+}
+
+interface LoanStatementDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  statement: LoanStatement | null;
+  isLoading: boolean;
+}
+
+function LoanStatementDialog({
+  open,
+  onOpenChange,
+  statement,
+  isLoading,
+}: LoanStatementDialogProps) {
+  const { t } = useTranslation();
+
+  const handleDownload = () => {
+    if (!statement || typeof window === "undefined") {
+      return;
+    }
+    const rows = [
+      ["Installment", "Due Date", "Principal", "Interest", "Payment", "Remaining", "Status"],
+      ...statement.schedule.map((entry) => [
+        entry.installmentNumber,
+        entry.dueDate,
+        formatMoney(Number(entry.principalAmount)),
+        formatMoney(Number(entry.interestAmount)),
+        formatMoney(Number(entry.paymentAmount)),
+        formatMoney(Number(entry.remainingBalance)),
+        entry.status,
+      ]),
+    ];
+    const csv = rows.map((row) => row.join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `loan-${statement.loan.id}-statement.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const totals = statement?.totals;
+  const nextDueLabel = statement?.nextDue
+    ? (() => {
+        const parsed = new Date(statement.nextDue.dueDate);
+        return Number.isNaN(parsed.getTime()) ? undefined : format(parsed, "MMM d, yyyy");
+      })()
+    : undefined;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>{t('loansPage.statement', 'Loan statement')}</DialogTitle>
+          <DialogDescription>
+            {statement
+              ? t('loansPage.statementSubtitle', 'Schedule and payment summary for the selected loan')
+              : t('loansPage.statementDescription', 'Review amortization schedule and payments.')}
+          </DialogDescription>
+        </DialogHeader>
+        {isLoading ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">
+            {t('common.loading', 'Loading...')}
+          </div>
+        ) : statement ? (
+          <div className="space-y-6">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <p className="text-xs uppercase text-muted-foreground">{t('loansPage.totalPrincipal', 'Total principal')}</p>
+                <p className="text-base font-semibold">{formatMoney(totals?.scheduledPrincipal ?? 0)} KWD</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase text-muted-foreground">{t('loansPage.totalInterest', 'Total interest')}</p>
+                <p className="text-base font-semibold">{formatMoney(totals?.scheduledInterest ?? 0)} KWD</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase text-muted-foreground">{t('loansPage.totalPaid', 'Total paid')}</p>
+                <p className="text-base font-semibold">{formatMoney(totals?.totalPaid ?? 0)} KWD</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase text-muted-foreground">{t('loansPage.outstandingBalance', 'Outstanding balance')}</p>
+                <p className="text-base font-semibold">{formatMoney(totals?.outstandingBalance ?? 0)} KWD</p>
+                {nextDueLabel && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {t('loansPage.nextDue', 'Next due')}: {nextDueLabel}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-medium">{t('loansPage.schedule', 'Amortization schedule')}</h4>
+              <Button size="sm" variant="outline" onClick={handleDownload}>
+                {t('loansPage.downloadStatement', 'Download CSV')}
+              </Button>
+            </div>
+
+            <div className="rounded-md border">
+              <div className="max-h-64 overflow-y-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-muted/40 text-left text-xs uppercase text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2">{t('loansPage.installment', 'Inst.')}</th>
+                      <th className="px-3 py-2">{t('loansPage.dueDate', 'Due date')}</th>
+                      <th className="px-3 py-2">{t('loansPage.principal', 'Principal')}</th>
+                      <th className="px-3 py-2">{t('loansPage.interest', 'Interest')}</th>
+                      <th className="px-3 py-2">{t('loansPage.payment', 'Payment')}</th>
+                      <th className="px-3 py-2">{t('loansPage.remaining', 'Remaining')}</th>
+                      <th className="px-3 py-2">{t('loansPage.status', 'Status')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {statement.schedule.map((entry) => (
+                      <tr key={`${entry.installmentNumber}-${entry.dueDate}`} className="border-t">
+                        <td className="px-3 py-2">{entry.installmentNumber}</td>
+                        <td className="px-3 py-2">{format(new Date(entry.dueDate), 'MMM d, yyyy')}</td>
+                        <td className="px-3 py-2">{formatMoney(Number(entry.principalAmount))} KWD</td>
+                        <td className="px-3 py-2">{formatMoney(Number(entry.interestAmount))} KWD</td>
+                        <td className="px-3 py-2">{formatMoney(Number(entry.paymentAmount))} KWD</td>
+                        <td className="px-3 py-2">{formatMoney(Number(entry.remainingBalance))} KWD</td>
+                        <td className="px-3 py-2 capitalize">{entry.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <h5 className="text-sm font-medium">{t('loansPage.payments', 'Payments')}</h5>
+                <p className="text-sm text-muted-foreground">
+                  {t('loansPage.paymentsSummary', '{{count}} recorded payroll payments', {
+                    count: statement.payments.length,
+                  })}
+                </p>
+              </div>
+              {statement.documents.length > 0 && (
+                <div>
+                  <h5 className="text-sm font-medium">{t('loansPage.documents', 'Documents')}</h5>
+                  <ul className="mt-1 space-y-1 text-sm text-muted-foreground">
+                    {statement.documents.map((doc) => (
+                      <li key={doc.id}>
+                        {doc.title || doc.documentType || doc.fileUrl}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="py-8 text-center text-sm text-muted-foreground">
+            {t('loansPage.noStatementData', 'No statement data available')}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

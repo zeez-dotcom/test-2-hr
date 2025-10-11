@@ -41,6 +41,14 @@ import {
   type LoanWithEmployee,
   type LoanPayment,
   type InsertLoanPayment,
+  type LoanApprovalStage,
+  type InsertLoanApprovalStage,
+  type LoanDocument,
+  type InsertLoanDocument,
+  type LoanAmortizationScheduleEntry,
+  type InsertLoanAmortizationScheduleEntry,
+  type LoanScheduleStatus,
+  type LoanStatement,
   type Asset,
   type InsertAsset,
   type AssetWithAssignment,
@@ -114,6 +122,9 @@ import {
   vacationRequests,
   loans,
   loanPayments,
+  loanApprovalStages,
+  loanDocuments,
+  loanAmortizationSchedules,
   assets,
   assetAssignments,
   assetDocuments,
@@ -186,6 +197,14 @@ const computeExpectedMinutes = ({
 
 const removeUndefined = <T extends Record<string, unknown>>(input: T): T =>
   Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)) as T;
+
+const parseMoney = (value: unknown): number => {
+  if (value === null || value === undefined) {
+    return 0;
+  }
+  const parsed = Number.parseFloat(String(value));
+  return Number.isFinite(parsed) ? parsed : 0;
+};
 
 const calculateAttendanceMinutes = (record: Attendance): number => {
   const rawHours = (record as any)?.hours;
@@ -555,6 +574,36 @@ export interface IStorage {
   createLoanPayments(payments: InsertLoanPayment[]): Promise<LoanPayment[]>;
   getLoanPaymentsByLoan(loanId: string): Promise<LoanPayment[]>;
   getLoanPaymentsForPayroll(payrollRunId: string): Promise<LoanPayment[]>;
+  getLoanApprovalStages(
+    loanId: string,
+  ): Promise<Array<LoanApprovalStage & { approver?: Employee | null }>>;
+  setLoanApprovalStages(
+    loanId: string,
+    stages: InsertLoanApprovalStage[],
+  ): Promise<Array<LoanApprovalStage & { approver?: Employee | null }>>;
+  updateLoanApprovalStage(
+    stageId: string,
+    updates: Partial<InsertLoanApprovalStage>,
+  ): Promise<LoanApprovalStage | undefined>;
+  getLoanDocuments(
+    loanId: string,
+  ): Promise<Array<LoanDocument & { uploader?: Employee | null }>>;
+  createLoanDocument(document: InsertLoanDocument): Promise<LoanDocument>;
+  replaceLoanDocuments(loanId: string, documents: InsertLoanDocument[]): Promise<LoanDocument[]>;
+  deleteLoanDocument(id: string): Promise<boolean>;
+  getLoanAmortizationSchedule(loanId: string): Promise<LoanAmortizationScheduleEntry[]>;
+  replaceLoanAmortizationSchedule(
+    loanId: string,
+    schedule: InsertLoanAmortizationScheduleEntry[],
+    options?: { preservePaid?: boolean },
+  ): Promise<LoanAmortizationScheduleEntry[]>;
+  updateLoanScheduleStatuses(
+    loanId: string,
+    installmentNumbers: number[],
+    status: LoanScheduleStatus,
+    options?: { payrollRunId?: string; paidAt?: string; notes?: string; tx?: TransactionClient },
+  ): Promise<void>;
+  getLoanStatement(loanId: string): Promise<LoanStatement | undefined>;
   getLoanReportDetails(range: { startDate: string; endDate: string }): Promise<LoanReportDetail[]>;
 
   // Asset methods
@@ -1088,6 +1137,38 @@ export class DatabaseStorage implements IStorage {
       appliedDate: payment.appliedDate ?? undefined,
 
       source: payment.source ?? "payroll",
+
+    };
+
+  }
+
+  private formatLoanScheduleEntryForInsert(
+    entry: InsertLoanAmortizationScheduleEntry,
+  ): typeof loanAmortizationSchedules.$inferInsert {
+
+    return {
+
+      loanId: entry.loanId,
+
+      installmentNumber: entry.installmentNumber,
+
+      dueDate: entry.dueDate,
+
+      principalAmount: entry.principalAmount.toString(),
+
+      interestAmount: entry.interestAmount.toString(),
+
+      paymentAmount: entry.paymentAmount.toString(),
+
+      remainingBalance: entry.remainingBalance.toString(),
+
+      status: entry.status ?? "pending",
+
+      payrollRunId: entry.payrollRunId ?? undefined,
+
+      paidAt: entry.paidAt ?? undefined,
+
+      notes: (entry as any).notes ?? undefined,
 
     };
 
@@ -3560,6 +3641,9 @@ export class DatabaseStorage implements IStorage {
 
 
 
+    const startIso = start ? start.toISOString().split("T")[0] : undefined;
+    const endIso = end ? end.toISOString().split("T")[0] : undefined;
+
     const loanList = await db.query.loans.findMany({
 
       with: {
@@ -3567,6 +3651,28 @@ export class DatabaseStorage implements IStorage {
         employee: true,
 
         approver: true,
+
+        approvalStages: {
+
+          with: { approver: true },
+
+          orderBy: asc(loanApprovalStages.stageOrder),
+
+        },
+
+        documents: {
+
+          with: { uploader: true },
+
+          orderBy: desc(loanDocuments.uploadedAt),
+
+        },
+
+        amortizationSchedule: {
+
+          orderBy: asc(loanAmortizationSchedules.installmentNumber),
+
+        },
 
       },
 
@@ -3576,15 +3682,55 @@ export class DatabaseStorage implements IStorage {
 
     });
 
-    return loanList.map(loan => ({
+    return loanList.map(loan => {
 
-      ...loan,
+      const schedule = (loan as any).amortizationSchedule as LoanAmortizationScheduleEntry[] | undefined;
 
-      employee: loan.employee || undefined,
+      const allEntries = schedule ?? [];
 
-      approver: loan.approver || undefined,
+      const dueEntries = startIso && endIso
 
-    }));
+        ? allEntries.filter(entry => entry.dueDate >= startIso && entry.dueDate <= endIso)
+
+        : allEntries.filter(entry => entry.status === "pending" || entry.status === "paused");
+
+      const pendingEntries = dueEntries.filter(entry => entry.status === "pending");
+
+      const dueAmount = pendingEntries.reduce((sum, entry) => sum + parseMoney(entry.paymentAmount), 0);
+
+      return {
+
+        ...loan,
+
+        employee: loan.employee || undefined,
+
+        approver: loan.approver || undefined,
+
+        approvalStages: (loan.approvalStages ?? []).map(stage => ({
+
+          ...stage,
+
+          approver: stage.approver || undefined,
+
+        })),
+
+        documents: (loan.documents ?? []).map(doc => ({
+
+          ...doc,
+
+          uploader: doc.uploader || undefined,
+
+        })),
+
+        amortizationSchedule: allEntries,
+
+        dueAmountForPeriod: Number(dueAmount.toFixed(2)),
+
+        scheduleDueThisPeriod: dueEntries,
+
+      } satisfies LoanWithEmployee;
+
+    });
 
   }
 
@@ -3602,11 +3748,39 @@ export class DatabaseStorage implements IStorage {
 
         approver: true,
 
+        approvalStages: {
+
+          with: { approver: true },
+
+          orderBy: asc(loanApprovalStages.stageOrder),
+
+        },
+
+        documents: {
+
+          with: { uploader: true },
+
+          orderBy: desc(loanDocuments.uploadedAt),
+
+        },
+
+        amortizationSchedule: {
+
+          orderBy: asc(loanAmortizationSchedules.installmentNumber),
+
+        },
+
       },
 
     });
 
     if (!loan) return undefined;
+
+    const schedule = (loan as any).amortizationSchedule as LoanAmortizationScheduleEntry[] | undefined;
+
+    const pendingEntries = (schedule ?? []).filter(entry => entry.status === "pending");
+
+    const dueAmount = pendingEntries.reduce((sum, entry) => sum + parseMoney(entry.paymentAmount), 0);
 
     return {
 
@@ -3616,7 +3790,29 @@ export class DatabaseStorage implements IStorage {
 
       approver: loan.approver || undefined,
 
-    };
+      approvalStages: (loan.approvalStages ?? []).map(stage => ({
+
+        ...stage,
+
+        approver: stage.approver || undefined,
+
+      })),
+
+      documents: (loan.documents ?? []).map(doc => ({
+
+        ...doc,
+
+        uploader: doc.uploader || undefined,
+
+      })),
+
+      amortizationSchedule: schedule ?? [],
+
+      dueAmountForPeriod: Number(dueAmount.toFixed(2)),
+
+      scheduleDueThisPeriod: pendingEntries,
+
+    } satisfies LoanWithEmployee;
 
   }
 
@@ -3751,6 +3947,512 @@ export class DatabaseStorage implements IStorage {
       orderBy: asc(loanPayments.appliedDate),
 
     });
+
+  }
+
+
+
+  async getLoanApprovalStages(
+
+    loanId: string,
+
+  ): Promise<Array<LoanApprovalStage & { approver?: Employee | null }>> {
+
+    const stages = await db.query.loanApprovalStages.findMany({
+
+      where: eq(loanApprovalStages.loanId, loanId),
+
+      with: { approver: true },
+
+      orderBy: asc(loanApprovalStages.stageOrder),
+
+    });
+
+    return stages.map(stage => ({
+
+      ...stage,
+
+      approver: stage.approver || undefined,
+
+    }));
+
+  }
+
+
+
+  async setLoanApprovalStages(
+
+    loanId: string,
+
+    stages: InsertLoanApprovalStage[],
+
+  ): Promise<Array<LoanApprovalStage & { approver?: Employee | null }>> {
+
+    const normalized = stages.map((stage, index) => ({
+
+      ...stage,
+
+      loanId,
+
+      stageOrder: stage.stageOrder ?? index,
+
+    }));
+
+    await db.transaction(async tx => {
+
+      await tx.delete(loanApprovalStages).where(eq(loanApprovalStages.loanId, loanId));
+
+      if (normalized.length > 0) {
+
+        await tx.insert(loanApprovalStages).values(
+
+          normalized.map(stage => ({
+
+            loanId,
+
+            stageName: stage.stageName,
+
+            stageOrder: stage.stageOrder ?? 0,
+
+            approverId: stage.approverId ?? undefined,
+
+            status: stage.status ?? "pending",
+
+            actedAt: stage.actedAt ?? undefined,
+
+            notes: (stage as any).notes ?? undefined,
+
+            metadata: (stage as any).metadata ?? undefined,
+
+          })),
+
+        );
+
+      }
+
+    });
+
+    return await this.getLoanApprovalStages(loanId);
+
+  }
+
+
+
+  async updateLoanApprovalStage(
+
+    stageId: string,
+
+    updates: Partial<InsertLoanApprovalStage>,
+
+  ): Promise<LoanApprovalStage | undefined> {
+
+    const payload = removeUndefined({
+
+      ...updates,
+
+      stageOrder:
+
+        updates.stageOrder === undefined ? undefined : Number(updates.stageOrder),
+
+      actedAt: updates.actedAt ?? undefined,
+
+    });
+
+    const [updated] = await db
+
+      .update(loanApprovalStages)
+
+      .set(payload as any)
+
+      .where(eq(loanApprovalStages.id, stageId))
+
+      .returning();
+
+    return updated || undefined;
+
+  }
+
+
+
+  async getLoanDocuments(
+
+    loanId: string,
+
+  ): Promise<Array<LoanDocument & { uploader?: Employee | null }>> {
+
+    const docs = await db.query.loanDocuments.findMany({
+
+      where: eq(loanDocuments.loanId, loanId),
+
+      with: { uploader: true },
+
+      orderBy: desc(loanDocuments.uploadedAt),
+
+    });
+
+    return docs.map(doc => ({
+
+      ...doc,
+
+      uploader: doc.uploader || undefined,
+
+    }));
+
+  }
+
+
+
+  async createLoanDocument(document: InsertLoanDocument): Promise<LoanDocument> {
+
+    const [created] = await db
+
+      .insert(loanDocuments)
+
+      .values({
+
+        loanId: document.loanId,
+
+        title: document.title,
+
+        documentType: document.documentType ?? undefined,
+
+        fileUrl: document.fileUrl,
+
+        storageKey: document.storageKey ?? undefined,
+
+        uploadedBy: document.uploadedBy ?? undefined,
+
+        metadata: (document as any).metadata ?? undefined,
+
+      })
+
+      .returning();
+
+    return created;
+
+  }
+
+
+
+  async replaceLoanDocuments(
+
+    loanId: string,
+
+    documents: InsertLoanDocument[],
+
+  ): Promise<LoanDocument[]> {
+
+    await db.transaction(async tx => {
+
+      await tx.delete(loanDocuments).where(eq(loanDocuments.loanId, loanId));
+
+      if (documents.length > 0) {
+
+        await tx.insert(loanDocuments).values(
+
+          documents.map(doc => ({
+
+            loanId,
+
+            title: doc.title,
+
+            documentType: doc.documentType ?? undefined,
+
+            fileUrl: doc.fileUrl,
+
+            storageKey: doc.storageKey ?? undefined,
+
+            uploadedBy: doc.uploadedBy ?? undefined,
+
+            metadata: (doc as any).metadata ?? undefined,
+
+          })),
+
+        );
+
+      }
+
+    });
+
+    return await this.getLoanDocuments(loanId);
+
+  }
+
+
+
+  async deleteLoanDocument(id: string): Promise<boolean> {
+
+    const result = await db.delete(loanDocuments).where(eq(loanDocuments.id, id));
+
+    return (result.rowCount ?? 0) > 0;
+
+  }
+
+
+
+  async getLoanAmortizationSchedule(
+
+    loanId: string,
+
+  ): Promise<LoanAmortizationScheduleEntry[]> {
+
+    return await db.query.loanAmortizationSchedules.findMany({
+
+      where: eq(loanAmortizationSchedules.loanId, loanId),
+
+      orderBy: asc(loanAmortizationSchedules.installmentNumber),
+
+    });
+
+  }
+
+
+
+  async replaceLoanAmortizationSchedule(
+
+    loanId: string,
+
+    schedule: InsertLoanAmortizationScheduleEntry[],
+
+    options: { preservePaid?: boolean } = {},
+
+  ): Promise<LoanAmortizationScheduleEntry[]> {
+
+    const preservePaid = options.preservePaid ?? true;
+
+    await db.transaction(async tx => {
+
+      let preserved: LoanAmortizationScheduleEntry[] = [];
+
+      if (preservePaid) {
+
+        preserved = await tx.query.loanAmortizationSchedules.findMany({
+
+          where: eq(loanAmortizationSchedules.loanId, loanId),
+
+        });
+
+        preserved = preserved.filter(entry => entry.status === "paid");
+
+      }
+
+      await tx.delete(loanAmortizationSchedules).where(eq(loanAmortizationSchedules.loanId, loanId));
+
+      const preservedInstallments = new Set(
+
+        preserved.map(entry => entry.installmentNumber),
+
+      );
+
+      const sanitizedSchedule = schedule.filter(
+
+        entry => !preservedInstallments.has(entry.installmentNumber),
+
+      );
+
+      const values = [
+
+        ...preserved.map(entry =>
+
+          this.formatLoanScheduleEntryForInsert({
+
+            loanId,
+
+            installmentNumber: entry.installmentNumber,
+
+            dueDate: entry.dueDate,
+
+            principalAmount: parseMoney(entry.principalAmount),
+
+            interestAmount: parseMoney(entry.interestAmount),
+
+            paymentAmount: parseMoney(entry.paymentAmount),
+
+            remainingBalance: parseMoney(entry.remainingBalance),
+
+            status: entry.status as LoanScheduleStatus,
+
+            payrollRunId: entry.payrollRunId ?? undefined,
+
+            paidAt: entry.paidAt ?? undefined,
+
+            notes: (entry as any).notes ?? undefined,
+
+          } as InsertLoanAmortizationScheduleEntry),
+
+        ),
+
+        ...sanitizedSchedule.map(entry =>
+
+          this.formatLoanScheduleEntryForInsert({
+
+            ...entry,
+
+            loanId,
+
+          }),
+
+        ),
+
+      ];
+
+      if (values.length > 0) {
+
+        await tx.insert(loanAmortizationSchedules).values(values);
+
+      }
+
+    });
+
+    return await this.getLoanAmortizationSchedule(loanId);
+
+  }
+
+
+
+  async updateLoanScheduleStatuses(
+
+    loanId: string,
+
+    installmentNumbers: number[],
+
+    status: LoanScheduleStatus,
+
+    options: { payrollRunId?: string; paidAt?: string; notes?: string; tx?: TransactionClient } = {},
+
+  ): Promise<void> {
+
+    if (installmentNumbers.length === 0) {
+
+      return;
+
+    }
+
+    const executor = options.tx ?? db;
+
+    const payload: Record<string, unknown> = {
+
+      status,
+
+      updatedAt: new Date(),
+
+    };
+
+    if (status === "paid") {
+
+      payload.payrollRunId = options.payrollRunId ?? null;
+
+      payload.paidAt = options.paidAt ?? new Date().toISOString().split("T")[0];
+
+    } else {
+
+      payload.payrollRunId = null;
+
+      payload.paidAt = null;
+
+    }
+
+    if (options.notes !== undefined) {
+
+      payload.notes = options.notes;
+
+    }
+
+    await executor
+
+      .update(loanAmortizationSchedules)
+
+      .set(payload)
+
+      .where(
+
+        and(
+
+          eq(loanAmortizationSchedules.loanId, loanId),
+
+          inArray(loanAmortizationSchedules.installmentNumber, installmentNumbers),
+
+        ),
+
+      );
+
+  }
+
+
+
+  async getLoanStatement(loanId: string): Promise<LoanStatement | undefined> {
+
+    const loan = await this.getLoan(loanId);
+
+    if (!loan) {
+
+      return undefined;
+
+    }
+
+    const [schedule, payments, documents] = await Promise.all([
+
+      this.getLoanAmortizationSchedule(loanId),
+
+      this.getLoanPaymentsByLoan(loanId),
+
+      this.getLoanDocuments(loanId),
+
+    ]);
+
+    let scheduledPrincipal = 0;
+
+    let scheduledInterest = 0;
+
+    let totalPaid = 0;
+
+    for (const entry of schedule) {
+
+      scheduledPrincipal += parseMoney(entry.principalAmount);
+
+      scheduledInterest += parseMoney(entry.interestAmount);
+
+      if (entry.status === "paid") {
+
+        totalPaid += parseMoney(entry.paymentAmount);
+
+      }
+
+    }
+
+    const outstandingBalance = schedule.length > 0
+
+      ? parseMoney(schedule[schedule.length - 1].remainingBalance)
+
+      : parseMoney((loan as any).remainingAmount ?? loan.amount);
+
+    const nextDue = schedule.find(entry => entry.status === "pending" || entry.status === "paused");
+
+    return {
+
+      loan,
+
+      schedule,
+
+      payments,
+
+      documents,
+
+      totals: {
+
+        scheduledPrincipal: Number(scheduledPrincipal.toFixed(2)),
+
+        scheduledInterest: Number(scheduledInterest.toFixed(2)),
+
+        totalPaid: Number(totalPaid.toFixed(2)),
+
+        outstandingBalance: Number(outstandingBalance.toFixed(2)),
+
+      },
+
+      nextDue,
+
+    };
 
   }
 
