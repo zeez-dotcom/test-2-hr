@@ -2,10 +2,10 @@
 
 This repository contains the HRPayMaster application. All application code lives in the `HRPayMaster/` folder:
 
-- `HRPayMaster/server` – Express API + Passport auth + Drizzle ORM
-- `HRPayMaster/client` – React (Vite) front end
-- `HRPayMaster/shared` – Shared schemas, types, helpers
-- `HRPayMaster/migrations` – SQL migrations managed by Drizzle
+- `HRPayMaster/server` Â– Express API + Passport auth + Drizzle ORM
+- `HRPayMaster/client` Â– React (Vite) front end
+- `HRPayMaster/shared` Â– Shared schemas, types, helpers
+- `HRPayMaster/migrations` Â– SQL migrations managed by Drizzle
 
 ## Prerequisites
 
@@ -23,10 +23,11 @@ cp HRPayMaster/.env.example HRPayMaster/.env
 
 Required values:
 
-- `DATABASE_URL` – Postgres connection string
-- `SESSION_SECRET` – Long random string for signing sessions
-- `VITE_API_BASE_URL` – Base URL the client uses to call the API (e.g. `http://localhost:5000` in dev)
-- `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_EMAIL` (recommended for production). If these are omitted, the server falls back to `admin / admin / admin@example.com` for local development only.
+- `DATABASE_URL` Â– Postgres connection string
+- `SESSION_SECRET` Â– Long random string for signing sessions
+- `VITE_API_BASE_URL` Â– Base URL the client uses to call the API (e.g. `http://localhost:5000` in dev)
+- `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_EMAIL` (recommended for production). If these are omitted, the server falls back to `admin / admin / admin@example.com` for local development only. These values are only used when no active admin account exists,
+ allowing you to change credentials later through the UI or API without environment overrides.
 
 ## Install Dependencies
 
@@ -61,6 +62,19 @@ npm run dev --prefix HRPayMaster
 
 The app serves both API and client on `http://localhost:5000`. Login with the admin credentials defined in the environment variables (or the `admin / admin` fallbacks if you are in development and left them unset).
 
+## Admin & User Management
+
+- Navigate to **Settings -> User Management** (visible to admins only) to add new users, update roles and contact info, deactivate/reactivate accounts, and reset passwords. Changes take effect immediately and refresh the list.
+- User accounts remain in the database when deactivated; inactive users cannot sign in and are excluded from the session bootstrap process.
+- The server exposes guarded endpoints under `/api/users` (requires an authenticated admin session):
+  - `GET /api/users` - list users without password hashes.
+  - `POST /api/users` - create a user (`{ username, email, password, role }`).
+  - `PUT /api/users/:id` - update username, email, role, or active flag.
+  - `POST /api/users/:id/deactivate` and `/reactivate` - toggle access while ensuring at least one admin stays active.
+  - `POST /api/users/:id/reset-password` - hash and store a new password.
+
+On startup the server ensures at least one active admin user exists. If none are present, the environment values above (or the development defaults) seed a new admin account.
+
 ## Tests & Type Checks
 
 ```bash
@@ -85,10 +99,10 @@ npm test                               # Vitest + Playwright from repo root
 
 The server exposes:
 
-- `GET /healthz` – unauthenticated health check
-- `POST /login`, `POST /logout` – authentication endpoints
-- `/metrics` – Prometheus metrics (unauthenticated by default; wrap with auth if you need to restrict it)
-- `/api/**` – all other routes, protected by session authentication
+- `GET /healthz` Â– unauthenticated health check
+- `POST /login`, `POST /logout` Â– authentication endpoints
+- `/metrics` Â– Prometheus metrics (unauthenticated by default; wrap with auth if you need to restrict it)
+- `/api/**` Â– all other routes, protected by session authentication
 
 ## Deployment Checklist
 
@@ -100,4 +114,4 @@ The server exposes:
 - [ ] Verify login using the configured admin credentials and confirm `/api/me` succeeds
 - [ ] Hit `GET /healthz` for smoke testing
 
-That’s it—the application is ready for a managed host (Render, Fly.io, Heroku, container platform, etc.) as long as it can run Node 20, supply the environment variables, and expose the single port.
+ThatÂ’s itÂ—the application is ready for a managed host (Render, Fly.io, Heroku, container platform, etc.) as long as it can run Node 20, supply the environment variables, and expose the single port.
