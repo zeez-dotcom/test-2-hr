@@ -9,6 +9,7 @@ import {
   boolean,
   integer,
   index,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -139,6 +140,44 @@ export const employeeCustomValues = pgTable("employee_custom_values", {
   fieldId: varchar("field_id").references(() => employeeCustomFields.id).notNull(),
   value: text("value"),
 });
+
+export const employeeWorkflows = pgTable(
+  "employee_workflows",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    employeeId: varchar("employee_id").references(() => employees.id).notNull(),
+    workflowType: text("workflow_type").notNull(),
+    status: text("status").notNull().default("pending"),
+    startedAt: timestamp("started_at").defaultNow(),
+    completedAt: timestamp("completed_at"),
+    metadata: jsonb("metadata").$type<Record<string, unknown> | null>().default(sql`'{}'::jsonb`),
+  },
+  (t) => ({
+    employeeIdx: index("employee_workflows_employee_id_idx").on(t.employeeId),
+    typeIdx: index("employee_workflows_type_idx").on(t.workflowType),
+  }),
+);
+
+export const employeeWorkflowSteps = pgTable(
+  "employee_workflow_steps",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    workflowId: varchar("workflow_id").references(() => employeeWorkflows.id).notNull(),
+    title: text("title").notNull(),
+    description: text("description"),
+    stepType: text("step_type").notNull(),
+    status: text("status").notNull().default("pending"),
+    orderIndex: integer("order_index").notNull().default(0),
+    dueDate: date("due_date"),
+    completedAt: timestamp("completed_at"),
+    metadata: jsonb("metadata").$type<Record<string, unknown> | null>().default(sql`'{}'::jsonb`),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (t) => ({
+    workflowIdx: index("employee_workflow_steps_workflow_id_idx").on(t.workflowId),
+  }),
+);
 
 export const vacationRequests = pgTable("vacation_requests", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -798,6 +837,7 @@ export const insertEmployeeEventSchema = baseInsertEmployeeEventSchema.extend({
     "asset_assignment",
     "asset_update",
     "asset_removal",
+    "workflow",
   ]),
   amount: baseInsertEmployeeEventSchema.shape.amount.optional().default("0"),
   recurrenceType: z.enum(["none", "monthly"]).optional().default("none"),
@@ -809,6 +849,31 @@ export const insertEmployeeEventSchema = baseInsertEmployeeEventSchema.extend({
 export const insertSickLeaveTrackingSchema = createInsertSchema(sickLeaveTracking).omit({
   id: true,
   lastUpdated: true,
+});
+
+const baseInsertEmployeeWorkflowSchema = createInsertSchema(employeeWorkflows).omit({
+  id: true,
+  startedAt: true,
+  completedAt: true,
+});
+
+export const insertEmployeeWorkflowSchema = baseInsertEmployeeWorkflowSchema.extend({
+  workflowType: z.enum(["onboarding", "offboarding"]),
+  status: z.enum(["pending", "in_progress", "completed", "cancelled"]).optional().default("pending"),
+  metadata: z.record(z.any()).optional().default({}),
+});
+
+const baseInsertEmployeeWorkflowStepSchema = createInsertSchema(employeeWorkflowSteps).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  completedAt: true,
+});
+
+export const insertEmployeeWorkflowStepSchema = baseInsertEmployeeWorkflowStepSchema.extend({
+  stepType: z.enum(["document", "asset", "task", "loan", "vacation"]),
+  status: z.enum(["pending", "in_progress", "completed", "skipped"]).optional().default("pending"),
+  metadata: z.record(z.any()).optional().default({}),
 });
 
 // Types
@@ -831,6 +896,14 @@ export type InsertAllowanceType = z.infer<typeof insertAllowanceTypeSchema>;
 export type EmployeeCustomValue = typeof employeeCustomValues.$inferSelect;
 export type InsertEmployeeCustomValue = z.infer<typeof insertEmployeeCustomValueSchema>;
 export type EmployeeCustomValueMap = Record<string, string | null>;
+
+export type EmployeeWorkflow = typeof employeeWorkflows.$inferSelect;
+export type InsertEmployeeWorkflow = z.infer<typeof insertEmployeeWorkflowSchema>;
+export type EmployeeWorkflowStep = typeof employeeWorkflowSteps.$inferSelect;
+export type InsertEmployeeWorkflowStep = z.infer<typeof insertEmployeeWorkflowStepSchema>;
+export type EmployeeWorkflowWithSteps = EmployeeWorkflow & {
+  steps: EmployeeWorkflowStep[];
+};
 
 export type PayrollRun = typeof payrollRuns.$inferSelect;
 export type InsertPayrollRun = z.infer<typeof insertPayrollRunSchema>;
@@ -1171,5 +1244,20 @@ export const employeeEventsRelations = relations(employeeEvents, ({ one }) => ({
   addedBy: one(employees, {
     fields: [employeeEvents.addedBy],
     references: [employees.id],
+  }),
+}));
+
+export const employeeWorkflowsRelations = relations(employeeWorkflows, ({ one, many }) => ({
+  employee: one(employees, {
+    fields: [employeeWorkflows.employeeId],
+    references: [employees.id],
+  }),
+  steps: many(employeeWorkflowSteps),
+}));
+
+export const employeeWorkflowStepsRelations = relations(employeeWorkflowSteps, ({ one }) => ({
+  workflow: one(employeeWorkflows, {
+    fields: [employeeWorkflowSteps.workflowId],
+    references: [employeeWorkflows.id],
   }),
 }));

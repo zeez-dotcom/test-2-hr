@@ -20,6 +20,7 @@ import {
   insertAllowanceTypeSchema,
   insertEmployeeCustomFieldSchema,
   employeeCustomValuePayloadSchema,
+  insertEmployeeWorkflowSchema,
   type InsertEmployeeEvent,
   type InsertEmployee,
   type InsertCar,
@@ -27,6 +28,7 @@ import {
   type InsertGenericDocument,
   type InsertSickLeaveTracking,
   type EmployeeCustomValueMap,
+  type InsertEmployeeWorkflowStep,
 } from "@shared/schema";
 import {
   sendEmail,
@@ -165,6 +167,92 @@ const sickLeaveBalanceUpdateSchema = z
 const employeeCustomFieldSchema = insertEmployeeCustomFieldSchema.extend({
   name: z.string().trim().min(1, "Name is required"),
 });
+
+const workflowTypeSchema = z.enum(["onboarding", "offboarding"]);
+type WorkflowType = z.infer<typeof workflowTypeSchema>;
+type WorkflowStepInput = Omit<
+  InsertEmployeeWorkflowStep,
+  "workflowId" | "id" | "createdAt" | "updatedAt" | "completedAt"
+>;
+
+const workflowProgressSchema = z.object({
+  status: z.enum(["pending", "in_progress", "completed", "skipped"]).default("completed"),
+  payload: z.record(z.any()).optional(),
+});
+
+function buildDefaultWorkflowSteps(type: WorkflowType): WorkflowStepInput[] {
+  if (type === "offboarding") {
+    return [
+      {
+        title: "Collect company assets",
+        description: "Ensure all assigned equipment is returned.",
+        stepType: "asset",
+        status: "pending",
+        orderIndex: 0,
+        metadata: { collectAssets: true },
+      },
+      {
+        title: "Settle outstanding loans",
+        description: "Close any remaining loan balances before exit.",
+        stepType: "loan",
+        status: "pending",
+        orderIndex: 1,
+        metadata: { settleLoans: true },
+      },
+      {
+        title: "Close pending vacations",
+        description: "Cancel or complete pending vacation requests.",
+        stepType: "vacation",
+        status: "pending",
+        orderIndex: 2,
+        metadata: { cancelVacations: true },
+      },
+      {
+        title: "Deactivate employee",
+        description: "Update employment status to terminated once tasks are complete.",
+        stepType: "task",
+        status: "pending",
+        orderIndex: 3,
+        metadata: { setStatus: "terminated" },
+      },
+    ];
+  }
+
+  return [
+    {
+      title: "Collect identity documents",
+      description: "Upload passport and civil ID copies for the employee.",
+      stepType: "document",
+      status: "pending",
+      orderIndex: 0,
+      metadata: { requiredFields: ["passportImage", "civilIdImage"] },
+    },
+    {
+      title: "Assign starter asset",
+      description: "Provide the employee with their initial equipment.",
+      stepType: "asset",
+      status: "pending",
+      orderIndex: 1,
+      metadata: { autoAssign: true },
+    },
+    {
+      title: "Schedule orientation",
+      description: "Coordinate the employee's first-day orientation.",
+      stepType: "task",
+      status: "pending",
+      orderIndex: 2,
+      metadata: {},
+    },
+    {
+      title: "Activate employee",
+      description: "Set the employee's status to active once onboarding is complete.",
+      stepType: "task",
+      status: "pending",
+      orderIndex: 3,
+      metadata: { setStatus: "active" },
+    },
+  ];
+}
 
 function normalizeCustomFieldValue(raw: unknown): string | null {
   if (raw === null || raw === undefined) {
@@ -1104,6 +1192,351 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
       next(new HttpError(500, "Failed to import employees"));
     }
   });
+
+  employeesRouter.get(
+    "/api/employees/:id/workflows",
+    requireRole(["admin", "hr"]),
+    async (req, res, next) => {
+      try {
+        const employee = await storage.getEmployee(req.params.id);
+        if (!employee) {
+          return next(new HttpError(404, "Employee not found"));
+        }
+
+        const rawType = Array.isArray(req.query.type) ? req.query.type[0] : req.query.type;
+        let workflowType: WorkflowType | undefined;
+        if (rawType) {
+          workflowType = workflowTypeSchema.parse(rawType);
+        }
+
+        const workflows = await storage.getEmployeeWorkflows(employee.id, workflowType);
+        const activeWorkflow =
+          workflows.find(workflow => workflow.status === "in_progress" || workflow.status === "pending") ?? null;
+
+        res.json({ workflows, activeWorkflow });
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return next(new HttpError(400, "Invalid workflow type", error.errors));
+        }
+        next(new HttpError(500, "Failed to load workflows", error));
+      }
+    },
+  );
+
+  employeesRouter.post(
+    "/api/employees/:id/workflows/:type/start",
+    requireRole(["admin", "hr"]),
+    async (req, res, next) => {
+      try {
+        const employee = await storage.getEmployee(req.params.id);
+        if (!employee) {
+          return next(new HttpError(404, "Employee not found"));
+        }
+
+        const workflowType = workflowTypeSchema.parse(req.params.type);
+        const existing = await storage.getActiveEmployeeWorkflow(employee.id, workflowType);
+        if (existing) {
+          return res.json({ workflow: existing });
+        }
+
+        const baseWorkflow = insertEmployeeWorkflowSchema.parse({
+          employeeId: employee.id,
+          workflowType,
+          status: "in_progress",
+        });
+        const steps = buildDefaultWorkflowSteps(workflowType);
+        const workflow = await storage.createEmployeeWorkflow(baseWorkflow, steps);
+        const addedBy = await getAddedBy(req);
+        try {
+          await storage.createEmployeeEvent({
+            employeeId: employee.id,
+            eventType: "workflow",
+            title: `${workflowType === "offboarding" ? "Offboarding" : "Onboarding"} workflow started`,
+            description: `Workflow created with ${steps.length} step${steps.length === 1 ? "" : "s"}.`,
+            amount: "0",
+            eventDate: new Date().toISOString().split("T")[0],
+            affectsPayroll: false,
+            recurrenceType: "none",
+            ...(addedBy ? { addedBy } : {}),
+          });
+        } catch (err) {
+          console.warn("Failed to log workflow start event", err);
+        }
+
+        res.status(201).json({ workflow });
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return next(new HttpError(400, "Invalid workflow type", error.errors));
+        }
+        next(new HttpError(500, "Failed to start workflow", error));
+      }
+    },
+  );
+
+  employeesRouter.post(
+    "/api/employees/:employeeId/workflows/:workflowId/steps/:stepId/progress",
+    requireRole(["admin", "hr"]),
+    async (req, res, next) => {
+      try {
+        const { employeeId, workflowId, stepId } = req.params;
+        const employee = await storage.getEmployee(employeeId);
+        if (!employee) {
+          return next(new HttpError(404, "Employee not found"));
+        }
+
+        const { status, payload } = workflowProgressSchema.parse(req.body ?? {});
+        const workflow = await storage.getEmployeeWorkflowById(workflowId);
+        if (!workflow || workflow.employeeId !== employee.id) {
+          return next(new HttpError(404, "Workflow not found"));
+        }
+
+        const step = workflow.steps.find(s => s.id === stepId);
+        if (!step) {
+          return next(new HttpError(404, "Workflow step not found"));
+        }
+
+        const payloadData = (payload ?? {}) as Record<string, unknown>;
+        const metadataResult: Record<string, unknown> = {};
+        const stepMetadata: Record<string, unknown> = { ...(step.metadata ?? {}) };
+        const today = new Date().toISOString().split("T")[0];
+        const addedBy = await getAddedBy(req);
+        let eventDescription: string | null = null;
+        let eventType: InsertEmployeeEvent["eventType"] = "employee_update";
+
+        if (step.stepType === "document") {
+          const required = Array.isArray((step.metadata as any)?.requiredFields)
+            ? ((step.metadata as any)?.requiredFields as string[])
+            : [];
+          const documentsRaw = payloadData.documents;
+          if (!documentsRaw || typeof documentsRaw !== "object") {
+            return next(new HttpError(400, "Document payload is required"));
+          }
+          const documents = documentsRaw as Record<string, unknown>;
+          const updates: Record<string, unknown> = {};
+          for (const field of required) {
+            const value = documents[field];
+            if (typeof value !== "string" || value.trim() === "") {
+              return next(new HttpError(400, `Missing document value for ${field}`));
+            }
+            updates[field] = value;
+          }
+          if (Object.keys(updates).length > 0) {
+            await storage.updateEmployee(employee.id, updates as any);
+            metadataResult.documents = Object.keys(updates);
+            eventType = "document_update";
+            eventDescription = `Updated ${Object.keys(updates).length} document field${
+              Object.keys(updates).length === 1 ? "" : "s"
+            }.`;
+          }
+        } else if (step.stepType === "asset") {
+          if ((step.metadata as any)?.collectAssets) {
+            const assignments = await assetService.getAssignments();
+            const activeAssignments = assignments.filter(
+              assignment =>
+                assignment.employeeId === employee.id &&
+                (assignment.status === "active" || assignment.status === "assigned"),
+            );
+            const returned: string[] = [];
+            for (const assignment of activeAssignments) {
+              await assetService.updateAssignment(assignment.id, {
+                status: "returned",
+                returnDate: today,
+              });
+              returned.push(assignment.id);
+            }
+            metadataResult.returnedAssignments = returned;
+            eventType = "asset_update";
+            eventDescription = returned.length
+              ? `Collected ${returned.length} asset${returned.length === 1 ? "" : "s"}.`
+              : "No assets were assigned to this employee.";
+          } else if ((step.metadata as any)?.autoAssign) {
+            const assets = await storage.getAssets();
+            const available = assets.find(asset => {
+              const status = (asset.status || "").toLowerCase();
+              const hasActiveAssignment = Boolean(asset.currentAssignment);
+              return status === "available" && !hasActiveAssignment;
+            });
+            if (!available) {
+              return next(new HttpError(409, "No available assets to assign"));
+            }
+            const assignment = await assetService.createAssignment({
+              assetId: available.id,
+              employeeId: employee.id,
+              assignedDate: today,
+              status: "active",
+            });
+            metadataResult.assignedAsset = {
+              assetId: available.id,
+              assignmentId: assignment.id,
+            };
+            eventType = "asset_assignment";
+            eventDescription = `Assigned asset ${available.name || available.id} to the employee.`;
+          }
+        } else if (step.stepType === "loan") {
+          const loans = await storage.getLoans();
+          const outstanding = loans.filter(loan =>
+            loan.employeeId === employee.id && ["pending", "active"].includes((loan.status || "").toLowerCase()),
+          );
+          const settled: string[] = [];
+          for (const loan of outstanding) {
+            await storage.updateLoan(loan.id, { status: "settled", remainingAmount: 0 });
+            settled.push(loan.id);
+          }
+          metadataResult.settledLoans = settled;
+          eventDescription = settled.length
+            ? `Settled ${settled.length} loan${settled.length === 1 ? "" : "s"}.`
+            : "No loans required settlement.";
+        } else if (step.stepType === "vacation") {
+          const vacations = await storage.getVacationRequests();
+          const relevant = vacations.filter(vacation =>
+            vacation.employeeId === employee.id &&
+            ["pending", "approved"].includes((vacation.status || "").toLowerCase()),
+          );
+          const closed: string[] = [];
+          for (const vacation of relevant) {
+            await storage.updateVacationRequest(vacation.id, { status: "cancelled" });
+            closed.push(vacation.id);
+          }
+          metadataResult.closedVacations = closed;
+          eventDescription = closed.length
+            ? `Cancelled ${closed.length} vacation request${closed.length === 1 ? "" : "s"}.`
+            : "No pending vacations to close.";
+        } else if (step.stepType === "task") {
+          const note = typeof payloadData.notes === "string" ? payloadData.notes.trim() : "";
+          if (note) {
+            metadataResult.notes = note;
+          }
+          const targetStatus = (step.metadata as any)?.setStatus;
+          if (status === "completed" && typeof targetStatus === "string" && targetStatus.trim()) {
+            if (targetStatus === "terminated") {
+              await storage.terminateEmployee(employee.id);
+            } else {
+              await storage.updateEmployee(employee.id, { status: targetStatus });
+            }
+            eventDescription = `Updated employee status to ${targetStatus}.`;
+          } else if (status === "completed") {
+            eventDescription = `Completed workflow task: ${step.title}.`;
+          }
+        }
+
+        if (!eventDescription && status === "completed") {
+          eventType = "workflow";
+          eventDescription = `Completed workflow step: ${step.title}.`;
+        }
+
+        stepMetadata.lastRunAt = new Date().toISOString();
+        if (Object.keys(metadataResult).length > 0) {
+          stepMetadata.result = metadataResult;
+        }
+
+        const updatedStep = await storage.updateEmployeeWorkflowStep(step.id, {
+          status,
+          completedAt: status === "completed" ? new Date() : null,
+          metadata: stepMetadata,
+        });
+        if (!updatedStep) {
+          throw new Error("Failed to update workflow step");
+        }
+
+        const updatedWorkflow = await storage.getEmployeeWorkflowById(workflowId);
+        if (!updatedWorkflow) {
+          throw new Error("Failed to reload workflow after update");
+        }
+
+        if (eventDescription) {
+          try {
+            await storage.createEmployeeEvent({
+              employeeId: employee.id,
+              eventType,
+              title: `${updatedWorkflow.workflowType === "offboarding" ? "Offboarding" : "Onboarding"}: ${step.title}`,
+              description: eventDescription,
+              amount: "0",
+              eventDate: today,
+              affectsPayroll: false,
+              recurrenceType: "none",
+              ...(addedBy ? { addedBy } : {}),
+            });
+          } catch (err) {
+            console.warn("Failed to log workflow step event", err);
+          }
+        }
+
+        res.json({ workflow: updatedWorkflow, step: updatedStep });
+      } catch (error) {
+        if (error instanceof HttpError) {
+          return next(error);
+        }
+        if (error instanceof z.ZodError) {
+          return next(new HttpError(400, "Invalid workflow step payload", error.errors));
+        }
+        next(new HttpError(500, "Failed to progress workflow", error));
+      }
+    },
+  );
+
+  employeesRouter.post(
+    "/api/employees/:employeeId/workflows/:workflowId/complete",
+    requireRole(["admin", "hr"]),
+    async (req, res, next) => {
+      try {
+        const { employeeId, workflowId } = req.params;
+        const employee = await storage.getEmployee(employeeId);
+        if (!employee) {
+          return next(new HttpError(404, "Employee not found"));
+        }
+
+        const workflow = await storage.getEmployeeWorkflowById(workflowId);
+        if (!workflow || workflow.employeeId !== employee.id) {
+          return next(new HttpError(404, "Workflow not found"));
+        }
+
+        const hasIncomplete = workflow.steps.some(
+          step => step.status !== "completed" && step.status !== "skipped",
+        );
+        if (hasIncomplete) {
+          return next(new HttpError(400, "All workflow steps must be completed before closing the workflow"));
+        }
+
+        const addedBy = await getAddedBy(req);
+        const metadata = {
+          ...(workflow.metadata ?? {}),
+          completedBy: addedBy ?? null,
+        };
+        await storage.updateEmployeeWorkflow(workflow.id, {
+          status: "completed",
+          completedAt: new Date(),
+          metadata,
+        });
+
+        if (workflow.workflowType === "offboarding") {
+          await storage.terminateEmployee(employee.id);
+        } else if (workflow.workflowType === "onboarding") {
+          await storage.updateEmployee(employee.id, { status: "active" });
+        }
+
+        try {
+          await storage.createEmployeeEvent({
+            employeeId: employee.id,
+            eventType: "workflow",
+            title: `${workflow.workflowType === "offboarding" ? "Offboarding" : "Onboarding"} workflow completed`,
+            description: `Workflow completed on ${new Date().toISOString().split("T")[0]}.`,
+            amount: "0",
+            eventDate: new Date().toISOString().split("T")[0],
+            affectsPayroll: false,
+            recurrenceType: "none",
+            ...(addedBy ? { addedBy } : {}),
+          });
+        } catch (err) {
+          console.warn("Failed to log workflow completion event", err);
+        }
+
+        const freshWorkflow = await storage.getEmployeeWorkflowById(workflow.id);
+        res.json({ workflow: freshWorkflow ?? workflow });
+      } catch (error) {
+        next(new HttpError(500, "Failed to complete workflow", error));
+      }
+    },
+  );
 
   employeesRouter.get("/api/employees/:id", async (req, res, next) => {
     try {
