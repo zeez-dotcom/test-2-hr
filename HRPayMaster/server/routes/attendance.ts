@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   insertShiftTemplateSchema,
   insertEmployeeScheduleSchema,
+  type InsertEmployeeSchedule,
 } from "@shared/schema";
 import { requireRole } from "./auth";
 import { HttpError } from "../errorHandler";
@@ -14,7 +15,13 @@ import {
 
 const MANAGER_ROLES = ["admin", "hr", "manager"];
 
-const scheduleAssignmentSchema = insertEmployeeScheduleSchema
+const baseScheduleSchema = insertEmployeeScheduleSchema.omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+} as any);
+
+const scheduleAssignmentSchema = baseScheduleSchema
   .extend({
     scheduleDate: z.string().min(1),
     customStartTime: z.string().min(1).or(z.null()).optional(),
@@ -31,11 +38,6 @@ const scheduleAssignmentSchema = insertEmployeeScheduleSchema
     absenceApprovalStatus: z.enum(["pending", "approved", "rejected"]).optional(),
     overtimeApprovalStatus: z.enum(["pending", "approved", "rejected"]).optional(),
     notes: z.string().optional().nullable(),
-  })
-  .omit({
-    id: true,
-    createdAt: true,
-    updatedAt: true,
   });
 
 const scheduleUpdateSchema = scheduleAssignmentSchema.partial();
@@ -218,7 +220,9 @@ attendanceRouter.post(
   async (req, res, next) => {
     try {
       const payload = createSchedulesSchema.parse(req.body);
-      const created = await storage.createEmployeeSchedules(payload.assignments);
+      const created = await storage.createEmployeeSchedules(
+        payload.assignments as InsertEmployeeSchedule[],
+      );
       res.status(201).json(created.map(serializeSchedule));
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -278,7 +282,7 @@ attendanceRouter.post(
   async (req, res, next) => {
     try {
       const { type, status, notes, minutes } = approvalSchema.parse(req.body);
-      const updates: Partial<z.infer<typeof scheduleAssignmentSchema>> = {};
+      const updates: Partial<InsertEmployeeSchedule> = {};
       if (type === "late") {
         updates.lateApprovalStatus = status;
       } else if (type === "absence") {

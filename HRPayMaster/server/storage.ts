@@ -1342,7 +1342,10 @@ export class DatabaseStorage implements IStorage {
 
   async createCompany(company: InsertCompany): Promise<Company> {
 
-    const [newCompany] = await db.insert(companies).values(company).returning();
+    const [newCompany] = await db
+      .insert(companies)
+      .values(company as typeof companies.$inferInsert)
+      .returning();
 
     return newCompany;
 
@@ -1356,7 +1359,7 @@ export class DatabaseStorage implements IStorage {
 
       .update(companies)
 
-      .set(company)
+      .set(company as Partial<typeof companies.$inferInsert>)
 
       .where(eq(companies.id, id))
 
@@ -4006,25 +4009,41 @@ export class DatabaseStorage implements IStorage {
 
         await tx.insert(loanApprovalStages).values(
 
-          normalized.map(stage => ({
+          normalized.map(stage => {
 
-            loanId,
+            const actedAtValue = stage.actedAt;
 
-            stageName: stage.stageName,
+            const actedAt = actedAtValue
 
-            stageOrder: stage.stageOrder ?? 0,
+              ? typeof actedAtValue === "string"
 
-            approverId: stage.approverId ?? undefined,
+                ? new Date(actedAtValue)
 
-            status: stage.status ?? "pending",
+                : actedAtValue
 
-            actedAt: stage.actedAt ?? undefined,
+              : undefined;
 
-            notes: (stage as any).notes ?? undefined,
+            return {
 
-            metadata: (stage as any).metadata ?? undefined,
+              loanId,
 
-          })),
+              stageName: stage.stageName,
+
+              stageOrder: stage.stageOrder ?? 0,
+
+              approverId: stage.approverId ?? undefined,
+
+              status: stage.status ?? "pending",
+
+              actedAt,
+
+              notes: (stage as any).notes ?? undefined,
+
+              metadata: (stage as any).metadata ?? undefined,
+
+            };
+
+          }),
 
         );
 
