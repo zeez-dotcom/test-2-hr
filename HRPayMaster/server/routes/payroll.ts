@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { HttpError } from "../errorHandler";
-import { LoanPaymentUndoError, storage } from "../storage";
+import { LoanPaymentUndoError, storage, type EmployeeScheduleSummary } from "../storage";
 import {
   insertPayrollRunSchema,
   insertPayrollEntrySchema,
@@ -48,6 +48,7 @@ type PayrollInputs = {
   vacationRequests: VacationRequestWithEmployee[];
   employeeEvents: EmployeeEventRecord[];
   attendanceSummary: Record<string, number>;
+  scheduleSummary: Record<string, EmployeeScheduleSummary>;
 };
 
 const parseAmount = (value: unknown) => {
@@ -148,11 +149,12 @@ const loadPayrollInputs = async ({
   end: Date;
   useAttendance: boolean;
 }): Promise<PayrollInputs> => {
-  const [employees, loans, vacationRequests, rawEvents] = await Promise.all([
+  const [employees, loans, vacationRequests, rawEvents, scheduleSummary] = await Promise.all([
     storage.getEmployees({ status: ["active"], includeTerminated: false }),
     storage.getLoans(start, end),
     storage.getVacationRequests(start, end),
     storage.getEmployeeEvents(start, end),
+    storage.getScheduleSummary(start, end),
   ]);
 
   const attendanceSummary: Record<string, number> = useAttendance
@@ -170,6 +172,7 @@ const loadPayrollInputs = async ({
     vacationRequests,
     employeeEvents,
     attendanceSummary,
+    scheduleSummary,
   };
 };
 
@@ -235,7 +238,7 @@ interface PayrollPreviewResponse {
 
 const buildEmployeePreview = (
   employee: EmployeeWithDepartment,
-  context: Omit<PayrollInputs, "employees" | "attendanceSummary">,
+  context: Omit<PayrollInputs, "employees" | "attendanceSummary" | "scheduleSummary">,
   start: Date,
   end: Date,
 ): PayrollPreviewEmployeeImpact => {
@@ -646,6 +649,7 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
       vacationRequests,
       employeeEvents,
       attendanceSummary,
+      scheduleSummary,
     } = await loadPayrollInputs({ start, end, useAttendance });
 
     if (activeEmployees.length === 0) {
@@ -727,6 +731,64 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
           daysUntilExpiry: 0,
           emailSent: false,
         });
+      }
+
+      const scheduleInfo = scheduleSummary[entry.employeeId];
+      if (scheduleInfo) {
+        const anomalies: string[] = [];
+        if (scheduleInfo.missingPunches > 0) {
+          anomalies.push(
+            `${scheduleInfo.missingPunches} scheduled shift${
+              scheduleInfo.missingPunches === 1 ? "" : "s"
+            } without punches`,
+          );
+        }
+        if (scheduleInfo.pendingAbsence.length > 0) {
+          anomalies.push(
+            `${scheduleInfo.pendingAbsence.length} absence approval${
+              scheduleInfo.pendingAbsence.length === 1 ? "" : "s"
+            } pending`,
+          );
+        }
+        if (scheduleInfo.pendingLate.length > 0) {
+          anomalies.push(
+            `${scheduleInfo.pendingLate.length} late arrival approval${
+              scheduleInfo.pendingLate.length === 1 ? "" : "s"
+            } pending`,
+          );
+        }
+        if (scheduleInfo.pendingOvertime.length > 0) {
+          anomalies.push(
+            `${scheduleInfo.pendingOvertime.length} overtime approval${
+              scheduleInfo.pendingOvertime.length === 1 ? "" : "s"
+            } pending`,
+          );
+        }
+        if (scheduleInfo.overtimeLimitBreaches.length > 0) {
+          anomalies.push(
+            `${scheduleInfo.overtimeLimitBreaches.length} overtime limit breach${
+              scheduleInfo.overtimeLimitBreaches.length === 1 ? "" : "es"
+            } detected`,
+          );
+        }
+
+        if (anomalies.length > 0) {
+          const hasCritical =
+            scheduleInfo.overtimeLimitBreaches.length > 0 || scheduleInfo.missingPunches > 0;
+          await storage.createNotification({
+            employeeId: entry.employeeId,
+            type: "attendance_variance",
+            title: `Schedule variance for ${period}`,
+            message: `Attendance variance detected: ${anomalies.join(
+              "; ",
+            )}.`,
+            priority: hasCritical ? "high" : "medium",
+            status: "unread",
+            expiryDate: endDate,
+            daysUntilExpiry: 0,
+            emailSent: false,
+          });
+        }
       }
     }
 

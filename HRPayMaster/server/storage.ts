@@ -75,6 +75,10 @@ import {
   type InsertCompany,
   type Attendance,
   type InsertAttendance,
+  type ShiftTemplate,
+  type InsertShiftTemplate,
+  type EmployeeSchedule,
+  type InsertEmployeeSchedule,
   type User,
   type SickLeaveTracking,
   type InsertSickLeaveTracking,
@@ -106,10 +110,118 @@ import {
   employeeEvents,
   carRepairs,
   attendance,
+  shiftTemplates,
+  employeeSchedules,
   users,
   allowanceTypes,
   sickLeaveTracking,
 } from "@shared/schema";
+
+export const DEFAULT_OVERTIME_LIMIT_MINUTES = 120;
+
+const MINUTES_PER_DAY = 24 * 60;
+
+const toMinutesFromTimeValue = (value?: string | null): number | undefined => {
+  if (!value) return undefined;
+  const parts = String(value).split(":");
+  if (parts.length < 2) return undefined;
+  const [hoursPart, minutesPart, secondsPart] = parts;
+  const hours = Number.parseInt(hoursPart, 10);
+  const minutes = Number.parseInt(minutesPart ?? "0", 10);
+  const seconds = secondsPart ? Number.parseFloat(secondsPart) : 0;
+  if (![hours, minutes, seconds].every(part => Number.isFinite(part))) {
+    return undefined;
+  }
+  const totalMinutes = hours * 60 + minutes + seconds / 60;
+  return Math.round(totalMinutes);
+};
+
+const resolveBreakMinutes = (value?: number | null) => {
+  if (value === null || value === undefined) return 0;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const computeExpectedMinutes = ({
+  startTime,
+  endTime,
+  breakMinutes,
+  fallback,
+}: {
+  startTime?: string | null;
+  endTime?: string | null;
+  breakMinutes?: number | null;
+  fallback?: number;
+}): number => {
+  const startMinutes = toMinutesFromTimeValue(startTime);
+  const endMinutes = toMinutesFromTimeValue(endTime);
+  if (startMinutes === undefined || endMinutes === undefined) {
+    return fallback ?? 0;
+  }
+  let duration = endMinutes - startMinutes;
+  if (!Number.isFinite(duration)) {
+    return fallback ?? 0;
+  }
+  if (duration < 0) {
+    duration += MINUTES_PER_DAY;
+  }
+  const breakValue = resolveBreakMinutes(breakMinutes);
+  return Math.max(0, Math.round(duration - breakValue));
+};
+
+const calculateAttendanceMinutes = (record: Attendance): number => {
+  const rawHours = (record as any)?.hours;
+  if (rawHours !== undefined && rawHours !== null) {
+    const parsed = Number.parseFloat(String(rawHours));
+    if (Number.isFinite(parsed)) {
+      return Math.max(0, Math.round(parsed * 60));
+    }
+  }
+  if (record.checkIn && record.checkOut) {
+    const start = new Date(record.checkIn as any);
+    const end = new Date(record.checkOut as any);
+    if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
+      const diffMinutes = (end.getTime() - start.getTime()) / (1000 * 60);
+      if (Number.isFinite(diffMinutes)) {
+        return Math.max(0, Math.round(diffMinutes));
+      }
+    }
+  }
+  return 0;
+};
+
+const toDateKey = (value: string | Date): string => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+  return date.toISOString().split("T")[0];
+};
+
+export interface ScheduleAlert {
+  scheduleId: string;
+  date: string;
+  varianceMinutes: number;
+  limitMinutes?: number;
+}
+
+export interface EmployeeScheduleSummary {
+  expectedMinutes: number;
+  actualMinutes: number;
+  missingPunches: number;
+  pendingLate: ScheduleAlert[];
+  pendingAbsence: ScheduleAlert[];
+  pendingOvertime: ScheduleAlert[];
+  overtimeLimitBreaches: ScheduleAlert[];
+}
+
+export interface EmployeeScheduleDetail extends EmployeeSchedule {
+  shiftTemplate?: ShiftTemplate | null;
+  employee?: Employee | null;
+  actualMinutes: number;
+  varianceMinutes: number;
+  attendanceRecords: Attendance[];
+}
 
 
 export class DuplicateEmployeeCodeError extends Error {
@@ -467,6 +579,23 @@ export interface IStorage {
   updateAttendance(id: string, record: Partial<InsertAttendance>): Promise<Attendance | undefined>;
   deleteAttendance(id: string): Promise<boolean>;
   getAttendanceSummary(start: Date, end: Date): Promise<Record<string, number>>; // employeeId -> present days
+  getShiftTemplates(): Promise<ShiftTemplate[]>;
+  createShiftTemplate(template: InsertShiftTemplate): Promise<ShiftTemplate>;
+  updateShiftTemplate(id: string, template: Partial<InsertShiftTemplate>): Promise<ShiftTemplate | undefined>;
+  deleteShiftTemplate(id: string): Promise<boolean>;
+  getEmployeeSchedules(filters?: {
+    start?: Date;
+    end?: Date;
+    employeeId?: string;
+  }): Promise<EmployeeScheduleDetail[]>;
+  getEmployeeSchedule(id: string): Promise<EmployeeScheduleDetail | undefined>;
+  createEmployeeSchedules(assignments: InsertEmployeeSchedule[]): Promise<EmployeeScheduleDetail[]>;
+  updateEmployeeSchedule(
+    id: string,
+    schedule: Partial<InsertEmployeeSchedule>,
+  ): Promise<EmployeeScheduleDetail | undefined>;
+  deleteEmployeeSchedule(id: string): Promise<boolean>;
+  getScheduleSummary(start: Date, end: Date): Promise<Record<string, EmployeeScheduleSummary>>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3671,6 +3800,890 @@ export class DatabaseStorage implements IStorage {
     for (const [emp, days] of Object.entries(present)) {
 
       summary[emp] = days.size;
+
+    }
+
+    return summary;
+
+  }
+
+
+
+  async getShiftTemplates(): Promise<ShiftTemplate[]> {
+
+    return await db.query.shiftTemplates.findMany({
+
+      orderBy: asc(shiftTemplates.name),
+
+    });
+
+  }
+
+
+
+  async createShiftTemplate(template: InsertShiftTemplate): Promise<ShiftTemplate> {
+
+    const expectedMinutes = computeExpectedMinutes({
+
+      startTime: template.startTime as any,
+
+      endTime: template.endTime as any,
+
+      breakMinutes: template.breakMinutes ?? 0,
+
+      fallback: template.expectedMinutes,
+
+    });
+
+    const [created] = await db
+
+      .insert(shiftTemplates)
+
+      .values({
+
+        ...template,
+
+        expectedMinutes,
+
+        overtimeLimitMinutes:
+
+          template.overtimeLimitMinutes ?? DEFAULT_OVERTIME_LIMIT_MINUTES,
+
+        updatedAt: new Date(),
+
+      })
+
+      .returning();
+
+    return created;
+
+  }
+
+
+
+  async updateShiftTemplate(
+
+    id: string,
+
+    template: Partial<InsertShiftTemplate>,
+
+  ): Promise<ShiftTemplate | undefined> {
+
+    const existing = await db.query.shiftTemplates.findFirst({
+
+      where: eq(shiftTemplates.id, id),
+
+    });
+
+    if (!existing) {
+
+      return undefined;
+
+    }
+
+    const startTime =
+
+      template.startTime !== undefined
+
+        ? (template.startTime as any)
+
+        : existing.startTime;
+
+    const endTime =
+
+      template.endTime !== undefined
+
+        ? (template.endTime as any)
+
+        : existing.endTime;
+
+    const breakMinutes =
+
+      template.breakMinutes !== undefined
+
+        ? template.breakMinutes
+
+        : existing.breakMinutes;
+
+    const expectedMinutes = computeExpectedMinutes({
+
+      startTime,
+
+      endTime,
+
+      breakMinutes,
+
+      fallback: template.expectedMinutes ?? existing.expectedMinutes,
+
+    });
+
+    const [updated] = await db
+
+      .update(shiftTemplates)
+
+      .set({
+
+        ...template,
+
+        expectedMinutes,
+
+        overtimeLimitMinutes:
+
+          template.overtimeLimitMinutes ?? existing.overtimeLimitMinutes ?? DEFAULT_OVERTIME_LIMIT_MINUTES,
+
+        updatedAt: new Date(),
+
+      })
+
+      .where(eq(shiftTemplates.id, id))
+
+      .returning();
+
+    return updated || undefined;
+
+  }
+
+
+
+  async deleteShiftTemplate(id: string): Promise<boolean> {
+
+    const result = await db.delete(shiftTemplates).where(eq(shiftTemplates.id, id));
+
+    return (result.rowCount ?? 0) > 0;
+
+  }
+
+
+
+  private async loadScheduleTemplateMap(
+
+    templateIds: Set<string>,
+
+  ): Promise<Map<string, ShiftTemplate>> {
+
+    if (templateIds.size === 0) {
+
+      return new Map();
+
+    }
+
+    const templates = await db.query.shiftTemplates.findMany({
+
+      where: inArray(shiftTemplates.id, Array.from(templateIds)),
+
+    });
+
+    const map = new Map<string, ShiftTemplate>();
+
+    templates.forEach(template => map.set(template.id, template));
+
+    return map;
+
+  }
+
+
+
+  private resolveScheduleInsert(
+
+    assignment: InsertEmployeeSchedule,
+
+    template?: ShiftTemplate,
+
+  ) {
+
+    const scheduleDateKey = toDateKey(assignment.scheduleDate as any);
+
+    const resolvedTemplateId =
+
+      assignment.shiftTemplateId !== undefined
+
+        ? assignment.shiftTemplateId
+
+        : template?.id ?? null;
+
+    const startTimeSource = assignment.customStartTime ?? template?.startTime ?? null;
+
+    const endTimeSource = assignment.customEndTime ?? template?.endTime ?? null;
+
+    const breakMinutesSource =
+
+      assignment.customBreakMinutes ?? template?.breakMinutes ?? 0;
+
+    const expectedMinutes = computeExpectedMinutes({
+
+      startTime: startTimeSource as any,
+
+      endTime: endTimeSource as any,
+
+      breakMinutes: breakMinutesSource,
+
+      fallback: assignment.expectedMinutes ?? template?.expectedMinutes,
+
+    });
+
+    return {
+
+      employeeId: assignment.employeeId,
+
+      scheduleDate: scheduleDateKey as any,
+
+      shiftTemplateId: resolvedTemplateId,
+
+      customStartTime: assignment.customStartTime ?? null,
+
+      customEndTime: assignment.customEndTime ?? null,
+
+      customBreakMinutes: assignment.customBreakMinutes ?? null,
+
+      expectedMinutes,
+
+      overtimeMinutes: assignment.overtimeMinutes ?? 0,
+
+      lateApprovalStatus: assignment.lateApprovalStatus ?? "pending",
+
+      absenceApprovalStatus: assignment.absenceApprovalStatus ?? "pending",
+
+      overtimeApprovalStatus: assignment.overtimeApprovalStatus ?? "pending",
+
+      notes: assignment.notes ?? null,
+
+      updatedAt: new Date(),
+
+    } satisfies typeof employeeSchedules.$inferInsert;
+
+  }
+
+
+
+  private async getSchedulesWithDetails(
+
+    filters?: { start?: Date; end?: Date; employeeId?: string },
+
+  ): Promise<EmployeeScheduleDetail[]> {
+
+    const startKey = filters?.start ? toDateKey(filters.start) : undefined;
+
+    const endKey = filters?.end ? toDateKey(filters.end) : undefined;
+
+    const hasFilters = Boolean(filters?.employeeId || startKey || endKey);
+
+    const schedules = await db.query.employeeSchedules.findMany({
+
+      where: hasFilters
+
+        ? (schedule, { and, eq, gte, lte }) => {
+
+            const clauses: SQL[] = [];
+
+            if (filters?.employeeId) {
+
+              clauses.push(eq(schedule.employeeId, filters.employeeId));
+
+            }
+
+            if (startKey) {
+
+              clauses.push(gte(schedule.scheduleDate, startKey));
+
+            }
+
+            if (endKey) {
+
+              clauses.push(lte(schedule.scheduleDate, endKey));
+
+            }
+
+            if (clauses.length === 0) {
+
+              return undefined as any;
+
+            }
+
+            if (clauses.length === 1) {
+
+              return clauses[0];
+
+            }
+
+            return and(...clauses);
+
+          }
+
+        : undefined,
+
+      with: {
+
+        shiftTemplate: true,
+
+        employee: true,
+
+      },
+
+      orderBy: asc(employeeSchedules.scheduleDate),
+
+    });
+
+    if (schedules.length === 0) {
+
+      return [];
+
+    }
+
+    let rangeStart = filters?.start;
+
+    let rangeEnd = filters?.end;
+
+    if (!rangeStart) {
+
+      const first = schedules[0].scheduleDate as any;
+
+      const parsed = new Date(first);
+
+      if (!Number.isNaN(parsed.getTime())) {
+
+        rangeStart = parsed;
+
+      }
+
+    }
+
+    if (!rangeEnd) {
+
+      const last = schedules[schedules.length - 1].scheduleDate as any;
+
+      const parsed = new Date(last);
+
+      if (!Number.isNaN(parsed.getTime())) {
+
+        rangeEnd = parsed;
+
+      }
+
+    }
+
+    const validRangeStart = rangeStart && !Number.isNaN(rangeStart.getTime()) ? rangeStart : undefined;
+
+    const validRangeEnd = rangeEnd && !Number.isNaN(rangeEnd.getTime()) ? rangeEnd : undefined;
+
+    const attendanceRecords = validRangeStart && validRangeEnd
+
+      ? await this.getAttendance(validRangeStart, validRangeEnd)
+
+      : await this.getAttendance();
+
+    const attendanceMap = new Map<string, Attendance[]>();
+
+    for (const record of attendanceRecords) {
+
+      const key = `${record.employeeId}:${toDateKey(record.date as any)}`;
+
+      const list = attendanceMap.get(key);
+
+      if (list) {
+
+        list.push(record);
+
+      } else {
+
+        attendanceMap.set(key, [record]);
+
+      }
+
+    }
+
+    return schedules.map(schedule => {
+
+      const dateKey = toDateKey(schedule.scheduleDate as any);
+
+      const attendanceKey = `${schedule.employeeId}:${dateKey}`;
+
+      const records = attendanceMap.get(attendanceKey) ?? [];
+
+      const actualMinutes = records.reduce(
+
+        (total, record) => total + calculateAttendanceMinutes(record),
+
+        0,
+
+      );
+
+      const expected = Number(schedule.expectedMinutes ?? 0);
+
+      return {
+
+        ...schedule,
+
+        shiftTemplate: schedule.shiftTemplate || undefined,
+
+        employee: schedule.employee || undefined,
+
+        actualMinutes,
+
+        varianceMinutes: actualMinutes - expected,
+
+        attendanceRecords: records,
+
+      } satisfies EmployeeScheduleDetail;
+
+    });
+
+  }
+
+
+
+  async getEmployeeSchedules(
+
+    filters?: { start?: Date; end?: Date; employeeId?: string },
+
+  ): Promise<EmployeeScheduleDetail[]> {
+
+    return await this.getSchedulesWithDetails(filters);
+
+  }
+
+
+
+  async getEmployeeSchedule(id: string): Promise<EmployeeScheduleDetail | undefined> {
+
+    const schedule = await db.query.employeeSchedules.findFirst({
+
+      where: eq(employeeSchedules.id, id),
+
+      with: {
+
+        shiftTemplate: true,
+
+        employee: true,
+
+      },
+
+    });
+
+    if (!schedule) {
+
+      return undefined;
+
+    }
+
+    const dateKey = toDateKey(schedule.scheduleDate as any);
+
+    const date = new Date(dateKey);
+
+    const attendanceRecords = await this.getAttendanceForEmployee(
+
+      schedule.employeeId,
+
+      date,
+
+      date,
+
+    );
+
+    const actualMinutes = attendanceRecords.reduce(
+
+      (total, record) => total + calculateAttendanceMinutes(record),
+
+      0,
+
+    );
+
+    const expected = Number(schedule.expectedMinutes ?? 0);
+
+    return {
+
+      ...schedule,
+
+      shiftTemplate: schedule.shiftTemplate || undefined,
+
+      employee: schedule.employee || undefined,
+
+      actualMinutes,
+
+      varianceMinutes: actualMinutes - expected,
+
+      attendanceRecords,
+
+    } satisfies EmployeeScheduleDetail;
+
+  }
+
+
+
+  async createEmployeeSchedules(
+
+    assignments: InsertEmployeeSchedule[],
+
+  ): Promise<EmployeeScheduleDetail[]> {
+
+    if (assignments.length === 0) {
+
+      return [];
+
+    }
+
+    const templateIds = new Set<string>();
+
+    for (const assignment of assignments) {
+
+      if (assignment.shiftTemplateId) {
+
+        templateIds.add(assignment.shiftTemplateId);
+
+      }
+
+    }
+
+    const templateMap = await this.loadScheduleTemplateMap(templateIds);
+
+    const now = new Date();
+
+    const values = assignments.map(assignment =>
+
+      this.resolveScheduleInsert(
+
+        assignment,
+
+        assignment.shiftTemplateId ? templateMap.get(assignment.shiftTemplateId) : undefined,
+
+      ),
+
+    );
+
+    const inserted = await db
+
+      .insert(employeeSchedules)
+
+      .values(values)
+
+      .onConflictDoUpdate({
+
+        target: [employeeSchedules.employeeId, employeeSchedules.scheduleDate],
+
+        set: {
+
+          shiftTemplateId: sql`excluded.shift_template_id`,
+
+          customStartTime: sql`excluded.custom_start_time`,
+
+          customEndTime: sql`excluded.custom_end_time`,
+
+          customBreakMinutes: sql`excluded.custom_break_minutes`,
+
+          expectedMinutes: sql`excluded.expected_minutes`,
+
+          overtimeMinutes: sql`excluded.overtime_minutes`,
+
+          lateApprovalStatus: sql`excluded.late_approval_status`,
+
+          absenceApprovalStatus: sql`excluded.absence_approval_status`,
+
+          overtimeApprovalStatus: sql`excluded.overtime_approval_status`,
+
+          notes: sql`excluded.notes`,
+
+          updatedAt: now,
+
+        },
+
+      })
+
+      .returning({ id: employeeSchedules.id, scheduleDate: employeeSchedules.scheduleDate });
+
+    if (inserted.length === 0) {
+
+      return [];
+
+    }
+
+    const ids = new Set(inserted.map(record => record.id));
+
+    const minDate = inserted.reduce<Date | undefined>((acc, record) => {
+
+      const date = new Date(record.scheduleDate as any);
+
+      if (Number.isNaN(date.getTime())) {
+
+        return acc;
+
+      }
+
+      if (!acc || date < acc) return date;
+
+      return acc;
+
+    }, undefined);
+
+    const maxDate = inserted.reduce<Date | undefined>((acc, record) => {
+
+      const date = new Date(record.scheduleDate as any);
+
+      if (Number.isNaN(date.getTime())) {
+
+        return acc;
+
+      }
+
+      if (!acc || date > acc) return date;
+
+      return acc;
+
+    }, undefined);
+
+    const employeeIds = new Set(assignments.map(assignment => assignment.employeeId));
+
+    const filters: { start?: Date; end?: Date; employeeId?: string } = {
+
+      start: minDate,
+
+      end: maxDate,
+
+    };
+
+    if (employeeIds.size === 1) {
+
+      filters.employeeId = assignments[0].employeeId;
+
+    }
+
+    const schedules = await this.getSchedulesWithDetails(filters);
+
+    return schedules.filter(schedule => ids.has(schedule.id));
+
+  }
+
+
+
+  async updateEmployeeSchedule(
+
+    id: string,
+
+    schedule: Partial<InsertEmployeeSchedule>,
+
+  ): Promise<EmployeeScheduleDetail | undefined> {
+
+    const existing = await db.query.employeeSchedules.findFirst({
+
+      where: eq(employeeSchedules.id, id),
+
+    });
+
+    if (!existing) {
+
+      return undefined;
+
+    }
+
+    const templateId =
+
+      schedule.shiftTemplateId !== undefined
+
+        ? schedule.shiftTemplateId
+
+        : existing.shiftTemplateId ?? undefined;
+
+    const template = templateId
+
+      ? await db.query.shiftTemplates.findFirst({
+
+          where: eq(shiftTemplates.id, templateId),
+
+        })
+
+      : undefined;
+
+    const startTime =
+
+      schedule.customStartTime !== undefined
+
+        ? (schedule.customStartTime as any)
+
+        : existing.customStartTime ?? template?.startTime;
+
+    const endTime =
+
+      schedule.customEndTime !== undefined
+
+        ? (schedule.customEndTime as any)
+
+        : existing.customEndTime ?? template?.endTime;
+
+    const breakMinutes =
+
+      schedule.customBreakMinutes !== undefined
+
+        ? schedule.customBreakMinutes
+
+        : existing.customBreakMinutes ?? template?.breakMinutes ?? 0;
+
+    const expectedMinutes = computeExpectedMinutes({
+
+      startTime,
+
+      endTime,
+
+      breakMinutes,
+
+      fallback: schedule.expectedMinutes ?? existing.expectedMinutes ?? template?.expectedMinutes,
+
+    });
+
+    const [updated] = await db
+
+      .update(employeeSchedules)
+
+      .set({
+
+        ...schedule,
+
+        expectedMinutes,
+
+        updatedAt: new Date(),
+
+      })
+
+      .where(eq(employeeSchedules.id, id))
+
+      .returning();
+
+    if (!updated) {
+
+      return undefined;
+
+    }
+
+    return await this.getEmployeeSchedule(updated.id);
+
+  }
+
+
+
+  async deleteEmployeeSchedule(id: string): Promise<boolean> {
+
+    const result = await db.delete(employeeSchedules).where(eq(employeeSchedules.id, id));
+
+    return (result.rowCount ?? 0) > 0;
+
+  }
+
+
+
+  async getScheduleSummary(
+
+    start: Date,
+
+    end: Date,
+
+  ): Promise<Record<string, EmployeeScheduleSummary>> {
+
+    const schedules = await this.getSchedulesWithDetails({ start, end });
+
+    const summary: Record<string, EmployeeScheduleSummary> = {};
+
+    for (const schedule of schedules) {
+
+      const employeeId = schedule.employeeId;
+
+      if (!summary[employeeId]) {
+
+        summary[employeeId] = {
+
+          expectedMinutes: 0,
+
+          actualMinutes: 0,
+
+          missingPunches: 0,
+
+          pendingLate: [],
+
+          pendingAbsence: [],
+
+          pendingOvertime: [],
+
+          overtimeLimitBreaches: [],
+
+        };
+
+      }
+
+      const bucket = summary[employeeId];
+
+      const expected = Number(schedule.expectedMinutes ?? 0);
+
+      const actual = schedule.actualMinutes ?? 0;
+
+      bucket.expectedMinutes += expected;
+
+      bucket.actualMinutes += actual;
+
+      if (expected > 0 && actual === 0) {
+
+        bucket.missingPunches += 1;
+
+      }
+
+      const variance = schedule.varianceMinutes ?? actual - expected;
+
+      const dateKey = toDateKey(schedule.scheduleDate as any);
+
+      if (variance < -30 && (schedule.lateApprovalStatus ?? "pending") === "pending") {
+
+        bucket.pendingLate.push({
+
+          scheduleId: schedule.id,
+
+          date: dateKey,
+
+          varianceMinutes: variance,
+
+        });
+
+      }
+
+      if (actual === 0 && (schedule.absenceApprovalStatus ?? "pending") === "pending") {
+
+        bucket.pendingAbsence.push({
+
+          scheduleId: schedule.id,
+
+          date: dateKey,
+
+          varianceMinutes: variance,
+
+        });
+
+      }
+
+      if (variance > 0 && (schedule.overtimeApprovalStatus ?? "pending") === "pending") {
+
+        bucket.pendingOvertime.push({
+
+          scheduleId: schedule.id,
+
+          date: dateKey,
+
+          varianceMinutes: variance,
+
+        });
+
+      }
+
+      const limit = schedule.shiftTemplate?.overtimeLimitMinutes ?? DEFAULT_OVERTIME_LIMIT_MINUTES;
+
+      if (variance > limit && (schedule.overtimeApprovalStatus ?? "pending") !== "approved") {
+
+        bucket.overtimeLimitBreaches.push({
+
+          scheduleId: schedule.id,
+
+          date: dateKey,
+
+          varianceMinutes: variance,
+
+          limitMinutes: limit,
+
+        });
+
+      }
 
     }
 
