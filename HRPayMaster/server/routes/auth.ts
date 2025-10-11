@@ -2,6 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import { log } from "../vite";
 import passport from "passport";
 import { HttpError } from "../errorHandler";
+import type { PermissionKey, SessionUser } from "@shared/schema";
 
 export const authRouter = Router();
 
@@ -52,17 +53,56 @@ export const ensureAuth = (
   return res.status(401).json(body);
 };
 
-export const requireRole = (roles: string[]) => (
+type AccessPolicy = {
+  roles?: string[];
+  permissions?: PermissionKey | PermissionKey[];
+};
+
+const normalizePermissions = (
+  permissions?: PermissionKey | PermissionKey[],
+): PermissionKey[] => {
+  if (!permissions) return [];
+  return Array.isArray(permissions) ? permissions : [permissions];
+};
+
+const hasAllPermissions = (user: SessionUser, permissions: PermissionKey[]): boolean => {
+  if (permissions.length === 0) return false;
+  return permissions.every(permission => user.permissions.includes(permission));
+};
+
+export const requireAccess = (policy: AccessPolicy) => (
   req: Request,
-  res: Response,
+  _res: Response,
   next: NextFunction,
 ) => {
-  const user = req.user as Express.User & { role?: string };
-  if (req.isAuthenticated() && user?.role && roles.includes(user.role)) {
+  if (!req.isAuthenticated()) {
+    return next(new HttpError(403, "Forbidden"));
+  }
+  const user = req.user as SessionUser | undefined;
+  if (!user) {
+    return next(new HttpError(403, "Forbidden"));
+  }
+
+  const roles = policy.roles ?? [];
+  const permissions = normalizePermissions(policy.permissions);
+  const allowedByRole = roles.length > 0 && roles.includes(user.role);
+  const allowedByPermission = permissions.length > 0 && hasAllPermissions(user, permissions);
+
+  if (
+    (roles.length === 0 && permissions.length === 0) ||
+    allowedByRole ||
+    allowedByPermission
+  ) {
     return next();
   }
+
   next(new HttpError(403, "Forbidden"));
 };
+
+export const requireRole = (roles: string[]) => requireAccess({ roles });
+
+export const requirePermission = (permissions: PermissionKey | PermissionKey[]) =>
+  requireAccess({ permissions });
 
 authRouter.get("/api/me", ensureAuth, (req, res) => {
   res.json(req.user);

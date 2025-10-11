@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { HttpError } from "../errorHandler";
 import { LoanPaymentUndoError, storage, type EmployeeScheduleSummary } from "../storage";
 import {
@@ -19,11 +19,12 @@ import type {
   PayrollFrequencyConfig,
   PayrollExportFormatConfig,
   PayrollScenarioToggle,
+  SessionUser,
 } from "@shared/schema";
 import { z } from "zod";
 import { db } from "../db";
 import { eq } from "drizzle-orm";
-import { requireRole } from "./auth";
+import { requirePermission } from "./auth";
 import {
   calculateEmployeePayroll,
   calculateTotals,
@@ -39,6 +40,28 @@ const deductionsSchema = z.object({
   socialSecurityDeduction: z.number().optional(),
   healthInsuranceDeduction: z.number().optional(),
 });
+
+const logPayrollAudit = async (
+  req: Request,
+  summary: string,
+  entity: { type: string; id?: string | null },
+  metadata?: Record<string, unknown>,
+) => {
+  const actorId = (req.user as SessionUser | undefined)?.id;
+  if (!actorId) return;
+  try {
+    await storage.logSecurityEvent({
+      actorId,
+      eventType: "payroll_change",
+      entityType: entity.type,
+      entityId: entity.id ?? null,
+      summary,
+      metadata: metadata ?? null,
+    });
+  } catch (error) {
+    console.error("Failed to log payroll audit event", error);
+  }
+};
 
 const overridesSchema = z.object({
   skippedVacationIds: z.array(z.string().min(1)).optional(),
@@ -632,7 +655,7 @@ payrollRouter.get("/", async (req, res, next) => {
 // Recalculate payroll run totals (and fix entry netPay based on fields)
 payrollRouter.post(
   "/:id/recalculate",
-  requireRole(["admin", "hr"]),
+  requirePermission("payroll:manage"),
   async (req, res, next) => {
     try {
       const runId = req.params.id;
@@ -748,6 +771,17 @@ payrollRouter.post(
         return next(new HttpError(500, "Failed to load updated payroll run"));
       }
 
+      await logPayrollAudit(
+        req,
+        "Recalculated payroll run totals",
+        { type: "payroll_run", id: runId },
+        {
+          grossAmount: updatedRun.grossAmount,
+          netAmount: updatedRun.netAmount,
+          totalDeductions: updatedRun.totalDeductions,
+        },
+      );
+
       res.json(updatedRun);
     } catch (error) {
       console.error("Recalculate payroll error:", error);
@@ -758,7 +792,7 @@ payrollRouter.post(
 
 payrollRouter.post(
   "/preview",
-  requireRole(["admin", "hr"]),
+  requirePermission("payroll:manage"),
   async (req, res, next) => {
     try {
       const parsed = previewPayrollSchema.parse(req.body ?? {});
@@ -916,21 +950,35 @@ payrollRouter.get("/:id", async (req, res, next) => {
   }
 });
 
-payrollRouter.post("/", async (req, res, next) => {
-  try {
-    const payrollRun = insertPayrollRunSchema.parse(req.body);
-    const newPayrollRun = await storage.createPayrollRun(payrollRun);
-    res.status(201).json(newPayrollRun);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return next(new HttpError(400, "Invalid payroll data", error.errors));
+payrollRouter.post(
+  "/",
+  requirePermission("payroll:manage"),
+  async (req, res, next) => {
+    try {
+      const payrollRun = insertPayrollRunSchema.parse(req.body);
+      const newPayrollRun = await storage.createPayrollRun(payrollRun);
+      await logPayrollAudit(
+        req,
+        "Created payroll run",
+        { type: "payroll_run", id: newPayrollRun.id },
+        {
+          startDate: newPayrollRun.startDate,
+          endDate: newPayrollRun.endDate,
+          status: newPayrollRun.status,
+        },
+      );
+      res.status(201).json(newPayrollRun);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return next(new HttpError(400, "Invalid payroll data", error.errors));
+      }
+      next(new HttpError(500, "Failed to create payroll run"));
     }
-    next(new HttpError(500, "Failed to create payroll run"));
-  }
-});
+  },
+);
 
 
-payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, next) => {
+payrollRouter.post("/generate", requirePermission("payroll:manage"), async (req, res, next) => {
   try {
     const parsed = generatePayrollSchema.parse(req.body ?? {});
 
@@ -1400,6 +1448,18 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
     payrollRun.scenarioKey = scenarioKey;
     payrollRun.scenarioToggles = scenarioToggles;
 
+    await logPayrollAudit(
+      req,
+      "Generated payroll run",
+      { type: "payroll_run", id: payrollRun.id },
+      {
+        startDate: payrollRun.startDate,
+        endDate: payrollRun.endDate,
+        status: payrollRun.status,
+        scenarioKey,
+      },
+    );
+
     res.status(201).json(payrollRun);
   } catch (error) {
     console.error("Payroll generation error:", error);
@@ -1409,13 +1469,22 @@ payrollRouter.post("/generate", requireRole(["admin", "hr"]), async (req, res, n
     next(new HttpError(500, "Failed to generate payroll"));
   }
 });
-payrollRouter.put("/:id", async (req, res, next) => {
+payrollRouter.put(
+  "/:id",
+  requirePermission(["payroll:manage", "payroll:approve"]),
+  async (req, res, next) => {
   try {
     const updates = insertPayrollRunSchema.partial().parse(req.body);
     const updatedPayrollRun = await storage.updatePayrollRun(req.params.id, updates);
     if (!updatedPayrollRun) {
       return next(new HttpError(404, "Payroll run not found"));
     }
+    await logPayrollAudit(
+      req,
+      "Updated payroll run",
+      { type: "payroll_run", id: updatedPayrollRun.id },
+      { updatedFields: Object.keys(updates) },
+    );
     res.json(updatedPayrollRun);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -1427,13 +1496,19 @@ payrollRouter.put("/:id", async (req, res, next) => {
 
 payrollRouter.post(
   "/:id/undo-loan-deductions",
-  requireRole(["admin", "hr"]),
+  requirePermission("payroll:manage"),
   async (req, res, next) => {
     try {
       const result = await storage.undoPayrollRunLoanDeductions(req.params.id);
       if (!result) {
         return next(new HttpError(404, "Payroll run not found"));
       }
+      await logPayrollAudit(
+        req,
+        "Undid payroll loan deductions",
+        { type: "payroll_run", id: req.params.id },
+        { restoredPayments: result.loanPayments.length },
+      );
       res.status(200).json(result);
     } catch (error) {
       if (error instanceof LoanPaymentUndoError) {
@@ -1454,12 +1529,17 @@ payrollRouter.post(
   },
 );
 
-payrollRouter.delete("/:id", async (req, res, next) => {
+payrollRouter.delete(
+  "/:id",
+  requirePermission("payroll:manage"),
+  async (req, res, next) => {
   try {
-    const deleted = await storage.deletePayrollRun(req.params.id);
+    const runId = req.params.id;
+    const deleted = await storage.deletePayrollRun(runId);
     if (!deleted) {
       return next(new HttpError(404, "Payroll run not found"));
     }
+    await logPayrollAudit(req, "Deleted payroll run", { type: "payroll_run", id: runId });
     res.status(204).send();
   } catch (error) {
     if (error instanceof LoanPaymentUndoError) {
@@ -1480,13 +1560,22 @@ payrollRouter.delete("/:id", async (req, res, next) => {
 });
 
 // Payroll entry routes
-payrollRouter.put("/entries/:id", async (req, res, next) => {
+payrollRouter.put(
+  "/entries/:id",
+  requirePermission("payroll:manage"),
+  async (req, res, next) => {
   try {
     const updates = insertPayrollEntrySchema.partial().parse(req.body);
     const updatedEntry = await storage.updatePayrollEntry(req.params.id, updates);
     if (!updatedEntry) {
       return next(new HttpError(404, "Payroll entry not found"));
     }
+    await logPayrollAudit(
+      req,
+      "Updated payroll entry",
+      { type: "payroll_entry", id: updatedEntry.id },
+      { updatedFields: Object.keys(updates), payrollRunId: updatedEntry.payrollRunId },
+    );
     res.json(updatedEntry);
   } catch (error) {
     if (error instanceof z.ZodError) {

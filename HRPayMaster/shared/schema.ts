@@ -24,6 +24,53 @@ import {
   normalizeBigId,
 } from "../server/utils/normalize";
 
+export const permissionKeys = [
+  "payroll:view",
+  "payroll:manage",
+  "payroll:approve",
+  "loans:view",
+  "loans:manage",
+  "loans:approve",
+  "assets:view",
+  "assets:manage",
+  "reports:view",
+  "reports:finance",
+  "employees:custom-field",
+  "security:audit:view",
+  "security:access:request",
+  "security:access:review",
+] as const;
+
+export type PermissionKey = (typeof permissionKeys)[number];
+
+export const defaultRolePermissions: Record<string, PermissionKey[]> = {
+  admin: [...permissionKeys],
+  hr: [
+    "payroll:view",
+    "payroll:manage",
+    "payroll:approve",
+    "loans:view",
+    "loans:manage",
+    "loans:approve",
+    "assets:view",
+    "assets:manage",
+    "reports:view",
+    "reports:finance",
+    "employees:custom-field",
+    "security:audit:view",
+    "security:access:request",
+  ],
+  manager: [
+    "payroll:view",
+    "loans:view",
+    "assets:view",
+    "reports:view",
+    "security:access:request",
+  ],
+  viewer: ["reports:view"],
+  employee: ["security:access:request"],
+};
+
 const parseDate = (v: unknown) => parseDateToISO(v).value;
 
 const parseJsonInput = <T>(schema: z.ZodType<T>) =>
@@ -135,6 +182,96 @@ export const users = pgTable("users", {
   role: text("role").notNull().default("viewer"),
   active: boolean("active").notNull().default(true),
 });
+
+export const permissionSets = pgTable("permission_sets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  key: text("key").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description"),
+  permissions: jsonb("permissions")
+    .$type<PermissionKey[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const userPermissionGrants = pgTable(
+  "user_permission_grants",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    permissionSetId: varchar("permission_set_id")
+      .notNull()
+      .references(() => permissionSets.id, { onDelete: "cascade" }),
+    grantedById: varchar("granted_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    reason: text("reason"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    startsAt: timestamp("starts_at").notNull().defaultNow(),
+    expiresAt: timestamp("expires_at"),
+    revokedAt: timestamp("revoked_at"),
+  },
+  (table) => ({
+    userIdx: index("user_permission_grants_user_idx").on(table.userId),
+    activeIdx: index("user_permission_grants_active_idx").on(
+      table.userId,
+      table.startsAt,
+      table.expiresAt,
+    ),
+  }),
+);
+
+export const accessRequests = pgTable(
+  "access_requests",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    requesterId: varchar("requester_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    permissionSetId: varchar("permission_set_id")
+      .notNull()
+      .references(() => permissionSets.id, { onDelete: "cascade" }),
+    reason: text("reason"),
+    status: text("status").notNull().default("pending"),
+    requestedAt: timestamp("requested_at").notNull().defaultNow(),
+    reviewedAt: timestamp("reviewed_at"),
+    reviewerId: varchar("reviewer_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    startAt: timestamp("start_at"),
+    expiresAt: timestamp("expires_at"),
+    decisionNotes: text("decision_notes"),
+  },
+  (table) => ({
+    requesterIdx: index("access_requests_requester_idx").on(table.requesterId),
+    statusIdx: index("access_requests_status_idx").on(table.status),
+  }),
+);
+
+export const securityAuditEvents = pgTable(
+  "security_audit_events",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    actorId: varchar("actor_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    eventType: text("event_type").notNull(),
+    entityType: text("entity_type"),
+    entityId: text("entity_id"),
+    summary: text("summary"),
+    metadata: jsonb("metadata").$type<Record<string, unknown> | null>(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    eventTypeIdx: index("security_audit_events_type_idx").on(table.eventType),
+    actorIdx: index("security_audit_events_actor_idx").on(table.actorId),
+    createdIdx: index("security_audit_events_created_idx").on(table.createdAt),
+  }),
+);
 
 export const departments = pgTable("departments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1616,6 +1753,32 @@ export const upsertNotificationRoutingRuleSchema =
       steps: z.array(notificationEscalationStepInputSchema).optional().default([]),
     });
 
+export const insertPermissionSetSchema = createInsertSchema(permissionSets).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertUserPermissionGrantSchema = createInsertSchema(
+  userPermissionGrants,
+).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertAccessRequestSchema = createInsertSchema(accessRequests).omit({
+  id: true,
+  requestedAt: true,
+  reviewedAt: true,
+});
+
+export const insertSecurityAuditEventSchema = createInsertSchema(
+  securityAuditEvents,
+).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertEmailAlertSchema = createInsertSchema(emailAlerts).omit({
   id: true,
   createdAt: true,
@@ -1682,6 +1845,33 @@ export const insertEmployeeWorkflowStepSchema = baseInsertEmployeeWorkflowStepSc
 
 // Types
 export type User = typeof users.$inferSelect;
+export type PermissionSet = typeof permissionSets.$inferSelect;
+export type InsertPermissionSet = z.infer<typeof insertPermissionSetSchema>;
+export type UserPermissionGrant = typeof userPermissionGrants.$inferSelect;
+export type InsertUserPermissionGrant = z.infer<
+  typeof insertUserPermissionGrantSchema
+>;
+export type AccessRequest = typeof accessRequests.$inferSelect;
+export type InsertAccessRequest = z.infer<typeof insertAccessRequestSchema>;
+export type SecurityAuditEvent = typeof securityAuditEvents.$inferSelect;
+export type InsertSecurityAuditEvent = z.infer<
+  typeof insertSecurityAuditEventSchema
+>;
+
+export type UserPermissionGrantWithSet = UserPermissionGrant & {
+  permissionSet?: PermissionSet | null;
+};
+
+export type SessionUser = Omit<User, "passwordHash"> & {
+  permissions: PermissionKey[];
+  activeGrants: UserPermissionGrantWithSet[];
+};
+
+export type UserWithPermissions = User & {
+  permissions: PermissionKey[];
+  activeGrants: UserPermissionGrantWithSet[];
+};
+
 export type Department = typeof departments.$inferSelect;
 export type InsertDepartment = z.infer<typeof insertDepartmentSchema>;
 

@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { HttpError } from "../errorHandler";
 import { storage } from "../storage";
 import {
@@ -7,7 +7,8 @@ import {
   loanDocumentInputSchema,
 } from "@shared/schema";
 import { z } from "zod";
-import { requireRole } from "./auth";
+import { requirePermission } from "./auth";
+import type { SessionUser } from "@shared/schema";
 import {
   generateAmortizationSchedule,
   mapScheduleToInsert,
@@ -45,7 +46,30 @@ const toNumber = (value: unknown) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-loansRouter.get("/", async (req, res, next) => {
+const logLoanAudit = async (
+  req: Request,
+  eventType: string,
+  summary: string,
+  loanId: string,
+  metadata?: Record<string, unknown>,
+) => {
+  const actorId = (req.user as SessionUser | undefined)?.id;
+  if (!actorId) return;
+  try {
+    await storage.logSecurityEvent({
+      actorId,
+      eventType,
+      entityType: "loan",
+      entityId: loanId,
+      summary,
+      metadata: metadata ?? null,
+    });
+  } catch (error) {
+    console.error("Failed to log loan audit event", error);
+  }
+};
+
+loansRouter.get("/", requirePermission("loans:view"), async (req, res, next) => {
   try {
     const loans = await storage.getLoans();
     res.json(loans);
@@ -55,7 +79,7 @@ loansRouter.get("/", async (req, res, next) => {
   }
 });
 
-loansRouter.get("/:id", async (req, res, next) => {
+loansRouter.get("/:id", requirePermission("loans:view"), async (req, res, next) => {
   try {
     const loan = await storage.getLoan(req.params.id);
     if (!loan) {
@@ -68,7 +92,10 @@ loansRouter.get("/:id", async (req, res, next) => {
   }
 });
 
-loansRouter.get("/:id/statement", async (req, res, next) => {
+loansRouter.get(
+  "/:id/statement",
+  requirePermission("loans:view"),
+  async (req, res, next) => {
   try {
     const statement = await storage.getLoanStatement(req.params.id);
     if (!statement) {
@@ -81,7 +108,7 @@ loansRouter.get("/:id/statement", async (req, res, next) => {
   }
 });
 
-loansRouter.post("/", requireRole(["admin", "hr"]), async (req, res, next) => {
+loansRouter.post("/", requirePermission("loans:manage"), async (req, res, next) => {
   try {
     const payload = loanCreateSchema.parse({
       ...req.body,
@@ -174,6 +201,18 @@ loansRouter.post("/", requireRole(["admin", "hr"]), async (req, res, next) => {
       });
     } catch {}
 
+    await logLoanAudit(
+      req,
+      "loan_change",
+      "Created loan",
+      newLoan.id,
+      {
+        employeeId: newLoan.employeeId,
+        amount: newLoan.amount,
+        status: newLoan.status,
+      },
+    );
+
     res.status(201).json({ loan: enrichedLoan, policy: policyResult });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -185,13 +224,17 @@ loansRouter.post("/", requireRole(["admin", "hr"]), async (req, res, next) => {
   }
 });
 
-loansRouter.put("/:id", requireRole(["admin", "hr"]), async (req, res, next) => {
+loansRouter.put("/:id", requirePermission(["loans:manage", "loans:approve"]), async (req, res, next) => {
   try {
     const loanId = req.params.id;
     const existingLoan = await storage.getLoan(loanId);
     if (!existingLoan) {
       return next(new HttpError(404, "Loan not found"));
     }
+
+    const previousApprovalState = existingLoan.approvalState;
+    const approvedStageIds: string[] = [];
+    const rejectedStageIds: string[] = [];
 
     const payload = loanUpdateSchema.parse(req.body);
     const {
@@ -216,6 +259,23 @@ loansRouter.put("/:id", requireRole(["admin", "hr"]), async (req, res, next) => 
           status: stage.status,
           notes: stage.notes,
           actedAt: stage.actedAt,
+        });
+        if (stage.status === "approved") {
+          approvedStageIds.push(stage.id);
+        }
+        if (stage.status === "rejected") {
+          rejectedStageIds.push(stage.id);
+        }
+      }
+
+      if (approvedStageIds.length > 0) {
+        await logLoanAudit(req, "loan_approval", "Loan stage approved", loanId, {
+          stageIds: approvedStageIds,
+        });
+      }
+      if (rejectedStageIds.length > 0) {
+        await logLoanAudit(req, "loan_approval", "Loan stage rejected", loanId, {
+          stageIds: rejectedStageIds,
         });
       }
     }
@@ -330,6 +390,13 @@ loansRouter.put("/:id", requireRole(["admin", "hr"]), async (req, res, next) => 
       } as any,
     });
 
+    if (previousApprovalState !== approvalState) {
+      await logLoanAudit(req, "loan_approval", "Loan approval state updated", loanId, {
+        previousApprovalState,
+        approvalState,
+      });
+    }
+
     const finalLoan = await storage.getLoan(loanId);
 
     if (!finalLoan) {
@@ -351,6 +418,19 @@ loansRouter.put("/:id", requireRole(["admin", "hr"]), async (req, res, next) => 
       } catch {}
     }
 
+    await logLoanAudit(
+      req,
+      "loan_change",
+      "Updated loan",
+      loanId,
+      {
+        updatedFields: Object.keys(loanUpdates),
+        stageUpdates: stageUpdates?.map(stage => ({ id: stage.id, status: stage.status })),
+        approvalState,
+        regenerateSchedule: Boolean(regenerateSchedule),
+      },
+    );
+
     res.json({ loan: finalLoan, policy: policyResult });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -361,7 +441,7 @@ loansRouter.put("/:id", requireRole(["admin", "hr"]), async (req, res, next) => 
   }
 });
 
-loansRouter.delete("/:id", requireRole(["admin", "hr"]), async (req, res, next) => {
+loansRouter.delete("/:id", requirePermission("loans:manage"), async (req, res, next) => {
   try {
     const loan = await storage.getLoan(req.params.id);
     const deleted = await storage.deleteLoan(req.params.id);
@@ -382,6 +462,13 @@ loansRouter.delete("/:id", requireRole(["admin", "hr"]), async (req, res, next) 
         });
       }
     } catch {}
+    await logLoanAudit(
+      req,
+      "loan_change",
+      "Deleted loan",
+      req.params.id,
+      loan ? { employeeId: loan.employeeId } : undefined,
+    );
     res.status(204).send();
   } catch (error) {
     console.error("Failed to delete loan:", error);
