@@ -386,6 +386,16 @@ export interface CarAssignmentFilters {
   serial?: string;
 }
 
+export interface GenericDocumentFilters {
+  search?: string;
+  category?: string;
+  tags?: string[];
+  employeeId?: string;
+  signatureStatus?: import("@shared/schema").DocumentSignatureStatus | "all";
+  versionGroupId?: string;
+  latestOnly?: boolean;
+}
+
 export interface IStorage {
   // User methods
   getUserById(id: string): Promise<User | undefined>;
@@ -415,9 +425,24 @@ export interface IStorage {
   createAllowanceType(type: InsertAllowanceType): Promise<AllowanceType>;
 
   // Generic documents
-  getGenericDocuments(): Promise<import("@shared/schema").GenericDocument[]>;
-  createGenericDocument(doc: import("@shared/schema").InsertGenericDocument): Promise<import("@shared/schema").GenericDocument>;
-  updateGenericDocument(id: string, doc: Partial<import("@shared/schema").InsertGenericDocument>): Promise<import("@shared/schema").GenericDocument | undefined>;
+  getGenericDocuments(
+    filters?: GenericDocumentFilters,
+  ): Promise<import("@shared/schema").GenericDocument[]>;
+  getGenericDocument(
+    id: string,
+  ): Promise<import("@shared/schema").GenericDocument | undefined>;
+  createGenericDocument(
+    doc: import("@shared/schema").InsertGenericDocument,
+    options?: { baseDocumentId?: string | null },
+  ): Promise<import("@shared/schema").GenericDocument>;
+  updateGenericDocument(
+    id: string,
+    doc: Partial<import("@shared/schema").InsertGenericDocument>,
+  ): Promise<import("@shared/schema").GenericDocument | undefined>;
+  updateGenericDocumentByEnvelope(
+    envelopeId: string,
+    updates: Partial<import("@shared/schema").InsertGenericDocument>,
+  ): Promise<import("@shared/schema").GenericDocument | undefined>;
   deleteGenericDocument(id: string): Promise<boolean>;
 
   // Templates
@@ -1248,27 +1273,327 @@ export class DatabaseStorage implements IStorage {
 
   }
 
-  async getGenericDocuments(): Promise<import("@shared/schema").GenericDocument[]> {
+  async getGenericDocuments(
+    filters: GenericDocumentFilters = {},
+  ): Promise<import("@shared/schema").GenericDocument[]> {
+    const { genericDocuments } = await import("@shared/schema");
+    const {
+      search,
+      category,
+      tags,
+      employeeId,
+      signatureStatus,
+      versionGroupId,
+      latestOnly = true,
+    } = filters;
 
-    return await db.select().from((await import("@shared/schema")).genericDocuments);
+    const conditions: SQL[] = [];
+
+    if (latestOnly) {
+
+      conditions.push(eq(genericDocuments.isLatest, true));
+
+    }
+
+    if (employeeId) {
+
+      conditions.push(eq(genericDocuments.employeeId, employeeId));
+
+    }
+
+    if (category) {
+
+      conditions.push(ilike(genericDocuments.category, `%${category}%`));
+
+    }
+
+    if (versionGroupId) {
+
+      conditions.push(eq(genericDocuments.versionGroupId, versionGroupId));
+
+    }
+
+    if (signatureStatus && signatureStatus !== "all") {
+
+      conditions.push(eq(genericDocuments.signatureStatus, signatureStatus));
+
+    }
+
+    if (tags && tags.length) {
+
+      const tagConditions = tags
+
+        .map(tag => tag.trim())
+
+        .filter((tag): tag is string => Boolean(tag.length))
+
+        .map(tag => ilike(genericDocuments.tags, `%${tag}%`));
+
+      if (tagConditions.length) {
+
+        const combinedTags = and(...tagConditions);
+
+        if (combinedTags) {
+
+          conditions.push(combinedTags);
+
+        }
+
+      }
+
+    }
+
+    if (search) {
+
+      const likeValue = `%${search}%`;
+
+      const searchCondition = or(
+
+        ilike(genericDocuments.title, likeValue),
+
+        ilike(genericDocuments.description, likeValue),
+
+        ilike(genericDocuments.referenceNumber, likeValue),
+
+        ilike(genericDocuments.controllerNumber, likeValue),
+
+      );
+
+      if (searchCondition) {
+
+        conditions.push(searchCondition);
+
+      }
+
+    }
+
+    const whereClause = conditions.length ? and(...conditions) : undefined;
+
+    const baseQuery = db.select().from(genericDocuments);
+
+    const filteredQuery = whereClause ? baseQuery.where(whereClause) : baseQuery;
+
+    return await filteredQuery.orderBy(
+
+      desc(genericDocuments.createdAt),
+
+      desc(genericDocuments.version),
+
+    );
 
   }
 
-  async createGenericDocument(doc: import("@shared/schema").InsertGenericDocument): Promise<import("@shared/schema").GenericDocument> {
-
+  async getGenericDocument(
+    id: string,
+  ): Promise<import("@shared/schema").GenericDocument | undefined> {
     const { genericDocuments } = await import("@shared/schema");
+    const [row] = await db
 
-    const [row] = await db.insert(genericDocuments).values(doc).returning();
+      .select()
 
-    return row;
+      .from(genericDocuments)
+
+      .where(eq(genericDocuments.id, id))
+
+      .limit(1);
+
+    return row || undefined;
 
   }
 
-  async updateGenericDocument(id: string, doc: Partial<import("@shared/schema").InsertGenericDocument>): Promise<import("@shared/schema").GenericDocument | undefined> {
+  async createGenericDocument(
+
+    doc: import("@shared/schema").InsertGenericDocument,
+
+    options: { baseDocumentId?: string | null } = {},
+
+  ): Promise<import("@shared/schema").GenericDocument> {
+    const { genericDocuments } = await import("@shared/schema");
+    const payload = removeUndefined({ ...doc }) as typeof genericDocuments.$inferInsert;
+
+    const baseDocumentId = options.baseDocumentId;
+
+    return await db.transaction(async (tx) => {
+
+      if (baseDocumentId) {
+
+        const baseDocument = await tx
+
+          .select()
+
+          .from(genericDocuments)
+
+          .where(eq(genericDocuments.id, baseDocumentId))
+
+          .limit(1);
+
+        const current = baseDocument[0];
+
+        if (!current) {
+
+          throw new Error(`Base document ${baseDocumentId} not found`);
+
+        }
+
+        const groupId = current.versionGroupId ?? current.id;
+
+        const [{ maxVersion }] = await tx
+
+          .select({ maxVersion: sql<number>`COALESCE(max(${genericDocuments.version}), 0)` })
+
+          .from(genericDocuments)
+
+          .where(eq(genericDocuments.versionGroupId, groupId));
+
+        await tx
+
+          .update(genericDocuments)
+
+          .set({ isLatest: false })
+
+          .where(eq(genericDocuments.versionGroupId, groupId));
+
+        const [row] = await tx
+
+          .insert(genericDocuments)
+
+          .values({
+
+            ...payload,
+
+            versionGroupId: groupId,
+
+            version: (maxVersion ?? 0) + 1,
+
+            previousVersionId: current.id,
+
+            isLatest: true,
+
+          })
+
+          .returning();
+
+        if (!row) {
+
+          throw new Error("Failed to create document version");
+
+        }
+
+        return row;
+
+      }
+
+      const [row] = await tx.insert(genericDocuments).values(payload).returning();
+
+      if (!row) {
+
+        throw new Error("Failed to create document");
+
+      }
+
+      return row;
+
+    });
+
+  }
+
+  async updateGenericDocument(
+
+    id: string,
+
+    doc: Partial<import("@shared/schema").InsertGenericDocument>,
+
+  ): Promise<import("@shared/schema").GenericDocument | undefined> {
 
     const { genericDocuments } = await import("@shared/schema");
 
-    const [row] = await db.update(genericDocuments).set(doc).where(eq(genericDocuments.id, id)).returning();
+    const updates = removeUndefined({ ...doc }) as Partial<typeof genericDocuments.$inferInsert>;
+
+    delete (updates as any).id;
+
+    delete (updates as any).version;
+
+    delete (updates as any).versionGroupId;
+
+    delete (updates as any).previousVersionId;
+
+    delete (updates as any).createdAt;
+
+    delete (updates as any).isLatest;
+
+    if (Object.keys(updates).length === 0) {
+
+      const current = await this.getGenericDocument(id);
+
+      return current;
+
+    }
+
+    const [row] = await db
+
+      .update(genericDocuments)
+
+      .set(updates)
+
+      .where(eq(genericDocuments.id, id))
+
+      .returning();
+
+    return row || undefined;
+
+  }
+
+  async updateGenericDocumentByEnvelope(
+
+    envelopeId: string,
+
+    updates: Partial<import("@shared/schema").InsertGenericDocument>,
+
+  ): Promise<import("@shared/schema").GenericDocument | undefined> {
+
+    const { genericDocuments } = await import("@shared/schema");
+
+    if (!envelopeId) return undefined;
+
+    const payload = removeUndefined({ ...updates }) as Partial<typeof genericDocuments.$inferInsert>;
+
+    delete (payload as any).id;
+
+    delete (payload as any).version;
+
+    delete (payload as any).versionGroupId;
+
+    delete (payload as any).previousVersionId;
+
+    delete (payload as any).createdAt;
+
+    delete (payload as any).isLatest;
+
+    if (Object.keys(payload).length === 0) {
+
+      const [current] = await db
+
+        .select()
+
+        .from(genericDocuments)
+
+        .where(eq(genericDocuments.signatureEnvelopeId, envelopeId))
+
+        .limit(1);
+
+      return current || undefined;
+
+    }
+
+    const [row] = await db
+
+      .update(genericDocuments)
+
+      .set(payload)
+
+      .where(eq(genericDocuments.signatureEnvelopeId, envelopeId))
+
+      .returning();
 
     return row || undefined;
 
@@ -1276,11 +1601,46 @@ export class DatabaseStorage implements IStorage {
 
   async deleteGenericDocument(id: string): Promise<boolean> {
 
-    const { genericDocuments } = await import("@shared/schema");
+    const existing = await this.getGenericDocument(id);
 
+    if (!existing) return false;
+
+    const { genericDocuments } = await import("@shared/schema");
     const result = await db.delete(genericDocuments).where(eq(genericDocuments.id, id));
 
-    return (result.rowCount ?? 0) > 0;
+    const deleted = (result.rowCount ?? 0) > 0;
+
+    if (!deleted) return false;
+
+    if (existing.isLatest) {
+
+      const [latest] = await db
+
+        .select()
+
+        .from(genericDocuments)
+
+        .where(eq(genericDocuments.versionGroupId, existing.versionGroupId))
+
+        .orderBy(desc(genericDocuments.version))
+
+        .limit(1);
+
+      if (latest) {
+
+        await db
+
+          .update(genericDocuments)
+
+          .set({ isLatest: true })
+
+          .where(eq(genericDocuments.id, latest.id));
+
+      }
+
+    }
+
+    return true;
 
   }
 

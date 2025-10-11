@@ -16,7 +16,6 @@ import {
   insertNotificationSchema,
   insertEmailAlertSchema,
   insertEmployeeEventSchema,
-  insertGenericDocumentSchema,
   insertAttendanceSchema,
   insertAllowanceTypeSchema,
   insertEmployeeCustomFieldSchema,
@@ -31,7 +30,6 @@ import {
   type InsertEmployee,
   type InsertCar,
   type InsertAssetAssignment,
-  type InsertGenericDocument,
   type InsertSickLeaveTracking,
   type EmployeeCustomValueMap,
   type InsertEmployeeWorkflowStep,
@@ -3410,171 +3408,6 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
       res.status(201).json(newEvent);
     } catch (error) {
       next(new HttpError(500, "Failed to save employee document"));
-    }
-  });
-
-  // Generic documents management
-  employeesRouter.get("/api/documents", async (_req, res, next) => {
-    try {
-      const docs = await storage.getGenericDocuments();
-      res.json(docs);
-    } catch (error) {
-      next(new HttpError(500, "Failed to fetch documents"));
-    }
-  });
-  employeesRouter.post("/api/documents", async (req, res, next) => {
-    try {
-      const {
-        title,
-        description,
-        pdfDataUrl,
-        controllerNumber,
-        employeeId,
-        category,
-        tags,
-        referenceNumber,
-        expiryDate,
-        alertDays,
-      } = req.body as Record<string, unknown>;
-
-      const toOptionalString = (value: unknown): string | undefined => {
-        if (typeof value !== "string") return undefined;
-        const valueTrimmed = value.trim();
-        return valueTrimmed.length ? valueTrimmed : undefined;
-      };
-
-      const toNullableString = (value: unknown): string | null => toOptionalString(value) ?? null;
-
-      const toNullableNumber = (value: unknown): number | null => {
-        if (value === null || value === undefined || value === "") {
-          return null;
-        }
-        const numeric = typeof value === "number" ? value : Number(value);
-        return Number.isFinite(numeric) ? numeric : null;
-      };
-
-      const documentUrl = typeof pdfDataUrl === "string" ? pdfDataUrl : "";
-      const normalizedTitle = toOptionalString(title);
-
-      if (!normalizedTitle || !documentUrl) {
-        return next(new HttpError(400, "title and pdfDataUrl are required"));
-      }
-
-      const payload: InsertGenericDocument = {
-        title: normalizedTitle,
-        description: toNullableString(description),
-        documentUrl,
-        controllerNumber: toNullableString(controllerNumber),
-        employeeId: toOptionalString(employeeId) ?? null,
-        category: toNullableString(category),
-        tags: toNullableString(tags),
-        referenceNumber: toNullableString(referenceNumber),
-        expiryDate: toNullableString(expiryDate),
-        alertDays: toNullableNumber(alertDays),
-      };
-
-      const parsed = insertGenericDocumentSchema.safeParse(payload);
-      if (!parsed.success) {
-        return next(new HttpError(400, "Invalid document payload"));
-      }
-
-      const doc = await storage.createGenericDocument(parsed.data);
-      res.status(201).json(doc);
-    } catch (error) {
-      next(new HttpError(500, "Failed to save document"));
-    }
-  });
-  employeesRouter.put("/api/documents/:id", async (req, res, next) => {
-    try {
-      const body = req.body as Record<string, unknown>;
-
-      const toOptionalString = (value: unknown): string | undefined => {
-        if (typeof value !== "string") return undefined;
-        const valueTrimmed = value.trim();
-        return valueTrimmed.length ? valueTrimmed : undefined;
-      };
-
-      const toNullableString = (value: unknown): string | null => toOptionalString(value) ?? null;
-
-      const toNullableNumber = (value: unknown): number | null => {
-        if (value === null || value === undefined || value === "") {
-          return null;
-        }
-        const numeric = typeof value === "number" ? value : Number(value);
-        return Number.isFinite(numeric) ? numeric : null;
-      };
-
-      const updates: Partial<InsertGenericDocument> = {};
-      const hasKey = (key: string) => Object.prototype.hasOwnProperty.call(body, key);
-
-      if (hasKey("title")) {
-        const value = toOptionalString(body.title);
-        if (!value) {
-          return next(new HttpError(400, "title cannot be empty"));
-        }
-        updates.title = value;
-      }
-
-      if (hasKey("description")) {
-        updates.description = toNullableString(body.description);
-      }
-
-      if (hasKey("documentUrl")) {
-        const value = toOptionalString(body.documentUrl);
-        if (!value) {
-          return next(new HttpError(400, "documentUrl cannot be empty"));
-        }
-        updates.documentUrl = value;
-      }
-
-      if (hasKey("controllerNumber")) {
-        updates.controllerNumber = toNullableString(body.controllerNumber);
-      }
-
-      if (hasKey("employeeId")) {
-        const value = toOptionalString(body.employeeId);
-        updates.employeeId = value ?? null;
-      }
-
-      if (hasKey("category")) {
-        updates.category = toNullableString(body.category);
-      }
-
-      if (hasKey("tags")) {
-        updates.tags = toNullableString(body.tags);
-      }
-
-      if (hasKey("referenceNumber")) {
-        updates.referenceNumber = toNullableString(body.referenceNumber);
-      }
-
-      if (hasKey("expiryDate")) {
-        updates.expiryDate = toNullableString(body.expiryDate);
-      }
-
-      if (hasKey("alertDays")) {
-        updates.alertDays = toNullableNumber(body.alertDays);
-      }
-
-      const parsed = insertGenericDocumentSchema.partial().safeParse(updates);
-      if (!parsed.success) {
-        return next(new HttpError(400, "Invalid document update"));
-      }
-
-      const updated = await storage.updateGenericDocument(req.params.id, parsed.data);
-      if (!updated) return next(new HttpError(404, "Document not found"));
-      res.json(updated);
-    } catch (error) {
-      next(new HttpError(500, "Failed to update document"));
-    }
-  });
-  employeesRouter.delete("/api/documents/:id", async (req, res, next) => {
-    try {
-      const ok = await storage.deleteGenericDocument(req.params.id);
-      if (!ok) return next(new HttpError(404, "Document not found"));
-      res.status(204).send();
-    } catch (error) {
-      next(new HttpError(500, "Failed to delete document"));
     }
   });
 
