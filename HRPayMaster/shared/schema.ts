@@ -25,6 +25,23 @@ import {
 
 const parseDate = (v: unknown) => parseDateToISO(v).value;
 
+export type VacationApprovalStep = {
+  approverId: string;
+  status: "pending" | "approved" | "rejected" | "delegated";
+  actedAt?: string | null;
+  notes?: string | null;
+  delegatedToId?: string | null;
+};
+
+export type VacationAuditLogEntry = {
+  id: string;
+  actorId: string;
+  action: "created" | "updated" | "approved" | "rejected" | "delegated" | "comment";
+  actionAt: string;
+  notes?: string | null;
+  metadata?: Record<string, unknown> | null;
+};
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
@@ -181,6 +198,86 @@ export const employeeWorkflowSteps = pgTable(
   }),
 );
 
+export const leaveAccrualPolicies = pgTable(
+  "leave_accrual_policies",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    name: text("name").notNull(),
+    leaveType: text("leave_type").notNull(),
+    accrualRatePerMonth: numeric("accrual_rate_per_month", { precision: 6, scale: 2 }).notNull(),
+    maxBalanceDays: numeric("max_balance_days", { precision: 6, scale: 2 }),
+    carryoverLimitDays: numeric("carryover_limit_days", { precision: 6, scale: 2 }),
+    allowNegativeBalance: boolean("allow_negative_balance").notNull().default(false),
+    effectiveFrom: date("effective_from").notNull(),
+    expiresOn: date("expires_on"),
+    metadata: jsonb("metadata").$type<Record<string, unknown> | null>().default(sql`'{}'::jsonb`),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  t => ({
+    leaveTypeIdx: index("leave_accrual_policies_leave_type_idx").on(t.leaveType),
+    nameIdx: uniqueIndex("leave_accrual_policies_name_idx").on(t.name),
+  }),
+);
+
+export const employeeLeavePolicies = pgTable(
+  "employee_leave_policies",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    employeeId: varchar("employee_id").references(() => employees.id).notNull(),
+    policyId: varchar("policy_id").references(() => leaveAccrualPolicies.id).notNull(),
+    effectiveFrom: date("effective_from").notNull(),
+    effectiveTo: date("effective_to"),
+    customAccrualRatePerMonth: numeric("custom_accrual_rate_per_month", { precision: 6, scale: 2 }),
+    metadata: jsonb("metadata").$type<Record<string, unknown> | null>().default(sql`'{}'::jsonb`),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  t => ({
+    employeePolicyIdx: uniqueIndex("employee_leave_policy_unique")
+      .on(t.employeeId, t.policyId, t.effectiveFrom),
+  }),
+);
+
+export const leaveBalances = pgTable(
+  "leave_balances",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    employeeId: varchar("employee_id").references(() => employees.id).notNull(),
+    leaveType: text("leave_type").notNull(),
+    year: integer("year").notNull(),
+    balanceDays: numeric("balance_days", { precision: 8, scale: 2 }).notNull().default("0"),
+    carryoverDays: numeric("carryover_days", { precision: 8, scale: 2 }).notNull().default("0"),
+    lastAccruedAt: timestamp("last_accrued_at"),
+    policyId: varchar("policy_id").references(() => leaveAccrualPolicies.id),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  t => ({
+    employeeLeaveIdx: uniqueIndex("leave_balances_employee_type_year_idx")
+      .on(t.employeeId, t.leaveType, t.year),
+  }),
+);
+
+export const leaveAccrualLedger = pgTable(
+  "leave_accrual_ledger",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    employeeId: varchar("employee_id").references(() => employees.id).notNull(),
+    policyId: varchar("policy_id").references(() => leaveAccrualPolicies.id).notNull(),
+    leaveType: text("leave_type").notNull(),
+    accrualDate: date("accrual_date").notNull(),
+    amount: numeric("amount", { precision: 6, scale: 2 }).notNull(),
+    balanceAfter: numeric("balance_after", { precision: 8, scale: 2 }),
+    note: text("note"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  t => ({
+    employeePolicyDateIdx: uniqueIndex("leave_accrual_employee_policy_month_idx")
+      .on(t.employeeId, t.policyId, t.accrualDate),
+  }),
+);
+
 export const vacationRequests = pgTable("vacation_requests", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   employeeId: varchar("employee_id").references(() => employees.id).notNull(),
@@ -193,6 +290,16 @@ export const vacationRequests = pgTable("vacation_requests", {
   documentUrl: text("document_url"), // For medical certificates, emergency docs, etc.
   status: text("status").notNull().default("pending"), // pending, approved, rejected
   approvedBy: varchar("approved_by").references(() => employees.id),
+  currentApprovalStep: integer("current_approval_step").notNull().default(0),
+  approvalChain: jsonb("approval_chain")
+    .$type<VacationApprovalStep[]>()
+    .default(sql`'[]'::jsonb`),
+  auditLog: jsonb("audit_log")
+    .$type<VacationAuditLogEntry[]>()
+    .default(sql`'[]'::jsonb`),
+  delegateApproverId: varchar("delegate_approver_id").references(() => employees.id),
+  appliesPolicyId: varchar("applies_policy_id").references(() => leaveAccrualPolicies.id),
+  autoPauseAllowances: boolean("auto_pause_allowances").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -653,11 +760,117 @@ export const insertPayrollEntrySchema = createInsertSchema(payrollEntries)
     }, z.string()),
   });
 
-export const insertVacationRequestSchema = createInsertSchema(vacationRequests).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
+export const insertVacationRequestSchema = createInsertSchema(vacationRequests)
+  .omit({
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+  })
+  .extend({
+    delegateApproverId: z.preprocess(v => {
+      if (v === null) return null;
+      const normalized = emptyToUndef(v);
+      return normalized === undefined ? undefined : normalizeBigId(normalized);
+    }, z.union([z.string(), z.null()]).optional()),
+    appliesPolicyId: z.preprocess(v => {
+      const normalized = emptyToUndef(v);
+      return normalized === undefined ? undefined : normalizeBigId(normalized);
+    }, z.string().optional()),
+    autoPauseAllowances: z.preprocess(parseBoolean, z.boolean().optional()),
+    approvalChain: z
+      .array(
+        z.object({
+          approverId: z.string().min(1),
+          status: z
+            .enum(["pending", "approved", "rejected", "delegated"])
+            .optional()
+            .default("pending"),
+          actedAt: z.string().nullable().optional(),
+          notes: z.string().nullable().optional(),
+          delegatedToId: z.string().nullable().optional(),
+        }),
+      )
+      .optional(),
+    auditLog: z
+      .array(
+        z.object({
+          id: z.string(),
+          actorId: z.string(),
+          action: z.enum(["created", "updated", "approved", "rejected", "delegated", "comment"]),
+          actionAt: z.string(),
+          notes: z.string().nullable().optional(),
+          metadata: z.record(z.any()).nullable().optional(),
+        }),
+      )
+      .optional(),
+  });
+
+export const insertLeaveAccrualPolicySchema = createInsertSchema(leaveAccrualPolicies)
+  .omit({
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+  })
+  .extend({
+    leaveType: z.string().min(1),
+    accrualRatePerMonth: z.preprocess(parseNumber, z.number()),
+    maxBalanceDays: z.preprocess(parseNumber, z.number().optional()),
+    carryoverLimitDays: z.preprocess(parseNumber, z.number().optional()),
+    effectiveFrom: z.preprocess(parseDate, z.string()),
+    expiresOn: z.preprocess(v => {
+      const parsed = parseDate(v);
+      return parsed === null ? undefined : parsed;
+    }, z.string().optional()),
+  });
+
+export const insertEmployeeLeavePolicySchema = createInsertSchema(employeeLeavePolicies)
+  .omit({
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+  })
+  .extend({
+    employeeId: z.preprocess(normalizeBigId, z.string()),
+    policyId: z.preprocess(normalizeBigId, z.string()),
+    effectiveFrom: z.preprocess(parseDate, z.string()),
+    effectiveTo: z.preprocess(v => {
+      const parsed = parseDate(v);
+      return parsed === null ? undefined : parsed;
+    }, z.string().optional()),
+    customAccrualRatePerMonth: z.preprocess(parseNumber, z.number().optional()),
+  });
+
+export const insertLeaveBalanceSchema = createInsertSchema(leaveBalances)
+  .omit({
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+  })
+  .extend({
+    employeeId: z.preprocess(normalizeBigId, z.string()),
+    leaveType: z.string().min(1),
+    year: z.preprocess(parseNumber, z.number().int()),
+    balanceDays: z.preprocess(parseNumber, z.number().optional()),
+    carryoverDays: z.preprocess(parseNumber, z.number().optional()),
+    policyId: z.preprocess(v => {
+      const normalized = emptyToUndef(v);
+      return normalized === undefined ? undefined : normalizeBigId(normalized);
+    }, z.string().optional()),
+  });
+
+export const insertLeaveAccrualLedgerSchema = createInsertSchema(leaveAccrualLedger)
+  .omit({
+    id: true,
+    createdAt: true,
+  })
+  .extend({
+    employeeId: z.preprocess(normalizeBigId, z.string()),
+    policyId: z.preprocess(normalizeBigId, z.string()),
+    leaveType: z.string().min(1),
+    accrualDate: z.preprocess(parseDate, z.string()),
+    amount: z.preprocess(parseNumber, z.number()),
+    balanceAfter: z.preprocess(parseNumber, z.number().optional()),
+  });
 
 export const insertLoanSchema = createInsertSchema(loans)
   .omit({
@@ -927,6 +1140,18 @@ export type InsertPayrollEntry = z.infer<typeof insertPayrollEntrySchema>;
 export type VacationRequest = typeof vacationRequests.$inferSelect;
 export type InsertVacationRequest = z.infer<typeof insertVacationRequestSchema>;
 
+export type LeaveAccrualPolicy = typeof leaveAccrualPolicies.$inferSelect;
+export type InsertLeaveAccrualPolicy = z.infer<typeof insertLeaveAccrualPolicySchema>;
+
+export type EmployeeLeavePolicy = typeof employeeLeavePolicies.$inferSelect;
+export type InsertEmployeeLeavePolicy = z.infer<typeof insertEmployeeLeavePolicySchema>;
+
+export type LeaveBalance = typeof leaveBalances.$inferSelect;
+export type InsertLeaveBalance = z.infer<typeof insertLeaveBalanceSchema>;
+
+export type LeaveAccrualLedgerEntry = typeof leaveAccrualLedger.$inferSelect;
+export type InsertLeaveAccrualLedgerEntry = z.infer<typeof insertLeaveAccrualLedgerSchema>;
+
 export type Loan = typeof loans.$inferSelect;
 export type InsertLoan = z.infer<typeof insertLoanSchema>;
 export type LoanPayment = typeof loanPayments.$inferSelect;
@@ -1114,6 +1339,8 @@ export type PayrollRunWithEntries = PayrollRun & {
 export type VacationRequestWithEmployee = VacationRequest & {
   employee?: Employee;
   approver?: Employee;
+  delegateApprover?: Employee;
+  policy?: LeaveAccrualPolicy;
 };
 
 export type LoanWithEmployee = Loan & {
@@ -1195,6 +1422,53 @@ export const vacationRequestsRelations = relations(vacationRequests, ({ one }) =
   approver: one(employees, {
     fields: [vacationRequests.approvedBy],
     references: [employees.id],
+  }),
+  delegateApprover: one(employees, {
+    fields: [vacationRequests.delegateApproverId],
+    references: [employees.id],
+  }),
+  policy: one(leaveAccrualPolicies, {
+    fields: [vacationRequests.appliesPolicyId],
+    references: [leaveAccrualPolicies.id],
+  }),
+}));
+
+export const leaveAccrualPoliciesRelations = relations(leaveAccrualPolicies, ({ many }) => ({
+  assignments: many(employeeLeavePolicies),
+  balances: many(leaveBalances),
+  ledger: many(leaveAccrualLedger),
+}));
+
+export const employeeLeavePoliciesRelations = relations(employeeLeavePolicies, ({ one }) => ({
+  employee: one(employees, {
+    fields: [employeeLeavePolicies.employeeId],
+    references: [employees.id],
+  }),
+  policy: one(leaveAccrualPolicies, {
+    fields: [employeeLeavePolicies.policyId],
+    references: [leaveAccrualPolicies.id],
+  }),
+}));
+
+export const leaveBalancesRelations = relations(leaveBalances, ({ one }) => ({
+  employee: one(employees, {
+    fields: [leaveBalances.employeeId],
+    references: [employees.id],
+  }),
+  policy: one(leaveAccrualPolicies, {
+    fields: [leaveBalances.policyId],
+    references: [leaveAccrualPolicies.id],
+  }),
+}));
+
+export const leaveAccrualLedgerRelations = relations(leaveAccrualLedger, ({ one }) => ({
+  employee: one(employees, {
+    fields: [leaveAccrualLedger.employeeId],
+    references: [employees.id],
+  }),
+  policy: one(leaveAccrualPolicies, {
+    fields: [leaveAccrualLedger.policyId],
+    references: [leaveAccrualPolicies.id],
   }),
 }));
 

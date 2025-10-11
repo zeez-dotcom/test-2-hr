@@ -14,6 +14,7 @@ import {
   type AnyColumn,
   type SQL,
 } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { db } from "./db";
 import { normalizeAllowanceTitle } from "./utils/payroll";
 
@@ -33,6 +34,8 @@ import {
   type VacationRequest,
   type InsertVacationRequest,
   type VacationRequestWithEmployee,
+  type VacationApprovalStep,
+  type VacationAuditLogEntry,
   type Loan,
   type InsertLoan,
   type LoanWithEmployee,
@@ -87,6 +90,14 @@ import {
   type EmployeeWorkflowStep,
   type InsertEmployeeWorkflowStep,
   type EmployeeWorkflowWithSteps,
+  type LeaveAccrualPolicy,
+  type InsertLeaveAccrualPolicy,
+  type EmployeeLeavePolicy,
+  type InsertEmployeeLeavePolicy,
+  type LeaveBalance,
+  type InsertLeaveBalance,
+  type LeaveAccrualLedgerEntry,
+  type InsertLeaveAccrualLedgerEntry,
   departments,
   companies,
   employees,
@@ -94,6 +105,10 @@ import {
   employeeCustomValues,
   employeeWorkflows,
   employeeWorkflowSteps,
+  leaveAccrualPolicies,
+  employeeLeavePolicies,
+  leaveBalances,
+  leaveAccrualLedger,
   payrollRuns,
   payrollEntries,
   vacationRequests,
@@ -168,6 +183,9 @@ const computeExpectedMinutes = ({
   const breakValue = resolveBreakMinutes(breakMinutes);
   return Math.max(0, Math.round(duration - breakValue));
 };
+
+const removeUndefined = <T extends Record<string, unknown>>(input: T): T =>
+  Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)) as T;
 
 const calculateAttendanceMinutes = (record: Attendance): number => {
   const rawHours = (record as any)?.hours;
@@ -459,6 +477,54 @@ export interface IStorage {
   getPayrollEntries(payrollRunId: string): Promise<PayrollEntry[]>;
   createPayrollEntry(payrollEntry: InsertPayrollEntry): Promise<PayrollEntry>;
   updatePayrollEntry(id: string, payrollEntry: Partial<InsertPayrollEntry>): Promise<PayrollEntry | undefined>;
+  getLeaveAccrualPolicies(): Promise<LeaveAccrualPolicy[]>;
+  getLeaveAccrualPolicy(id: string): Promise<LeaveAccrualPolicy | undefined>;
+  createLeaveAccrualPolicy(policy: InsertLeaveAccrualPolicy): Promise<LeaveAccrualPolicy>;
+  updateLeaveAccrualPolicy(
+    id: string,
+    policy: Partial<InsertLeaveAccrualPolicy>,
+  ): Promise<LeaveAccrualPolicy | undefined>;
+  assignEmployeeLeavePolicy(assignment: InsertEmployeeLeavePolicy): Promise<EmployeeLeavePolicy>;
+  getEmployeeLeavePolicies(filters?: {
+    employeeId?: string;
+    activeOn?: Date;
+  }): Promise<(EmployeeLeavePolicy & { policy?: LeaveAccrualPolicy; employee?: Employee })[]>;
+  getLeaveBalances(filters?: {
+    employeeId?: string;
+    year?: number;
+  }): Promise<(LeaveBalance & { employee?: Employee; policy?: LeaveAccrualPolicy })[]>;
+  getLeaveBalance(
+    employeeId: string,
+    leaveType: string,
+    year: number,
+  ): Promise<LeaveBalance | undefined>;
+  incrementLeaveBalance(args: {
+    employeeId: string;
+    leaveType: string;
+    year: number;
+    delta: number;
+    policyId?: string | null;
+    maxBalanceDays?: number | null;
+    allowNegativeBalance?: boolean;
+  }): Promise<LeaveBalance>;
+  recordLeaveAccrual(
+    entry: InsertLeaveAccrualLedgerEntry & { note?: string },
+  ): Promise<LeaveAccrualLedgerEntry>;
+  getLeaveAccrualLedger(filters?: {
+    employeeId?: string;
+    policyId?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<LeaveAccrualLedgerEntry[]>;
+  applyLeaveUsage(args: {
+    employeeId: string;
+    leaveType: string;
+    year: number;
+    days: number;
+    policyId?: string | null;
+    note?: string;
+    allowNegativeBalance?: boolean;
+  }): Promise<{ balance: LeaveBalance; sick?: SickLeaveTracking | undefined }>;
   getSickLeaveBalance(
     employeeId: string,
     year: number,
@@ -2828,6 +2894,437 @@ export class DatabaseStorage implements IStorage {
 
 
 
+  private normalizeApprovalChain(approvalChain?: VacationApprovalStep[]): VacationApprovalStep[] {
+    if (!approvalChain || !Array.isArray(approvalChain)) {
+      return [];
+    }
+
+    return approvalChain.map((step, index) => ({
+      approverId: step.approverId,
+      status: step.status ?? (index === 0 ? "pending" : "pending"),
+      actedAt: step.actedAt ?? null,
+      notes: step.notes ?? null,
+      delegatedToId: step.delegatedToId ?? null,
+    }));
+  }
+
+  private computeApprovalIndex(approvalChain: VacationApprovalStep[]): number {
+    const pendingIndex = approvalChain.findIndex(step => step.status === "pending" || step.status === "delegated");
+    if (pendingIndex >= 0) {
+      return pendingIndex;
+    }
+    return approvalChain.length > 0 ? approvalChain.length - 1 : 0;
+  }
+
+  // Leave accrual policy methods
+
+  private formatLeaveAccrualPolicyForDb(policy: Partial<InsertLeaveAccrualPolicy>) {
+    const { metadata, ...rest } = policy;
+    const normalizedMetadata =
+      metadata === undefined
+        ? undefined
+        : metadata === null
+          ? null
+          : (metadata as Record<string, unknown>);
+
+    return removeUndefined({
+      ...rest,
+      metadata: normalizedMetadata,
+      accrualRatePerMonth:
+        policy.accrualRatePerMonth !== undefined ? policy.accrualRatePerMonth.toString() : undefined,
+      maxBalanceDays:
+        policy.maxBalanceDays !== undefined && policy.maxBalanceDays !== null
+          ? policy.maxBalanceDays.toString()
+          : undefined,
+      carryoverLimitDays:
+        policy.carryoverLimitDays !== undefined && policy.carryoverLimitDays !== null
+          ? policy.carryoverLimitDays.toString()
+          : undefined,
+    });
+  }
+
+  private formatEmployeeLeavePolicyForDb(
+    assignment: InsertEmployeeLeavePolicy | Partial<InsertEmployeeLeavePolicy>,
+  ) {
+    const { metadata, ...rest } = assignment;
+    const normalizedMetadata =
+      metadata === undefined
+        ? undefined
+        : metadata === null
+          ? null
+          : (metadata as Record<string, unknown>);
+
+    return removeUndefined({
+      ...rest,
+      metadata: normalizedMetadata,
+      customAccrualRatePerMonth:
+        assignment.customAccrualRatePerMonth !== undefined && assignment.customAccrualRatePerMonth !== null
+          ? assignment.customAccrualRatePerMonth.toString()
+          : undefined,
+    });
+  }
+
+  async getLeaveAccrualPolicies(): Promise<LeaveAccrualPolicy[]> {
+    return await db.select().from(leaveAccrualPolicies).orderBy(asc(leaveAccrualPolicies.name));
+  }
+
+  async getLeaveAccrualPolicy(id: string): Promise<LeaveAccrualPolicy | undefined> {
+    return await db.query.leaveAccrualPolicies.findFirst({
+      where: eq(leaveAccrualPolicies.id, id),
+    });
+  }
+
+  async createLeaveAccrualPolicy(policy: InsertLeaveAccrualPolicy): Promise<LeaveAccrualPolicy> {
+    const payload = this.formatLeaveAccrualPolicyForDb(policy) as unknown as InsertLeaveAccrualPolicy;
+
+    const [created] = await db.insert(leaveAccrualPolicies).values(payload as any).returning();
+
+    return created;
+  }
+
+  async updateLeaveAccrualPolicy(
+    id: string,
+    policy: Partial<InsertLeaveAccrualPolicy>,
+  ): Promise<LeaveAccrualPolicy | undefined> {
+    const updatePayload = this.formatLeaveAccrualPolicyForDb(policy) as Partial<InsertLeaveAccrualPolicy>;
+
+    if (Object.keys(updatePayload).length === 0) {
+      return await this.getLeaveAccrualPolicy(id);
+    }
+
+    const [updated] = await db
+      .update(leaveAccrualPolicies)
+      .set({ ...(updatePayload as any), updatedAt: new Date() })
+      .where(eq(leaveAccrualPolicies.id, id))
+      .returning();
+
+    return updated ?? undefined;
+  }
+
+  async assignEmployeeLeavePolicy(assignment: InsertEmployeeLeavePolicy): Promise<EmployeeLeavePolicy> {
+    const payload = this.formatEmployeeLeavePolicyForDb(assignment) as unknown as InsertEmployeeLeavePolicy;
+    const updateSet = removeUndefined({
+      ...payload,
+      employeeId: undefined,
+      policyId: undefined,
+      effectiveFrom: undefined,
+      updatedAt: new Date(),
+    });
+
+    const [record] = await db
+      .insert(employeeLeavePolicies)
+      .values(payload as any)
+      .onConflictDoUpdate({
+        target: [
+          employeeLeavePolicies.employeeId,
+          employeeLeavePolicies.policyId,
+          employeeLeavePolicies.effectiveFrom,
+        ],
+        set: updateSet as any,
+      })
+      .returning();
+
+    return record;
+  }
+
+  async getEmployeeLeavePolicies(filters?: {
+    employeeId?: string;
+    activeOn?: Date;
+  }): Promise<(EmployeeLeavePolicy & { policy?: LeaveAccrualPolicy; employee?: Employee })[]> {
+    const activeOn = filters?.activeOn ? toDateKey(filters.activeOn) : undefined;
+
+    const results = await db.query.employeeLeavePolicies.findMany({
+      where: filters
+        ? (record, helpers) => {
+            const conditions: SQL[] = [];
+            if (filters.employeeId) {
+              conditions.push(helpers.eq(record.employeeId, filters.employeeId));
+            }
+            if (activeOn !== undefined) {
+              const activeDate = activeOn;
+              conditions.push(helpers.lte(record.effectiveFrom, activeDate as any));
+              const effectiveToCondition = helpers.or(
+                helpers.isNull(record.effectiveTo),
+                helpers.gte(record.effectiveTo, activeDate as any),
+              ) as SQL<unknown>;
+              conditions.push(effectiveToCondition);
+            }
+            if (conditions.length === 0) {
+              return undefined;
+            }
+            return helpers.and(...conditions);
+          }
+        : undefined,
+      with: {
+        policy: true,
+        employee: true,
+      },
+      orderBy: [asc(employeeLeavePolicies.employeeId), asc(employeeLeavePolicies.effectiveFrom)],
+    });
+
+    return results.map(record => ({
+      ...record,
+      policy: record.policy ?? undefined,
+      employee: record.employee ?? undefined,
+    }));
+  }
+
+  async getLeaveBalances(filters?: {
+    employeeId?: string;
+    year?: number;
+  }): Promise<(LeaveBalance & { employee?: Employee; policy?: LeaveAccrualPolicy })[]> {
+    const results = await db.query.leaveBalances.findMany({
+      where: filters
+        ? (record, helpers) => {
+            const conditions: SQL[] = [];
+            if (filters.employeeId) {
+              conditions.push(helpers.eq(record.employeeId, filters.employeeId));
+            }
+            if (filters.year !== undefined) {
+              conditions.push(helpers.eq(record.year, filters.year));
+            }
+            if (conditions.length === 0) {
+              return undefined;
+            }
+            return helpers.and(...conditions);
+          }
+        : undefined,
+      with: {
+        employee: true,
+        policy: true,
+      },
+      orderBy: [asc(leaveBalances.leaveType), asc(leaveBalances.employeeId)],
+    });
+
+    return results.map(record => ({
+      ...record,
+      employee: record.employee ?? undefined,
+      policy: record.policy ?? undefined,
+    }));
+  }
+
+  async getLeaveBalance(
+    employeeId: string,
+    leaveType: string,
+    year: number,
+  ): Promise<LeaveBalance | undefined> {
+    return await db.query.leaveBalances.findFirst({
+      where: (record, helpers) =>
+        helpers.and(
+          helpers.eq(record.employeeId, employeeId),
+          helpers.eq(record.leaveType, leaveType),
+          helpers.eq(record.year, year),
+        ),
+    });
+  }
+
+  async incrementLeaveBalance({
+    employeeId,
+    leaveType,
+    year,
+    delta,
+    policyId,
+    maxBalanceDays,
+    allowNegativeBalance,
+  }: {
+    employeeId: string;
+    leaveType: string;
+    year: number;
+    delta: number;
+    policyId?: string | null;
+    maxBalanceDays?: number | null;
+    allowNegativeBalance?: boolean;
+  }): Promise<LeaveBalance> {
+    const existing = await this.getLeaveBalance(employeeId, leaveType, year);
+    const previous = existing ? Number(existing.balanceDays) : 0;
+
+    let nextBalance = previous + delta;
+    const allowNegative = allowNegativeBalance ?? false;
+    if (!allowNegative) {
+      nextBalance = Math.max(0, nextBalance);
+    }
+    if (maxBalanceDays !== undefined && maxBalanceDays !== null) {
+      nextBalance = Math.min(maxBalanceDays, nextBalance);
+    }
+
+    const resolvedPolicyId = policyId ?? (existing?.policyId ?? undefined);
+
+    const payload = removeUndefined({
+      employeeId,
+      leaveType,
+      year,
+      balanceDays: nextBalance.toFixed(2),
+      policyId: resolvedPolicyId ?? null,
+      lastAccruedAt: new Date(),
+    });
+
+    const updateSet = removeUndefined({
+      balanceDays: payload.balanceDays,
+      policyId: payload.policyId,
+      lastAccruedAt: payload.lastAccruedAt,
+      updatedAt: new Date(),
+    });
+
+    const [record] = await db
+      .insert(leaveBalances)
+      .values(payload)
+      .onConflictDoUpdate({
+        target: [leaveBalances.employeeId, leaveBalances.leaveType, leaveBalances.year],
+        set: updateSet,
+      })
+      .returning();
+
+    return record;
+  }
+
+  async recordLeaveAccrual(
+    entry: InsertLeaveAccrualLedgerEntry & { note?: string },
+  ): Promise<LeaveAccrualLedgerEntry> {
+    const accrualDate = toDateKey(entry.accrualDate);
+    const year = Number.parseInt(accrualDate.slice(0, 4), 10);
+    const policy = await this.getLeaveAccrualPolicy(entry.policyId);
+
+    const maxBalance = policy?.maxBalanceDays !== undefined && policy?.maxBalanceDays !== null
+      ? Number(policy.maxBalanceDays)
+      : undefined;
+
+    const balance = await this.incrementLeaveBalance({
+      employeeId: entry.employeeId,
+      leaveType: entry.leaveType,
+      year: Number.isFinite(year) ? year : new Date().getUTCFullYear(),
+      delta: entry.amount,
+      policyId: entry.policyId,
+      maxBalanceDays: maxBalance,
+      allowNegativeBalance: policy?.allowNegativeBalance ?? false,
+    });
+
+    if (entry.leaveType.toLowerCase() === "sick") {
+      const sickYear = Number.isFinite(year) ? year : new Date().getUTCFullYear();
+      const accrualDays = Math.round(entry.amount);
+      if (accrualDays !== 0) {
+        const sickRecord = await this.getSickLeaveBalance(entry.employeeId, sickYear);
+        if (sickRecord) {
+          await this.updateSickLeaveBalance(sickRecord.id, {
+            remainingSickDays: Math.max(0, (sickRecord.remainingSickDays ?? 0) + accrualDays),
+          });
+        } else {
+          await this.createSickLeaveBalance({
+            employeeId: entry.employeeId,
+            year: sickYear,
+            totalSickDaysUsed: 0,
+            remainingSickDays: Math.max(0, accrualDays),
+          });
+        }
+      }
+    }
+
+    const payload = removeUndefined({
+      ...entry,
+      accrualDate,
+      amount: entry.amount.toString(),
+      balanceAfter: balance.balanceDays,
+      note: entry.note,
+    });
+
+    const updateSet = removeUndefined({
+      amount: payload.amount,
+      balanceAfter: payload.balanceAfter,
+      note: payload.note,
+    });
+
+    const [record] = await db
+      .insert(leaveAccrualLedger)
+      .values(payload)
+      .onConflictDoUpdate({
+        target: [leaveAccrualLedger.employeeId, leaveAccrualLedger.policyId, leaveAccrualLedger.accrualDate],
+        set: updateSet,
+      })
+      .returning();
+
+    return record;
+  }
+
+  async getLeaveAccrualLedger(filters?: {
+    employeeId?: string;
+    policyId?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<LeaveAccrualLedgerEntry[]> {
+    const conditions: SQL[] = [];
+    if (filters?.employeeId) {
+      conditions.push(eq(leaveAccrualLedger.employeeId, filters.employeeId));
+    }
+    if (filters?.policyId) {
+      conditions.push(eq(leaveAccrualLedger.policyId, filters.policyId));
+    }
+    if (filters?.startDate) {
+      conditions.push(gte(leaveAccrualLedger.accrualDate, filters.startDate));
+    }
+    if (filters?.endDate) {
+      conditions.push(lte(leaveAccrualLedger.accrualDate, filters.endDate));
+    }
+
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const baseQuery = db.select().from(leaveAccrualLedger);
+    const conditioned = where ? baseQuery.where(where) : baseQuery;
+
+    return await conditioned.orderBy(asc(leaveAccrualLedger.accrualDate));
+  }
+
+  async applyLeaveUsage(args: {
+    employeeId: string;
+    leaveType: string;
+    year: number;
+    days: number;
+    policyId?: string | null;
+    note?: string;
+    allowNegativeBalance?: boolean;
+  }): Promise<{ balance: LeaveBalance; sick?: SickLeaveTracking | undefined }> {
+    const { employeeId, leaveType, year, days, policyId, allowNegativeBalance } = args;
+    const negativeDelta = -Math.abs(days);
+    const resolvedPolicyId = policyId ?? undefined;
+
+    const policy = resolvedPolicyId ? await this.getLeaveAccrualPolicy(resolvedPolicyId) : undefined;
+
+    const balance = await this.incrementLeaveBalance({
+      employeeId,
+      leaveType,
+      year,
+      delta: negativeDelta,
+      policyId: resolvedPolicyId,
+      maxBalanceDays:
+        policy?.maxBalanceDays !== undefined && policy?.maxBalanceDays !== null
+          ? Number(policy.maxBalanceDays)
+          : undefined,
+      allowNegativeBalance: allowNegativeBalance ?? policy?.allowNegativeBalance ?? false,
+    });
+
+    let sickRecord: SickLeaveTracking | undefined;
+    if (leaveType.toLowerCase() === "sick") {
+      sickRecord = await this.getSickLeaveBalance(employeeId, year);
+      const daysUsed = Math.abs(Math.round(days));
+      if (!sickRecord) {
+        sickRecord = await this.createSickLeaveBalance({
+          employeeId,
+          year,
+          totalSickDaysUsed: daysUsed,
+          remainingSickDays: Math.max(0, 14 - daysUsed),
+        });
+      } else {
+        const updated = removeUndefined({
+          totalSickDaysUsed: (sickRecord.totalSickDaysUsed ?? 0) + daysUsed,
+          remainingSickDays: Math.max(0, (sickRecord.remainingSickDays ?? 0) + negativeDelta),
+        });
+        sickRecord = (await this.updateSickLeaveBalance(sickRecord.id, updated)) ?? sickRecord;
+      }
+    }
+
+    return { balance, sick: sickRecord };
+  }
+
+
+
   // Sick leave balance methods
 
   async getSickLeaveBalance(
@@ -2907,6 +3404,10 @@ export class DatabaseStorage implements IStorage {
 
         approver: true,
 
+        delegateApprover: true,
+
+        policy: true,
+
       },
 
       where,
@@ -2923,6 +3424,22 @@ export class DatabaseStorage implements IStorage {
 
       approver: req.approver || undefined,
 
+      delegateApprover: req.delegateApprover || undefined,
+
+      policy: req.policy || undefined,
+
+      approvalChain: Array.isArray(req.approvalChain)
+
+        ? (req.approvalChain as VacationApprovalStep[])
+
+        : [],
+
+      auditLog: Array.isArray(req.auditLog)
+
+        ? (req.auditLog as VacationAuditLogEntry[])
+
+        : [],
+
     }));
 
   }
@@ -2930,79 +3447,85 @@ export class DatabaseStorage implements IStorage {
 
 
   async getVacationRequest(id: string): Promise<VacationRequestWithEmployee | undefined> {
-
     const vacationRequest = await db.query.vacationRequests.findFirst({
-
       where: eq(vacationRequests.id, id),
-
       with: {
-
         employee: true,
-
         approver: true,
-
+        delegateApprover: true,
+        policy: true,
       },
-
     });
 
     if (!vacationRequest) return undefined;
 
     return {
-
       ...vacationRequest,
-
       employee: vacationRequest.employee || undefined,
-
       approver: vacationRequest.approver || undefined,
-
+      delegateApprover: vacationRequest.delegateApprover || undefined,
+      policy: vacationRequest.policy || undefined,
     };
-
   }
 
 
 
   async createVacationRequest(vacationRequest: InsertVacationRequest): Promise<VacationRequest> {
+    const approvalChain = this.normalizeApprovalChain(vacationRequest.approvalChain);
+    const currentApprovalStep = this.computeApprovalIndex(approvalChain);
+    const auditLog: VacationAuditLogEntry[] = Array.isArray(vacationRequest.auditLog)
+      ? [...vacationRequest.auditLog]
+      : [];
+    auditLog.push({
+      id: randomUUID(),
+      actorId: vacationRequest.employeeId,
+      action: "created",
+      actionAt: new Date().toISOString(),
+      notes: vacationRequest.reason ?? null,
+      metadata: null,
+    });
 
     const [newVacationRequest] = await db
-
       .insert(vacationRequests)
-
       .values({
-
         ...vacationRequest,
-
         status: vacationRequest.status || "pending",
-
+        approvalChain,
+        currentApprovalStep,
+        auditLog,
       })
-
       .returning();
 
     return newVacationRequest;
-
   }
 
 
 
   async updateVacationRequest(id: string, vacationRequest: Partial<InsertVacationRequest>): Promise<VacationRequest | undefined> {
+    const updateData: Partial<InsertVacationRequest> & { updatedAt: Date } = {
+      ...vacationRequest,
+      updatedAt: new Date(),
+    };
+
+    if (vacationRequest.approvalChain !== undefined) {
+      const normalized = this.normalizeApprovalChain(vacationRequest.approvalChain as VacationApprovalStep[]);
+      (updateData as any).approvalChain = normalized;
+      (updateData as any).currentApprovalStep = this.computeApprovalIndex(normalized);
+    }
+
+    if (vacationRequest.auditLog !== undefined) {
+      (updateData as any).auditLog = vacationRequest.auditLog;
+    }
+
+    const sanitized = removeUndefined(updateData as Record<string, unknown>);
 
     const [updated] = await db
-
       .update(vacationRequests)
-
-      .set({
-
-        ...vacationRequest,
-
-        updatedAt: new Date(),
-
-      })
-
+      .set(sanitized as any)
       .where(eq(vacationRequests.id, id))
-
       .returning();
 
     return updated || undefined;
-
   }
 
 

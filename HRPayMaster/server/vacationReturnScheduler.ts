@@ -102,3 +102,80 @@ export async function processVacationReturnAlerts(now: Date = new Date()): Promi
 
   return processed;
 }
+
+const toMonthStartISO = (date: Date) =>
+  new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1)).toISOString().split("T")[0];
+
+const toMonthStartDate = (date: Date) => new Date(`${toMonthStartISO(date)}T00:00:00Z`);
+
+const toNumber = (value: unknown) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+export async function postMonthlyLeaveAccruals(
+  now: Date = new Date(),
+): Promise<{ processed: number; postings: number; skipped: number }> {
+  const accrualDateISO = toMonthStartISO(now);
+  const accrualDate = toMonthStartDate(now);
+
+  const policies = await storage.getLeaveAccrualPolicies();
+  if (policies.length === 0) {
+    return { processed: 0, postings: 0, skipped: 0 };
+  }
+
+  const assignments = await storage.getEmployeeLeavePolicies({ activeOn: accrualDate });
+  let postings = 0;
+  let skipped = 0;
+
+  for (const assignment of assignments) {
+    const policy = policies.find(item => item.id === assignment.policyId);
+    if (!policy) {
+      skipped += 1;
+      continue;
+    }
+
+    if (policy.expiresOn && policy.expiresOn < accrualDateISO) {
+      skipped += 1;
+      continue;
+    }
+
+    const existing = await storage.getLeaveAccrualLedger({
+      policyId: assignment.policyId,
+      employeeId: assignment.employeeId,
+      startDate: accrualDateISO,
+      endDate: accrualDateISO,
+    });
+
+    if (existing.length > 0) {
+      skipped += 1;
+      continue;
+    }
+
+    const overrideRate = assignment.customAccrualRatePerMonth ?? null;
+    const baseRate = toNumber(policy.accrualRatePerMonth);
+    const accrualAmount = overrideRate !== null && overrideRate !== undefined ? toNumber(overrideRate) : baseRate;
+
+    if (!Number.isFinite(accrualAmount) || accrualAmount === 0) {
+      skipped += 1;
+      continue;
+    }
+
+    try {
+      await storage.recordLeaveAccrual({
+        employeeId: assignment.employeeId,
+        policyId: assignment.policyId,
+        leaveType: policy.leaveType,
+        accrualDate: accrualDateISO,
+        amount: accrualAmount,
+        note: `Automated accrual for ${accrualDate.toLocaleString('en-US', { month: 'long', year: 'numeric' })}`,
+      });
+      postings += 1;
+    } catch (error) {
+      console.warn('Failed to record leave accrual:', error);
+      skipped += 1;
+    }
+  }
+
+  return { processed: assignments.length, postings, skipped };
+}
