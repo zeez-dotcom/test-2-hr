@@ -23,6 +23,7 @@ import {
   type InsertCar,
   type InsertAssetAssignment,
   type InsertGenericDocument,
+  type InsertSickLeaveTracking,
 } from "@shared/schema";
 import {
   sendEmail,
@@ -137,6 +138,26 @@ async function getAddedBy(req: Request): Promise<string | undefined> {
 }
 
 const upload = multer({ storage: multer.memoryStorage() });
+
+const DEFAULT_SICK_LEAVE_DAYS = 14;
+
+const sickLeaveBalanceUpdateSchema = z
+  .object({
+    year: z.coerce.number().int().min(1900).max(9999),
+    daysUsed: z.coerce.number().int().min(1).optional(),
+    totalSickDaysUsed: z.coerce.number().int().min(0).optional(),
+    remainingSickDays: z.coerce.number().int().min(0).optional(),
+  })
+  .refine(
+    (data) =>
+      typeof data.daysUsed === "number" ||
+      typeof data.totalSickDaysUsed === "number" ||
+      typeof data.remainingSickDays === "number",
+    {
+      message: "At least one update field must be provided",
+      path: ["daysUsed"],
+    },
+  );
 
 export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
   "Employee Code/معرف الموظف",
@@ -913,6 +934,126 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
       next(new HttpError(500, "Failed to fetch employee"));
     }
   });
+
+  employeesRouter.get(
+    "/api/employees/:id/sick-leave-balance",
+    async (req, res, next) => {
+      try {
+        const employee = await storage.getEmployee(req.params.id);
+        if (!employee) {
+          return next(new HttpError(404, "Employee not found"));
+        }
+
+        const rawYear = req.query.year;
+        const yearParam = Array.isArray(rawYear) ? rawYear[0] : rawYear;
+        const parsedYear =
+          yearParam === undefined || yearParam === null || yearParam === ""
+            ? new Date().getFullYear()
+            : Number.parseInt(String(yearParam), 10);
+
+        if (!Number.isInteger(parsedYear)) {
+          return next(new HttpError(400, "Invalid year parameter"));
+        }
+
+        let balance = await storage.getSickLeaveBalance(employee.id, parsedYear);
+        if (!balance) {
+          balance = await storage.createSickLeaveBalance({
+            employeeId: employee.id,
+            year: parsedYear,
+            totalSickDaysUsed: 0,
+            remainingSickDays: DEFAULT_SICK_LEAVE_DAYS,
+          });
+        }
+
+        res.json(balance);
+      } catch (error) {
+        console.error("Failed to fetch sick leave balance:", error);
+        next(new HttpError(500, "Failed to fetch sick leave balance"));
+      }
+    },
+  );
+
+  employeesRouter.post(
+    "/api/employees/:id/sick-leave-balance",
+    async (req, res, next) => {
+      try {
+        const employee = await storage.getEmployee(req.params.id);
+        if (!employee) {
+          return next(new HttpError(404, "Employee not found"));
+        }
+
+        const payload = sickLeaveBalanceUpdateSchema.parse(req.body);
+
+        let balance = await storage.getSickLeaveBalance(employee.id, payload.year);
+        if (!balance) {
+          balance = await storage.createSickLeaveBalance({
+            employeeId: employee.id,
+            year: payload.year,
+            totalSickDaysUsed: 0,
+            remainingSickDays: DEFAULT_SICK_LEAVE_DAYS,
+          });
+        }
+
+        const updates: Partial<InsertSickLeaveTracking> = {};
+
+        if (typeof payload.daysUsed === "number") {
+          if (payload.daysUsed > balance.remainingSickDays) {
+            return next(
+              new HttpError(
+                400,
+                `Requested sick leave days (${payload.daysUsed}) exceed remaining balance (${balance.remainingSickDays})`,
+              ),
+            );
+          }
+          updates.totalSickDaysUsed = balance.totalSickDaysUsed + payload.daysUsed;
+          updates.remainingSickDays = balance.remainingSickDays - payload.daysUsed;
+        }
+
+        if (typeof payload.totalSickDaysUsed === "number") {
+          updates.totalSickDaysUsed = payload.totalSickDaysUsed;
+        }
+
+        if (typeof payload.remainingSickDays === "number") {
+          updates.remainingSickDays = payload.remainingSickDays;
+        }
+
+        if (
+          updates.remainingSickDays !== undefined &&
+          updates.remainingSickDays < 0
+        ) {
+          return next(new HttpError(400, "Remaining sick days cannot be negative"));
+        }
+
+        if (
+          updates.totalSickDaysUsed !== undefined &&
+          updates.totalSickDaysUsed < 0
+        ) {
+          return next(new HttpError(400, "Total sick days used cannot be negative"));
+        }
+
+        if (Object.keys(updates).length === 0) {
+          return res.json(balance);
+        }
+
+        const updated = await storage.updateSickLeaveBalance(balance.id, updates);
+        if (updated) {
+          return res.json(updated);
+        }
+
+        const refreshed = await storage.getSickLeaveBalance(
+          employee.id,
+          payload.year,
+        );
+        res.json(refreshed ?? balance);
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return next(new HttpError(400, "Invalid sick leave update", error.errors));
+        }
+        console.error("Failed to update sick leave balance:", error);
+        next(new HttpError(500, "Failed to update sick leave balance"));
+      }
+    },
+  );
 
   employeesRouter.post("/api/employees", async (req, res, next) => {
     try {
