@@ -11,6 +11,7 @@ import { metricsRouter } from "./metrics";
 import { templatesRouter } from "./routes/templates";
 import { usersRouter } from "./routes/users";
 import { attendanceRouter } from "./routes/attendance";
+import { documentsRouter } from "./routes/documents";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/healthz", (_req, res) => {
@@ -26,6 +27,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use("/api/payroll", payrollRouter);
   app.use("/api/loans", loansRouter);
   app.use("/api/cars", carsRouter);
+  app.use(documentsRouter);
   app.use(templatesRouter);
   app.use(chatbotRouter);
   const httpServer = createServer(app);

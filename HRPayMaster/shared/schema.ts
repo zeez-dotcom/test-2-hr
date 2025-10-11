@@ -12,6 +12,7 @@ import {
   jsonb,
   time,
   uniqueIndex,
+  foreignKey,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -596,20 +597,55 @@ export const assetDocuments = pgTable("asset_documents", {
 });
 
 // Generic generated documents (optionally linked to employee)
-export const genericDocuments = pgTable("generic_documents", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  employeeId: varchar("employee_id").references(() => employees.id),
-  title: text("title").notNull(),
-  description: text("description"),
-  documentUrl: text("document_url").notNull(),
-  category: text("category"),
-  tags: text("tags"),
-  referenceNumber: text("reference_number"),
-  controllerNumber: text("controller_number"),
-  expiryDate: date("expiry_date"),
-  alertDays: integer("alert_days"),
-  createdAt: timestamp("created_at").defaultNow(),
-});
+export const genericDocuments = pgTable(
+  "generic_documents",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    employeeId: varchar("employee_id").references(() => employees.id),
+    title: text("title").notNull(),
+    description: text("description"),
+    documentUrl: text("document_url").notNull(),
+    category: text("category"),
+    tags: text("tags"),
+    referenceNumber: text("reference_number"),
+    controllerNumber: text("controller_number"),
+    expiryDate: date("expiry_date"),
+    alertDays: integer("alert_days"),
+    metadata: jsonb("metadata")
+      .$type<Record<string, unknown>>()
+      .default(sql`'{}'::jsonb`),
+    versionGroupId: varchar("version_group_id")
+      .notNull()
+      .default(sql`gen_random_uuid()`),
+    version: integer("version").notNull().default(1),
+    previousVersionId: varchar("previous_version_id"),
+    isLatest: boolean("is_latest").notNull().default(true),
+    generatedFromTemplateKey: text("generated_from_template_key"),
+    generatedByUserId: varchar("generated_by_user_id").references(() => users.id),
+    signatureStatus: text("signature_status").default("not_requested"),
+    signatureProvider: text("signature_provider"),
+    signatureEnvelopeId: text("signature_envelope_id"),
+    signatureRecipientEmail: text("signature_recipient_email"),
+    signatureRequestedAt: timestamp("signature_requested_at"),
+    signatureCompletedAt: timestamp("signature_completed_at"),
+    signatureDeclinedAt: timestamp("signature_declined_at"),
+    signatureCancelledAt: timestamp("signature_cancelled_at"),
+    signatureMetadata: jsonb("signature_metadata")
+      .$type<Record<string, unknown>>()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => ({
+    versionGroupIdx: index("generic_documents_version_group_idx").on(table.versionGroupId),
+    signatureStatusIdx: index("generic_documents_signature_status_idx").on(table.signatureStatus),
+    employeeIdx: index("generic_documents_employee_idx").on(table.employeeId),
+    previousVersionFk: foreignKey({
+      columns: [table.previousVersionId],
+      foreignColumns: [table.id],
+      name: "generic_documents_previous_version_id_fk",
+    }).onDelete("set null"),
+  }),
+);
 
 // Document templates (NOC/Offer/Warning/Experience) editable in Settings
 export const templates = pgTable("templates", {
@@ -1358,10 +1394,33 @@ export const insertAssetDocumentSchema = createInsertSchema(assetDocuments).omit
   createdAt: true,
 });
 
-export const insertGenericDocumentSchema = createInsertSchema(genericDocuments).omit({
+export const documentSignatureStatusSchema = z.enum([
+  "not_requested",
+  "draft",
+  "sent",
+  "viewed",
+  "completed",
+  "declined",
+  "voided",
+  "error",
+]);
+
+const baseInsertGenericDocumentSchema = createInsertSchema(genericDocuments).omit({
   id: true,
   createdAt: true,
+  version: true,
+  versionGroupId: true,
+  previousVersionId: true,
+  isLatest: true,
 });
+
+export const insertGenericDocumentSchema = baseInsertGenericDocumentSchema.extend({
+  metadata: parseJsonInput(z.record(z.unknown()).optional()),
+  signatureMetadata: parseJsonInput(z.record(z.unknown()).optional()),
+  signatureStatus: documentSignatureStatusSchema.optional(),
+});
+
+export type DocumentSignatureStatus = z.infer<typeof documentSignatureStatusSchema>;
 
 export const insertAssetRepairSchema = createInsertSchema(assetRepairs).omit({
   id: true,
