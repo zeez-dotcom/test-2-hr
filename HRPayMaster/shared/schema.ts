@@ -827,6 +827,45 @@ export const notifications = pgTable("notifications", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const reportSchedules = pgTable("report_schedules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  reportType: text("report_type").notNull(),
+  filters: jsonb("filters")
+    .$type<Record<string, unknown>>()
+    .notNull()
+    .default(sql`'{}'::jsonb`),
+  groupings: jsonb("groupings")
+    .$type<string[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
+  exportFormat: text("export_format").notNull().default("json"),
+  cadence: text("cadence").notNull().default("monthly"),
+  runTime: time("run_time"),
+  timezone: text("timezone").notNull().default("UTC"),
+  deliveryChannels: jsonb("delivery_channels")
+    .$type<NotificationChannel[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
+  recipients: jsonb("recipients")
+    .$type<string[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
+  notifyEmployeeIds: jsonb("notify_employee_ids")
+    .$type<string[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
+  createdBy: varchar("created_by").references(() => users.id),
+  status: text("status").notNull().default("active"),
+  lastRunStatus: text("last_run_status"),
+  lastRunSummary: text("last_run_summary"),
+  lastRunAt: timestamp("last_run_at"),
+  nextRunAt: timestamp("next_run_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Email alerts log
 export const emailAlerts = pgTable("email_alerts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1529,6 +1568,16 @@ export const insertNotificationSchema = baseInsertNotificationSchema.extend({
   escalationStatus: notificationEscalationStatusSchema.optional(),
 });
 
+export const insertReportScheduleSchema = createInsertSchema(reportSchedules).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  lastRunAt: true,
+  nextRunAt: true,
+  lastRunStatus: true,
+  lastRunSummary: true,
+});
+
 export const insertNotificationRoutingRuleSchema = createInsertSchema(
   notificationRoutingRules,
 ).omit({
@@ -1749,6 +1798,9 @@ export type InsertCarAssignment = z.infer<typeof insertCarAssignmentSchema>;
 
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+
+export type ReportSchedule = typeof reportSchedules.$inferSelect;
+export type InsertReportSchedule = typeof reportSchedules.$inferInsert;
 
 export type NotificationRoutingRule = typeof notificationRoutingRules.$inferSelect;
 export type InsertNotificationRoutingRule = z.infer<
