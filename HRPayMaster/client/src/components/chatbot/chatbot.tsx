@@ -9,6 +9,7 @@ import type {
 import { resolveDate, ChatIntent } from "@shared/chatbot";
 import { differenceInCalendarDays } from "date-fns";
 import { apiGet, apiPost } from "@/lib/http";
+import { updateLatestLoanMonthlyDeduction, updateEmployeeFieldValue } from "./chatbot-actions";
 import { getNewTabRel } from "@/lib/utils";
 import { buildBilingualActionReceipt, buildAndEncodePdf } from "@/lib/pdf";
 import { Button } from "@/components/ui/button";
@@ -1116,14 +1117,7 @@ export function Chatbot() {
           const newMd = v;
           // choose latest active loan for employee
           try {
-            const res = await apiGet('/api/loans');
-            if (!res.ok) throw new Error(res.error);
-            const loans: any[] = (res.data || []).filter((l:any)=> l.employeeId === selectedEmployee);
-            const target = loans.sort((a,b)=> +new Date(b.startDate) - +new Date(a.startDate))[0];
-            if (!target) { setMessages((m)=>[...m,{from:'bot', text:'No loan found to update.'}]); setPending(null); return; }
-            const up = await apiPost(`/api/loans/${target.id}`, { monthlyDeduction: newMd } as any);
-            if (!up.ok) throw new Error(up.error);
-
+            await updateLatestLoanMonthlyDeduction(selectedEmployee, newMd);
 
             const doc = buildReceiptDocument({
               titleEn: "Loan Updated",
@@ -1135,8 +1129,12 @@ export function Chatbot() {
             });
 
             setMessages((m)=>[...m,{from:'bot', text:'Loan updated.'}]);
-          } catch {
-            setMessages((m)=>[...m,{from:'bot', text:'Failed to update loan.'}]);
+          } catch (error) {
+            const message = (error as Error)?.message === 'NO_LOAN'
+              ? 'No loan found to update.'
+              : 'Failed to update loan.';
+            setMessages((m)=>[...m,{from:'bot', text: message}]);
+            setPending(null); return;
           }
           setPending(null); return;
         }
@@ -1154,9 +1152,7 @@ export function Chatbot() {
         if (!(pending.data as any).value) {
           const value = text.trim();
           try {
-            const payload: any = {}; payload[(pending.data as any).field] = value;
-            const res = await apiPost(`/api/employees/${selectedEmployee}`, payload as any);
-            if (!res.ok) throw new Error(res.error);
+            await updateEmployeeFieldValue(selectedEmployee, (pending.data as any).field, value);
 
 
             const fieldLabel = (pending.data as any).field;
