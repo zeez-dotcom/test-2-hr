@@ -61,6 +61,11 @@ import {
   type InsertEmailAlert,
   type EmployeeEvent,
   type InsertEmployeeEvent,
+  type EmployeeWorkflow,
+  type InsertEmployeeWorkflow,
+  type EmployeeWorkflowWithSteps,
+  type EmployeeWorkflowStep,
+  type InsertEmployeeWorkflowStep,
   type DocumentExpiryCheck,
   type FleetExpiryCheck,
   type CarRepair,
@@ -97,6 +102,8 @@ import {
   notifications,
   emailAlerts,
   employeeEvents,
+  employeeWorkflows,
+  employeeWorkflowSteps,
   carRepairs,
   attendance,
   users,
@@ -301,6 +308,30 @@ export interface IStorage {
     value: Partial<InsertEmployeeCustomValue>
   ): Promise<EmployeeCustomValue | undefined>;
   deleteEmployeeCustomValue(id: string): Promise<boolean>;
+
+  // Employee workflow methods
+  getEmployeeWorkflow(id: string): Promise<EmployeeWorkflowWithSteps | undefined>;
+  getEmployeeWorkflows(
+    employeeId: string,
+    type?: EmployeeWorkflow["workflowType"],
+  ): Promise<EmployeeWorkflowWithSteps[]>;
+  getActiveEmployeeWorkflow(
+    employeeId: string,
+    type: EmployeeWorkflow["workflowType"],
+  ): Promise<EmployeeWorkflowWithSteps | undefined>;
+  createEmployeeWorkflow(
+    workflow: InsertEmployeeWorkflow,
+    steps: Omit<InsertEmployeeWorkflowStep, "workflowId">[],
+  ): Promise<EmployeeWorkflowWithSteps>;
+  updateEmployeeWorkflow(
+    id: string,
+    workflow: Partial<InsertEmployeeWorkflow>,
+  ): Promise<EmployeeWorkflow | undefined>;
+  updateEmployeeWorkflowStep(
+    id: string,
+    step: Partial<InsertEmployeeWorkflowStep>,
+  ): Promise<EmployeeWorkflowStep | undefined>;
+  getEmployeeWorkflowStep(id: string): Promise<EmployeeWorkflowStep | undefined>;
 
   // Payroll methods
   getPayrollRuns(): Promise<PayrollRunWithEntries[]>;
@@ -1585,6 +1616,278 @@ export class DatabaseStorage implements IStorage {
       .where(eq(employeeCustomValues.id, id));
 
     return (result.rowCount ?? 0) > 0;
+
+  }
+
+
+
+  async getEmployeeWorkflow(id: string): Promise<EmployeeWorkflowWithSteps | undefined> {
+
+    const workflow = await db.query.employeeWorkflows.findFirst({
+
+      where: eq(employeeWorkflows.id, id),
+
+      with: { steps: true },
+
+    });
+
+
+
+    if (!workflow) return undefined;
+
+
+
+    return {
+
+      ...workflow,
+
+      steps: (workflow.steps ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex),
+
+    };
+
+  }
+
+
+
+  async getEmployeeWorkflows(
+
+    employeeId: string,
+
+    type?: EmployeeWorkflow["workflowType"],
+
+  ): Promise<EmployeeWorkflowWithSteps[]> {
+
+    const where = type
+
+      ? and(
+
+          eq(employeeWorkflows.employeeId, employeeId),
+
+          eq(employeeWorkflows.workflowType, type),
+
+        )
+
+      : eq(employeeWorkflows.employeeId, employeeId);
+
+
+
+    const workflows = await db.query.employeeWorkflows.findMany({
+
+      where,
+
+      with: { steps: true },
+
+      orderBy: [desc(employeeWorkflows.createdAt)],
+
+    });
+
+
+
+    return workflows.map(workflow => ({
+
+      ...workflow,
+
+      steps: (workflow.steps ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex),
+
+    }));
+
+  }
+
+
+
+  async getActiveEmployeeWorkflow(
+
+    employeeId: string,
+
+    type: EmployeeWorkflow["workflowType"],
+
+  ): Promise<EmployeeWorkflowWithSteps | undefined> {
+
+    const workflow = await db.query.employeeWorkflows.findFirst({
+
+      where: and(
+
+        eq(employeeWorkflows.employeeId, employeeId),
+
+        eq(employeeWorkflows.workflowType, type),
+
+        ne(employeeWorkflows.status, "completed"),
+
+      ),
+
+      with: { steps: true },
+
+      orderBy: [desc(employeeWorkflows.createdAt)],
+
+    });
+
+    if (!workflow) return undefined;
+
+    return {
+
+      ...workflow,
+
+      steps: (workflow.steps ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex),
+
+    };
+
+  }
+
+
+
+  async createEmployeeWorkflow(
+
+    workflow: InsertEmployeeWorkflow,
+
+    steps: Omit<InsertEmployeeWorkflowStep, "workflowId">[],
+
+  ): Promise<EmployeeWorkflowWithSteps> {
+
+    return await db.transaction(async tx => {
+
+      const [created] = await tx
+
+        .insert(employeeWorkflows)
+
+        .values(workflow)
+
+        .returning();
+
+
+
+      if (!created) {
+
+        throw new Error("Failed to create workflow");
+
+      }
+
+
+
+      if (steps.length) {
+
+        const stepValues = steps.map((step, index) => ({
+
+          ...step,
+
+          workflowId: created.id,
+
+          orderIndex: step.orderIndex ?? index,
+
+        }));
+
+        await tx.insert(employeeWorkflowSteps).values(stepValues);
+
+      }
+
+
+
+      const full = await tx.query.employeeWorkflows.findFirst({
+
+        where: eq(employeeWorkflows.id, created.id),
+
+        with: { steps: true },
+
+      });
+
+
+
+      if (!full) {
+
+        throw new Error("Failed to load workflow");
+
+      }
+
+
+
+      return {
+
+        ...full,
+
+        steps: (full.steps ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex),
+
+      };
+
+    });
+
+  }
+
+
+
+  async updateEmployeeWorkflow(
+
+    id: string,
+
+    workflow: Partial<InsertEmployeeWorkflow>,
+
+  ): Promise<EmployeeWorkflow | undefined> {
+
+    const [updated] = await db
+
+      .update(employeeWorkflows)
+
+      .set({
+
+        ...workflow,
+
+        updatedAt: new Date(),
+
+      })
+
+      .where(eq(employeeWorkflows.id, id))
+
+      .returning();
+
+
+
+    return updated || undefined;
+
+  }
+
+
+
+  async updateEmployeeWorkflowStep(
+
+    id: string,
+
+    step: Partial<InsertEmployeeWorkflowStep>,
+
+  ): Promise<EmployeeWorkflowStep | undefined> {
+
+    const [updated] = await db
+
+      .update(employeeWorkflowSteps)
+
+      .set({
+
+        ...step,
+
+        updatedAt: new Date(),
+
+      })
+
+      .where(eq(employeeWorkflowSteps.id, id))
+
+      .returning();
+
+
+
+    return updated || undefined;
+
+  }
+
+
+
+  async getEmployeeWorkflowStep(id: string): Promise<EmployeeWorkflowStep | undefined> {
+
+    const [step] = await db
+
+      .select()
+
+      .from(employeeWorkflowSteps)
+
+      .where(eq(employeeWorkflowSteps.id, id));
+
+    return step || undefined;
 
   }
 

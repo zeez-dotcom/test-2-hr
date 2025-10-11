@@ -714,6 +714,50 @@ export const insertAssetAssignmentSchema = assetAssignmentBaseSchema.refine(
   },
 );
 
+export const employeeWorkflows = pgTable(
+  "employee_workflows",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    employeeId: varchar("employee_id").references(() => employees.id).notNull(),
+    workflowType: text("workflow_type").notNull(),
+    status: text("status").notNull().default("pending"),
+    startedAt: timestamp("started_at"),
+    completedAt: timestamp("completed_at"),
+    initiatedBy: varchar("initiated_by").references(() => employees.id),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (t) => ({
+    employeeIdx: index("employee_workflows_employee_id_idx").on(t.employeeId),
+    typeIdx: index("employee_workflows_type_idx").on(t.workflowType),
+    statusIdx: index("employee_workflows_status_idx").on(t.status),
+  }),
+);
+
+export const employeeWorkflowSteps = pgTable(
+  "employee_workflow_steps",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    workflowId: varchar("workflow_id").references(() => employeeWorkflows.id).notNull(),
+    stepKey: text("step_key").notNull(),
+    stepType: text("step_type").notNull(),
+    title: text("title").notNull(),
+    description: text("description"),
+    status: text("status").notNull().default("pending"),
+    orderIndex: integer("order_index").notNull().default(0),
+    dueDate: date("due_date"),
+    completedAt: timestamp("completed_at"),
+    notes: text("notes"),
+    resourceId: varchar("resource_id"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (t) => ({
+    workflowIdx: index("employee_workflow_steps_workflow_id_idx").on(t.workflowId),
+    stepKeyIdx: index("employee_workflow_steps_key_idx").on(t.stepKey),
+  }),
+);
+
 export const updateAssetAssignmentSchema = assetAssignmentBaseSchema
   .partial()
   .superRefine((data, ctx) => {
@@ -744,6 +788,18 @@ export const insertAssetRepairSchema = createInsertSchema(assetRepairs).omit({
 export const insertCarRepairSchema = createInsertSchema(carRepairs).omit({
   id: true,
   createdAt: true,
+});
+
+export const insertEmployeeWorkflowSchema = createInsertSchema(employeeWorkflows).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEmployeeWorkflowStepSchema = createInsertSchema(employeeWorkflowSteps).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
 });
 
 export const insertTemplateSchema = createInsertSchema(templates).omit({
@@ -893,6 +949,16 @@ export type InsertAttendance = z.infer<typeof insertAttendanceSchema>;
 
 export type EmployeeEvent = typeof employeeEvents.$inferSelect;
 export type InsertEmployeeEvent = z.infer<typeof insertEmployeeEventSchema>;
+
+export type EmployeeWorkflow = typeof employeeWorkflows.$inferSelect;
+export type InsertEmployeeWorkflow = z.infer<typeof insertEmployeeWorkflowSchema>;
+export type EmployeeWorkflowStep = typeof employeeWorkflowSteps.$inferSelect;
+export type InsertEmployeeWorkflowStep = z.infer<
+  typeof insertEmployeeWorkflowStepSchema
+>;
+export type EmployeeWorkflowWithSteps = EmployeeWorkflow & {
+  steps: EmployeeWorkflowStep[];
+};
 
 export type SickLeaveTracking = typeof sickLeaveTracking.$inferSelect;
 export type InsertSickLeaveTracking = z.infer<typeof insertSickLeaveTrackingSchema>;
@@ -1150,5 +1216,24 @@ export const employeeEventsRelations = relations(employeeEvents, ({ one }) => ({
   addedBy: one(employees, {
     fields: [employeeEvents.addedBy],
     references: [employees.id],
+  }),
+}));
+
+export const employeeWorkflowsRelations = relations(employeeWorkflows, ({ one, many }) => ({
+  employee: one(employees, {
+    fields: [employeeWorkflows.employeeId],
+    references: [employees.id],
+  }),
+  initiator: one(employees, {
+    fields: [employeeWorkflows.initiatedBy],
+    references: [employees.id],
+  }),
+  steps: many(employeeWorkflowSteps),
+}));
+
+export const employeeWorkflowStepsRelations = relations(employeeWorkflowSteps, ({ one }) => ({
+  workflow: one(employeeWorkflows, {
+    fields: [employeeWorkflowSteps.workflowId],
+    references: [employeeWorkflows.id],
   }),
 }));

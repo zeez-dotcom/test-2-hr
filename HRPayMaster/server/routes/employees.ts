@@ -24,6 +24,7 @@ import {
   type InsertAssetAssignment,
   type InsertGenericDocument,
   type InsertSickLeaveTracking,
+  type InsertEmployeeWorkflowStep,
 } from "@shared/schema";
 import {
   sendEmail,
@@ -158,6 +159,85 @@ const sickLeaveBalanceUpdateSchema = z
       path: ["daysUsed"],
     },
   );
+
+const workflowTypeSchema = z.enum(["onboarding", "offboarding"]);
+type WorkflowType = z.infer<typeof workflowTypeSchema>;
+
+type WorkflowStepTemplate = Omit<InsertEmployeeWorkflowStep, "workflowId">;
+
+const DEFAULT_WORKFLOW_STEPS: Record<WorkflowType, WorkflowStepTemplate[]> = {
+  onboarding: [
+    {
+      stepKey: "collect_documents",
+      stepType: "document",
+      title: "Collect mandatory documents",
+      description: "Upload signed contract and national ID copies.",
+    },
+    {
+      stepKey: "assign_assets",
+      stepType: "asset",
+      title: "Assign starter assets",
+      description: "Provision laptop, badge, or other starter assets.",
+    },
+    {
+      stepKey: "activate_status",
+      stepType: "task",
+      title: "Activate employee status",
+      description: "Mark the employee as active and ready for payroll.",
+    },
+  ],
+  offboarding: [
+    {
+      stepKey: "collect_assets",
+      stepType: "asset",
+      title: "Collect company assets",
+      description: "Record the return of all assigned company assets.",
+    },
+    {
+      stepKey: "settle_loans",
+      stepType: "task",
+      title: "Settle outstanding loans",
+      description: "Ensure loans are settled and remaining balances cleared.",
+    },
+    {
+      stepKey: "finalize_exit",
+      stepType: "task",
+      title: "Finalize exit status",
+      description: "Terminate the employee and document the exit interview.",
+    },
+  ],
+};
+
+const workflowProgressSchema = z.object({
+  status: z.enum(["pending", "in_progress", "completed", "blocked"]).optional(),
+  notes: z.string().optional(),
+  document: z
+    .object({
+      title: z.string().min(1),
+      description: z.string().optional(),
+      pdfDataUrl: z.string().min(1),
+    })
+    .optional(),
+  assetAssignment: z
+    .object({
+      assetId: z.string().min(1),
+      assignedDate: z.string().optional(),
+      notes: z.string().optional(),
+    })
+    .optional(),
+  assetReturn: z
+    .object({
+      assignmentId: z.string().min(1),
+      returnDate: z.string().optional(),
+    })
+    .optional(),
+  loanSettlement: z
+    .object({
+      loanId: z.string().min(1),
+      settlementAmount: z.coerce.number().optional(),
+    })
+    .optional(),
+});
 
 export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
   "Employee Code/معرف الموظف",
@@ -2162,6 +2242,313 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
   });
 
   // Employee documents: save PDF into employee's file (as event with documentUrl)
+  employeesRouter.get("/api/employees/:id/workflows/:type", async (req, res, next) => {
+    try {
+      const type = workflowTypeSchema.parse(req.params.type);
+      const active = await storage.getActiveEmployeeWorkflow(req.params.id, type);
+      if (active) {
+        return res.json(active);
+      }
+      const history = await storage.getEmployeeWorkflows(req.params.id, type);
+      if (!history.length) {
+        return next(new HttpError(404, "Workflow not found"));
+      }
+      res.json(history[0]);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return next(new HttpError(400, "Invalid workflow type", error.errors));
+      }
+      next(new HttpError(500, "Failed to load workflow"));
+    }
+  });
+
+  employeesRouter.post(
+    "/api/employees/:id/workflows/:type/start",
+    requireRole(["admin", "hr"]),
+    async (req, res, next) => {
+      try {
+        const type = workflowTypeSchema.parse(req.params.type);
+        const employee = await storage.getEmployee(req.params.id);
+        if (!employee) {
+          return next(new HttpError(404, "Employee not found"));
+        }
+        const existing = await storage.getActiveEmployeeWorkflow(employee.id, type);
+        if (existing) {
+          return res.json(existing);
+        }
+        const addedBy = await getAddedBy(req);
+        const steps = DEFAULT_WORKFLOW_STEPS[type].map((step, index) => ({
+          ...step,
+          orderIndex: index,
+        }));
+        const workflow = await storage.createEmployeeWorkflow(
+          {
+            employeeId: employee.id,
+            workflowType: type,
+            status: "in_progress",
+            startedAt: new Date(),
+            ...(addedBy ? { initiatedBy: addedBy } : {}),
+          },
+          steps,
+        );
+        res.status(201).json(workflow);
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return next(new HttpError(400, "Invalid workflow request", error.errors));
+        }
+        next(new HttpError(500, "Failed to start workflow"));
+      }
+    },
+  );
+
+  employeesRouter.post(
+    "/api/employees/:id/workflows/:type/steps/:stepId/progress",
+    requireRole(["admin", "hr"]),
+    async (req, res, next) => {
+      try {
+        const type = workflowTypeSchema.parse(req.params.type);
+        const parsed = workflowProgressSchema.parse(req.body ?? {});
+        const step = await storage.getEmployeeWorkflowStep(req.params.stepId);
+        if (!step) {
+          return next(new HttpError(404, "Workflow step not found"));
+        }
+        const workflow = await storage.getEmployeeWorkflow(step.workflowId);
+        if (!workflow || workflow.employeeId !== req.params.id || workflow.workflowType !== type) {
+          return next(new HttpError(404, "Workflow not found"));
+        }
+        if (step.status === "completed" && (parsed.status ?? "completed") === "completed") {
+          return next(new HttpError(409, "Step already completed"));
+        }
+
+        const status = parsed.status ?? "completed";
+        const updates: Partial<InsertEmployeeWorkflowStep> = {
+          status,
+          notes: parsed.notes,
+          completedAt: status === "completed" ? new Date() : null,
+        };
+        let resourceId: string | undefined;
+        const today = new Date().toISOString().split("T")[0];
+        const addedBy = await getAddedBy(req);
+
+        if (step.stepType === "document" || step.stepKey === "collect_documents") {
+          const document = parsed.document;
+          if (!document) {
+            return next(new HttpError(400, "Document payload is required for this step"));
+          }
+          const event: InsertEmployeeEvent = {
+            employeeId: workflow.employeeId,
+            eventType: "document_update",
+            title: document.title,
+            description: document.description ?? document.title,
+            amount: "0",
+            eventDate: today,
+            affectsPayroll: false,
+            documentUrl: document.pdfDataUrl,
+            recurrenceType: "none",
+            ...(addedBy ? { addedBy } : {}),
+          };
+          const createdEvent = await storage.createEmployeeEvent(event);
+          resourceId = createdEvent.id;
+        } else if (step.stepKey === "assign_assets") {
+          const assignmentInput = parsed.assetAssignment;
+          if (!assignmentInput) {
+            return next(new HttpError(400, "Asset assignment payload is required"));
+          }
+          const assignedDate = assignmentInput.assignedDate || today;
+          const newAssignment = await assetService.createAssignment({
+            assetId: assignmentInput.assetId,
+            employeeId: workflow.employeeId,
+            assignedDate,
+            status: "active",
+            notes: assignmentInput.notes,
+            assignedBy: addedBy,
+          });
+          resourceId = newAssignment.id;
+          const desiredStatus = mapAssignmentStatusToResourceStatus(newAssignment.status) ?? "assigned";
+          await storage.updateAsset(newAssignment.assetId, { status: desiredStatus });
+          const detailed = await storage.getAssetAssignment(newAssignment.id);
+          if (detailed) {
+            const event: InsertEmployeeEvent = {
+              employeeId: workflow.employeeId,
+              eventType: "asset_assignment",
+              title: `Assigned ${detailed.asset?.name ?? "asset"}`,
+              description: `Assigned ${detailed.asset?.name ?? "asset"} to ${detailed.employee?.firstName ?? ""} ${detailed.employee?.lastName ?? ""}`.trim(),
+              amount: "0",
+              eventDate: today,
+              affectsPayroll: false,
+              recurrenceType: "none",
+              ...(addedBy ? { addedBy } : {}),
+            };
+            await storage.createEmployeeEvent(event);
+          }
+        } else if (step.stepKey === "collect_assets") {
+          const assetReturn = parsed.assetReturn;
+          if (!assetReturn) {
+            return next(new HttpError(400, "Asset return payload is required"));
+          }
+          const assignment = await storage.getAssetAssignment(assetReturn.assignmentId);
+          if (!assignment || assignment.employeeId !== workflow.employeeId) {
+            return next(new HttpError(404, "Asset assignment not found"));
+          }
+          const returnDate = assetReturn.returnDate || today;
+          await storage.updateAssetAssignment(assignment.id, {
+            status: "completed",
+            returnDate,
+          });
+          assetService.invalidateAssignmentCache();
+          if (assignment.assetId) {
+            const desiredStatus = mapAssignmentStatusToResourceStatus("completed");
+            if (desiredStatus) {
+              await storage.updateAsset(assignment.assetId, { status: desiredStatus });
+            }
+          }
+          resourceId = assignment.id;
+          const detailed = await storage.getAssetAssignment(assignment.id);
+          if (detailed) {
+            const event: InsertEmployeeEvent = {
+              employeeId: workflow.employeeId,
+              eventType: "asset_removal",
+              title: `Collected ${detailed.asset?.name ?? "asset"}`,
+              description: `Collected ${detailed.asset?.name ?? "asset"} from ${detailed.employee?.firstName ?? ""} ${detailed.employee?.lastName ?? ""}`.trim(),
+              amount: "0",
+              eventDate: today,
+              affectsPayroll: false,
+              recurrenceType: "none",
+              ...(addedBy ? { addedBy } : {}),
+            };
+            await storage.createEmployeeEvent(event);
+          }
+        } else if (step.stepKey === "settle_loans") {
+          const settlement = parsed.loanSettlement;
+          if (!settlement) {
+            return next(new HttpError(400, "Loan settlement payload is required"));
+          }
+          const loan = await storage.getLoan(settlement.loanId);
+          if (!loan || loan.employeeId !== workflow.employeeId) {
+            return next(new HttpError(404, "Loan not found"));
+          }
+          await storage.updateLoan(loan.id, {
+            remainingAmount: 0,
+            status: "completed",
+          });
+          resourceId = loan.id;
+          const event: InsertEmployeeEvent = {
+            employeeId: workflow.employeeId,
+            eventType: "deduction",
+            title: "Settled outstanding loan",
+            description: `Loan ${loan.id} marked as settled during offboarding`,
+            amount: String(settlement.settlementAmount ?? loan.remainingAmount ?? 0),
+            eventDate: today,
+            affectsPayroll: false,
+            recurrenceType: "none",
+            ...(addedBy ? { addedBy } : {}),
+          };
+          await storage.createEmployeeEvent(event);
+        } else if (step.stepKey === "activate_status") {
+          await storage.updateEmployee(workflow.employeeId, { status: "active" });
+          const event: InsertEmployeeEvent = {
+            employeeId: workflow.employeeId,
+            eventType: "employee_update",
+            title: "Activated employee",
+            description: "Onboarding workflow activated employee for payroll",
+            amount: "0",
+            eventDate: today,
+            affectsPayroll: false,
+            recurrenceType: "none",
+            ...(addedBy ? { addedBy } : {}),
+          };
+          await storage.createEmployeeEvent(event);
+        } else if (step.stepKey === "finalize_exit") {
+          await storage.updateEmployee(workflow.employeeId, { status: "terminated" });
+          const event: InsertEmployeeEvent = {
+            employeeId: workflow.employeeId,
+            eventType: "employee_update",
+            title: "Finalized offboarding",
+            description: "Offboarding workflow finalized exit status",
+            amount: "0",
+            eventDate: today,
+            affectsPayroll: false,
+            recurrenceType: "none",
+            ...(addedBy ? { addedBy } : {}),
+          };
+          await storage.createEmployeeEvent(event);
+        }
+
+        if (resourceId) {
+          updates.resourceId = resourceId;
+        }
+
+        await storage.updateEmployeeWorkflowStep(step.id, updates);
+        if (workflow.status === "pending") {
+          await storage.updateEmployeeWorkflow(workflow.id, { status: "in_progress" });
+        }
+        const refreshed = await storage.getEmployeeWorkflow(workflow.id);
+        if (!refreshed) {
+          return next(new HttpError(404, "Workflow not found"));
+        }
+        res.json(refreshed);
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return next(new HttpError(400, "Invalid workflow progress payload", error.errors));
+        }
+        next(new HttpError(500, "Failed to update workflow step"));
+      }
+    },
+  );
+
+  employeesRouter.post(
+    "/api/employees/:id/workflows/:type/complete",
+    requireRole(["admin", "hr"]),
+    async (req, res, next) => {
+      try {
+        const type = workflowTypeSchema.parse(req.params.type);
+        const workflow = await storage.getActiveEmployeeWorkflow(req.params.id, type);
+        if (!workflow) {
+          return next(new HttpError(404, "Workflow not found"));
+        }
+        const allCompleted = workflow.steps.every(step => step.status === "completed");
+        if (!allCompleted) {
+          return next(new HttpError(400, "All steps must be completed before finishing the workflow"));
+        }
+        await storage.updateEmployeeWorkflow(workflow.id, {
+          status: "completed",
+          completedAt: new Date(),
+        });
+        const addedBy = await getAddedBy(req);
+        const summary = workflow.steps
+          .map(step => `${step.title}: ${step.status}`)
+          .join(" | ");
+        if (type === "onboarding") {
+          await storage.updateEmployee(workflow.employeeId, { status: "active" });
+        } else if (type === "offboarding") {
+          await storage.updateEmployee(workflow.employeeId, { status: "terminated" });
+        }
+        const event: InsertEmployeeEvent = {
+          employeeId: workflow.employeeId,
+          eventType: "employee_update",
+          title: `${type === "onboarding" ? "Onboarding" : "Offboarding"} workflow completed`,
+          description: summary,
+          amount: "0",
+          eventDate: new Date().toISOString().split("T")[0],
+          affectsPayroll: false,
+          recurrenceType: "none",
+          ...(addedBy ? { addedBy } : {}),
+        };
+        await storage.createEmployeeEvent(event);
+        const refreshed = await storage.getEmployeeWorkflow(workflow.id);
+        if (!refreshed) {
+          return next(new HttpError(404, "Workflow not found"));
+        }
+        res.json(refreshed);
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return next(new HttpError(400, "Invalid workflow request", error.errors));
+        }
+        next(new HttpError(500, "Failed to complete workflow"));
+      }
+    },
+  );
+
   employeesRouter.post("/api/employees/:id/documents", async (req, res, next) => {
     try {
       const { title, description, pdfDataUrl, controllerNumber, createdAt } = req.body as any;

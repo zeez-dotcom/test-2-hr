@@ -19,7 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Eye, Edit, UserX, User, ArrowUpDown, ChevronDown, ChevronUp, Printer } from "lucide-react";
+import { Eye, Edit, UserX, User, ArrowUpDown, ChevronDown, ChevronUp, Printer, ListChecks } from "lucide-react";
 import type { EmployeeWithDepartment, Department } from "@shared/schema";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { apiGet } from "@/lib/http";
@@ -36,6 +36,7 @@ interface EmployeeTableProps {
   onEditEmployee: (employee: EmployeeWithDepartment) => void;
   isMutating: boolean;
   initialStatusFilter?: string;
+  onManageWorkflow?: (employee: EmployeeWithDepartment) => void;
 }
 
 export default function EmployeeTable({
@@ -43,6 +44,7 @@ export default function EmployeeTable({
   onEditEmployee,
   isMutating,
   initialStatusFilter,
+  onManageWorkflow,
 }: EmployeeTableProps) {
   const normalizedInitialStatus = (initialStatusFilter || "all").toLowerCase();
   const [nameFilter, setNameFilter] = useState("");
@@ -681,6 +683,17 @@ export default function EmployeeTable({
                   >
                     <Eye size={16} />
                   </Button>
+                  {onManageWorkflow ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onManageWorkflow(employee)}
+                      className="text-emerald-600 hover:text-emerald-700"
+                      aria-label="Manage workflow"
+                    >
+                      <ListChecks size={16} />
+                    </Button>
+                  ) : null}
                   <Button
                     variant="ghost"
                     size="sm"

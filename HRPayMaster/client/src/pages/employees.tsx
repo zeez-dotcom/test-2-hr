@@ -7,21 +7,60 @@ import EmployeeForm from "@/components/employees/employee-form";
 import EmployeeImport from "@/components/employees/employee-import";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Search } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
-import { apiPost, apiPut } from "@/lib/http";
+import { apiGet, apiPost, apiPut } from "@/lib/http";
 import { buildBilingualActionReceipt, buildAndEncodePdf } from "@/lib/pdf";
 import { useToast } from "@/hooks/use-toast";
 import { toastApiError } from "@/lib/toastError";
-import type { EmployeeWithDepartment, Department, InsertEmployee, Company } from "@shared/schema";
+import type {
+  EmployeeWithDepartment,
+  Department,
+  InsertEmployee,
+  Company,
+  EmployeeWorkflowWithSteps,
+  EmployeeWorkflowStep,
+  AssetWithAssignment,
+  AssetAssignmentWithDetails,
+  LoanWithEmployee,
+} from "@shared/schema";
 import { useLocation } from "wouter";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
 
 interface EmployeesProps {
   defaultStatus?: string;
 }
+
+type WorkflowType = "onboarding" | "offboarding";
+
+interface StepFormState {
+  title?: string;
+  description?: string;
+  pdfDataUrl?: string;
+  assetId?: string;
+  assignedDate?: string;
+  notes?: string;
+  assignmentId?: string;
+  loanId?: string;
+  settlementAmount?: string;
+}
+
+const workflowTypeLabels: Record<WorkflowType, string> = {
+  onboarding: "Onboarding",
+  offboarding: "Offboarding",
+};
+
+const readFileAsDataUrl = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string) ?? "");
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 
 export default function Employees({ defaultStatus = "active" }: EmployeesProps) {
   const { t } = useTranslation();
@@ -32,6 +71,13 @@ export default function Employees({ defaultStatus = "active" }: EmployeesProps) 
   const [editingEmployee, setEditingEmployee] = useState<EmployeeWithDepartment | null>(null);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [employeeToTerminate, setEmployeeToTerminate] = useState<string | null>(null);
+  const [isWorkflowDialogOpen, setIsWorkflowDialogOpen] = useState(false);
+  const [workflowEmployee, setWorkflowEmployee] = useState<EmployeeWithDepartment | null>(null);
+  const [workflowType, setWorkflowType] = useState<WorkflowType>("onboarding");
+  const [workflowData, setWorkflowData] = useState<EmployeeWorkflowWithSteps | null>(null);
+  const [workflowLoading, setWorkflowLoading] = useState(false);
+  const [workflowActionLoading, setWorkflowActionLoading] = useState(false);
+  const [stepForms, setStepForms] = useState<Record<string, StepFormState>>({});
   const { toast } = useToast();
 
   const {
@@ -60,6 +106,24 @@ export default function Employees({ defaultStatus = "active" }: EmployeesProps) 
     refetch: refetchCompanies,
   } = useQuery<Company[]>({
     queryKey: ["/api/companies"],
+  });
+
+  const { data: assets } = useQuery<AssetWithAssignment[]>({
+    queryKey: ["/api/assets"],
+    enabled: isWorkflowDialogOpen,
+    staleTime: 30_000,
+  });
+
+  const { data: assetAssignmentsData } = useQuery<AssetAssignmentWithDetails[]>({
+    queryKey: ["/api/asset-assignments"],
+    enabled: isWorkflowDialogOpen,
+    staleTime: 15_000,
+  });
+
+  const { data: loansData } = useQuery<LoanWithEmployee[]>({
+    queryKey: ["/api/loans"],
+    enabled: isWorkflowDialogOpen,
+    staleTime: 15_000,
   });
 
   const terminateEmployeeMutation = useMutation({
@@ -146,7 +210,7 @@ export default function Employees({ defaultStatus = "active" }: EmployeesProps) 
 
   // Filter employees based on search query and department
   const filteredEmployees = employees?.filter((employee) => {
-    const matchesSearch = searchQuery === "" || 
+    const matchesSearch = searchQuery === "" ||
       `${employee.firstName} ${employee.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
       employee.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       employee.position.toLowerCase().includes(searchQuery.toLowerCase());
@@ -158,6 +222,29 @@ export default function Employees({ defaultStatus = "active" }: EmployeesProps) 
     
     return matchesSearch && matchesDepartment && matchesStatus;
   }) || [];
+
+  const availableAssetsForWorkflow = useMemo(() => {
+    if (!assets) return [] as AssetWithAssignment[];
+    return assets.filter(asset => (asset.status || "").toLowerCase() === "available");
+  }, [assets]);
+
+  const workflowAssignments = useMemo(() => {
+    if (!assetAssignmentsData || !workflowEmployee) return [] as AssetAssignmentWithDetails[];
+    return assetAssignmentsData.filter(assignment => {
+      const belongsToEmployee = assignment.employeeId === workflowEmployee.id;
+      const status = (assignment.status || "").toLowerCase();
+      return belongsToEmployee && status !== "completed";
+    });
+  }, [assetAssignmentsData, workflowEmployee]);
+
+  const workflowLoans = useMemo(() => {
+    if (!loansData || !workflowEmployee) return [] as LoanWithEmployee[];
+    return loansData.filter(loan => {
+      const belongsToEmployee = loan.employeeId === workflowEmployee.id;
+      const status = (loan.status || "").toLowerCase();
+      return belongsToEmployee && status !== "completed" && status !== "cancelled";
+    });
+  }, [loansData, workflowEmployee]);
 
   const handleDeleteEmployee = (employeeId: string) => {
     setEmployeeToTerminate(employeeId);
@@ -196,6 +283,399 @@ export default function Employees({ defaultStatus = "active" }: EmployeesProps) 
         employee: updates,
       });
     }
+  };
+
+  const resetWorkflowState = () => {
+    setWorkflowData(null);
+    setStepForms({});
+    setWorkflowLoading(false);
+    setWorkflowActionLoading(false);
+  };
+
+  const loadWorkflow = async (employeeId: string, type: WorkflowType) => {
+    setWorkflowLoading(true);
+    try {
+      const res = await apiGet(`/api/employees/${employeeId}/workflows/${type}`);
+      if (res.ok) {
+        setWorkflowData(res.data as EmployeeWorkflowWithSteps);
+      } else if (res.status === 404) {
+        setWorkflowData(null);
+      } else {
+        toastApiError(res, "Failed to load workflow");
+      }
+    } finally {
+      setWorkflowLoading(false);
+    }
+  };
+
+  const handleWorkflowDialogChange = (open: boolean) => {
+    setIsWorkflowDialogOpen(open);
+    if (!open) {
+      setWorkflowEmployee(null);
+      resetWorkflowState();
+    }
+  };
+
+  const handleOpenWorkflow = (employee: EmployeeWithDepartment) => {
+    const normalizedStatus = employee.status?.toLowerCase() ?? "";
+    const defaultType: WorkflowType = normalizedStatus === "terminated" ? "offboarding" : "onboarding";
+    setWorkflowEmployee(employee);
+    setWorkflowType(defaultType);
+    resetWorkflowState();
+    setIsWorkflowDialogOpen(true);
+    void loadWorkflow(employee.id, defaultType);
+  };
+
+  const updateStepFormState = (stepId: string, updates: Partial<StepFormState>) => {
+    setStepForms(prev => ({
+      ...prev,
+      [stepId]: {
+        ...(prev[stepId] ?? {}),
+        ...updates,
+      },
+    }));
+  };
+
+  const handleWorkflowTypeSelect = (value: WorkflowType) => {
+    setWorkflowType(value);
+    if (workflowEmployee) {
+      resetWorkflowState();
+      void loadWorkflow(workflowEmployee.id, value);
+    }
+  };
+
+  const handleStartWorkflow = async () => {
+    if (!workflowEmployee) return;
+    setWorkflowActionLoading(true);
+    try {
+      const res = await apiPost(
+        `/api/employees/${workflowEmployee.id}/workflows/${workflowType}/start`,
+        {},
+      );
+      if (res.ok) {
+        setWorkflowData(res.data as EmployeeWorkflowWithSteps);
+        toast({
+          title: "Workflow started",
+          description: `${workflowTypeLabels[workflowType]} workflow initiated.`,
+        });
+      } else {
+        toastApiError(res, "Failed to start workflow");
+      }
+    } finally {
+      setWorkflowActionLoading(false);
+    }
+  };
+
+  const handleProgressStep = async (step: EmployeeWorkflowStep) => {
+    if (!workflowEmployee) return;
+    const form = stepForms[step.id] ?? {};
+    const payload: Record<string, any> = { status: "completed" };
+    if (form.notes) {
+      payload.notes = form.notes;
+    }
+
+    const missing = (message: string) => {
+      toast({
+        title: "Incomplete step",
+        description: message,
+        variant: "destructive",
+      });
+    };
+
+    if (step.stepType === "document" || step.stepKey === "collect_documents") {
+      const title = form.title?.trim() || step.title;
+      if (!form.pdfDataUrl) {
+        missing("Please attach a document before completing this step.");
+        return;
+      }
+      payload.document = {
+        title,
+        description: form.description,
+        pdfDataUrl: form.pdfDataUrl,
+      };
+    } else if (step.stepKey === "assign_assets") {
+      if (!form.assetId) {
+        missing("Select an asset to assign to the employee.");
+        return;
+      }
+      payload.assetAssignment = {
+        assetId: form.assetId,
+        assignedDate: form.assignedDate,
+        notes: form.notes,
+      };
+    } else if (step.stepKey === "collect_assets") {
+      if (!form.assignmentId) {
+        missing("Select which asset assignment was returned.");
+        return;
+      }
+      payload.assetReturn = {
+        assignmentId: form.assignmentId,
+      };
+    } else if (step.stepKey === "settle_loans") {
+      if (!form.loanId) {
+        missing("Select which loan was settled.");
+        return;
+      }
+      payload.loanSettlement = {
+        loanId: form.loanId,
+      };
+      if (form.settlementAmount) {
+        const numeric = Number(form.settlementAmount);
+        if (Number.isNaN(numeric)) {
+          missing("Settlement amount must be a valid number.");
+          return;
+        }
+        payload.loanSettlement.settlementAmount = numeric;
+      }
+    }
+
+    setWorkflowActionLoading(true);
+    try {
+      const res = await apiPost(
+        `/api/employees/${workflowEmployee.id}/workflows/${workflowType}/steps/${step.id}/progress`,
+        payload,
+      );
+      if (res.ok) {
+        setWorkflowData(res.data as EmployeeWorkflowWithSteps);
+        toast({
+          title: "Step completed",
+          description: `${step.title} marked as complete.`,
+        });
+        setStepForms(prev => ({ ...prev, [step.id]: {} }));
+        queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/asset-assignments"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/assets"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/loans"] });
+      } else {
+        toastApiError(res, "Failed to update workflow step");
+      }
+    } finally {
+      setWorkflowActionLoading(false);
+    }
+  };
+
+  const handleCompleteWorkflow = async () => {
+    if (!workflowEmployee) return;
+    setWorkflowActionLoading(true);
+    try {
+      const res = await apiPost(
+        `/api/employees/${workflowEmployee.id}/workflows/${workflowType}/complete`,
+        {},
+      );
+      if (res.ok) {
+        setWorkflowData(res.data as EmployeeWorkflowWithSteps);
+        toast({
+          title: `${workflowTypeLabels[workflowType]} workflow completed`,
+          description: "All tasks logged successfully.",
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+      } else {
+        toastApiError(res, "Failed to complete workflow");
+      }
+    } finally {
+      setWorkflowActionLoading(false);
+    }
+  };
+
+  const renderStepFields = (step: EmployeeWorkflowStep) => {
+    const form = stepForms[step.id] ?? {};
+    const sections: JSX.Element[] = [];
+
+    if (step.stepType === "document" || step.stepKey === "collect_documents") {
+      sections.push(
+        <div className="space-y-2" key={`${step.id}-doc-title`}>
+          <label className="text-sm font-medium" htmlFor={`workflow-${step.id}-title`}>
+            Document title
+          </label>
+          <Input
+            id={`workflow-${step.id}-title`}
+            placeholder="Employment contract"
+            value={form.title ?? ""}
+            onChange={(event) => updateStepFormState(step.id, { title: event.target.value })}
+          />
+        </div>,
+      );
+      sections.push(
+        <div className="space-y-2" key={`${step.id}-doc-description`}>
+          <label className="text-sm font-medium" htmlFor={`workflow-${step.id}-description`}>
+            Description
+          </label>
+          <Textarea
+            id={`workflow-${step.id}-description`}
+            rows={3}
+            placeholder="Summary or control number"
+            value={form.description ?? ""}
+            onChange={(event) => updateStepFormState(step.id, { description: event.target.value })}
+          />
+        </div>,
+      );
+      sections.push(
+        <div className="space-y-2" key={`${step.id}-doc-file`}>
+          <label className="text-sm font-medium" htmlFor={`workflow-${step.id}-file`}>
+            Upload document
+          </label>
+          <Input
+            id={`workflow-${step.id}-file`}
+            type="file"
+            accept=".pdf,image/*"
+            onChange={async (event) => {
+              const file = event.target.files?.[0];
+              if (!file) return;
+              try {
+                const dataUrl = await readFileAsDataUrl(file);
+                updateStepFormState(step.id, { pdfDataUrl: dataUrl });
+                toast({
+                  title: "Document attached",
+                  description: `${file.name} ready to submit.`,
+                });
+              } catch (error) {
+                toast({
+                  title: "File error",
+                  description: "Unable to read the selected file.",
+                  variant: "destructive",
+                });
+              }
+            }}
+          />
+          <p className="text-xs text-muted-foreground">
+            {form.pdfDataUrl ? "Document attached." : "Accepted PDF or image files."}
+          </p>
+        </div>,
+      );
+    }
+
+    if (step.stepKey === "assign_assets") {
+      sections.push(
+        <div className="space-y-2" key={`${step.id}-asset-select`}>
+          <label className="text-sm font-medium">Asset</label>
+          <Select
+            value={form.assetId ?? ""}
+            onValueChange={(value) => updateStepFormState(step.id, { assetId: value })}
+          >
+            <SelectTrigger aria-label="Asset selection">
+              <SelectValue placeholder={availableAssetsForWorkflow.length ? "Select asset" : "No assets available"} />
+            </SelectTrigger>
+            <SelectContent>
+              {availableAssetsForWorkflow.length ? (
+                availableAssetsForWorkflow.map((asset) => (
+                  <SelectItem key={asset.id} value={asset.id}>
+                    {asset.name}
+                    {asset.serialNumber ? ` (${asset.serialNumber})` : ""}
+                  </SelectItem>
+                ))
+              ) : (
+                <SelectItem value="" disabled>
+                  No available assets
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+        </div>,
+      );
+      sections.push(
+        <div className="space-y-2" key={`${step.id}-asset-date`}>
+          <label className="text-sm font-medium" htmlFor={`workflow-${step.id}-date`}>
+            Assignment date
+          </label>
+          <Input
+            id={`workflow-${step.id}-date`}
+            type="date"
+            value={form.assignedDate ?? ""}
+            onChange={(event) => updateStepFormState(step.id, { assignedDate: event.target.value })}
+          />
+        </div>,
+      );
+    }
+
+    if (step.stepKey === "collect_assets") {
+      sections.push(
+        <div className="space-y-2" key={`${step.id}-assignment-select`}>
+          <label className="text-sm font-medium">Assignment</label>
+          <Select
+            value={form.assignmentId ?? ""}
+            onValueChange={(value) => updateStepFormState(step.id, { assignmentId: value })}
+          >
+            <SelectTrigger aria-label="Assignment selection">
+              <SelectValue placeholder={workflowAssignments.length ? "Select assignment" : "No active assignments"} />
+            </SelectTrigger>
+            <SelectContent>
+              {workflowAssignments.length ? (
+                workflowAssignments.map((assignment) => (
+                  <SelectItem key={assignment.id} value={assignment.id}>
+                    {assignment.asset?.name ?? "Asset"} — {assignment.status}
+                  </SelectItem>
+                ))
+              ) : (
+                <SelectItem value="" disabled>
+                  No active assignments
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+        </div>,
+      );
+    }
+
+    if (step.stepKey === "settle_loans") {
+      sections.push(
+        <div className="space-y-2" key={`${step.id}-loan-select`}>
+          <label className="text-sm font-medium">Outstanding loan</label>
+          <Select
+            value={form.loanId ?? ""}
+            onValueChange={(value) => updateStepFormState(step.id, { loanId: value })}
+          >
+            <SelectTrigger aria-label="Loan selection">
+              <SelectValue placeholder={workflowLoans.length ? "Select loan" : "No active loans"} />
+            </SelectTrigger>
+            <SelectContent>
+              {workflowLoans.length ? (
+                workflowLoans.map((loan) => (
+                  <SelectItem key={loan.id} value={loan.id}>
+                    {loan.reason ?? "Loan"} — Remaining {Number(loan.remainingAmount ?? 0).toLocaleString()}
+                  </SelectItem>
+                ))
+              ) : (
+                <SelectItem value="" disabled>
+                  No active loans
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+        </div>,
+      );
+      sections.push(
+        <div className="space-y-2" key={`${step.id}-loan-amount`}>
+          <label className="text-sm font-medium" htmlFor={`workflow-${step.id}-settlement`}>
+            Settlement amount (optional)
+          </label>
+          <Input
+            id={`workflow-${step.id}-settlement`}
+            type="number"
+            step="0.01"
+            placeholder="0.00"
+            value={form.settlementAmount ?? ""}
+            onChange={(event) => updateStepFormState(step.id, { settlementAmount: event.target.value })}
+          />
+        </div>,
+      );
+    }
+
+    sections.push(
+      <div className="space-y-2" key={`${step.id}-notes`}>
+        <label className="text-sm font-medium" htmlFor={`workflow-${step.id}-notes`}>
+          Notes
+        </label>
+        <Textarea
+          id={`workflow-${step.id}-notes`}
+          rows={2}
+          placeholder="Optional internal notes"
+          value={form.notes ?? ""}
+          onChange={(event) => updateStepFormState(step.id, { notes: event.target.value })}
+        />
+      </div>,
+    );
+
+    return <div className="space-y-4">{sections}</div>;
   };
 
   return (
@@ -267,6 +747,7 @@ export default function Employees({ defaultStatus = "active" }: EmployeesProps) 
           onEditEmployee={handleEditEmployee}
           isMutating={terminateEmployeeMutation.isPending}
           initialStatusFilter={statusFilterParam || undefined}
+          onManageWorkflow={handleOpenWorkflow}
         />
 
         {/* Edit Employee Dialog */}
@@ -341,13 +822,145 @@ export default function Employees({ defaultStatus = "active" }: EmployeesProps) 
                   </Button>
                 </div>
               )}
-            </DialogContent>
-          </Dialog>
-        <ConfirmDialog
-          open={isConfirmOpen}
-          onOpenChange={handleConfirmOpenChange}
-          title={t('employeesPage.terminateEmployee', 'Terminate Employee')}
-          description={t('employeesPage.terminateDesc', 'Are you sure you want to terminate this employee?')}
+        </DialogContent>
+      </Dialog>
+        <Dialog open={isWorkflowDialogOpen} onOpenChange={handleWorkflowDialogChange}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                {workflowEmployee
+                  ? `${workflowTypeLabels[workflowType]} workflow • ${[
+                      workflowEmployee.firstName,
+                      workflowEmployee.lastName,
+                    ]
+                      .filter(Boolean)
+                      .join(" ") || workflowEmployee.employeeCode || workflowEmployee.id}`
+                  : "Employee workflow"}
+              </DialogTitle>
+            </DialogHeader>
+            {workflowEmployee ? (
+              <div className="space-y-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <Select
+                    value={workflowType}
+                    onValueChange={(value) => handleWorkflowTypeSelect(value as WorkflowType)}
+                  >
+                    <SelectTrigger className="sm:w-56" aria-label="Select workflow">
+                      <SelectValue placeholder="Select workflow" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="onboarding">Onboarding</SelectItem>
+                      <SelectItem value="offboarding">Offboarding</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="outline"
+                    onClick={handleStartWorkflow}
+                    disabled={
+                      workflowActionLoading ||
+                      workflowLoading ||
+                      (workflowData && workflowData.status !== "completed")
+                    }
+                  >
+                    {workflowData && workflowData.status === "completed"
+                      ? `Restart ${workflowTypeLabels[workflowType].toLowerCase()} workflow`
+                      : `Start ${workflowTypeLabels[workflowType].toLowerCase()} workflow`}
+                  </Button>
+                </div>
+                {workflowData ? (
+                  <Badge
+                    variant={
+                      workflowData.status === "completed"
+                        ? "secondary"
+                        : workflowData.status === "in_progress"
+                        ? "default"
+                        : "outline"
+                    }
+                  >
+                    {workflowData.status.replace(/_/g, " ")}
+                  </Badge>
+                ) : null}
+                {workflowLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading workflow…</p>
+                ) : workflowData ? (
+                  <>
+                    <div className="space-y-4">
+                      {workflowData.steps.map((step) => {
+                        const status = step.status || "pending";
+                        const normalized = status.replace(/_/g, " ");
+                        const isCompleted = status === "completed";
+                        return (
+                          <div key={step.id} className="space-y-4 rounded-lg border p-4">
+                            <div className="flex items-start justify-between gap-4">
+                              <div>
+                                <h3 className="text-sm font-semibold">{step.title}</h3>
+                                <p className="text-sm text-muted-foreground">{step.description}</p>
+                              </div>
+                              <Badge
+                                variant={
+                                  isCompleted
+                                    ? "secondary"
+                                    : status === "in_progress"
+                                    ? "default"
+                                    : "outline"
+                                }
+                              >
+                                {normalized}
+                              </Badge>
+                            </div>
+                            {renderStepFields(step)}
+                            <div className="flex justify-end">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleProgressStep(step)}
+                                disabled={workflowActionLoading || isCompleted}
+                              >
+                                {isCompleted ? "Completed" : "Mark complete"}
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="flex justify-end">
+                      <Button
+                        onClick={handleCompleteWorkflow}
+                        disabled={
+                          workflowActionLoading ||
+                          workflowData.status === "completed" ||
+                          !workflowData.steps.every((step) => step.status === "completed")
+                        }
+                      >
+                        {workflowData.status === "completed"
+                          ? "Workflow complete"
+                          : `Complete ${workflowTypeLabels[workflowType].toLowerCase()} workflow`}
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="space-y-4 rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+                    <p>
+                      No active {workflowTypeLabels[workflowType].toLowerCase()} workflow yet. Start one to
+                      track required steps.
+                    </p>
+                    <Button
+                      onClick={handleStartWorkflow}
+                      disabled={workflowActionLoading || workflowLoading}
+                    >
+                      Start {workflowTypeLabels[workflowType].toLowerCase()} workflow
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </DialogContent>
+        </Dialog>
+      <ConfirmDialog
+        open={isConfirmOpen}
+        onOpenChange={handleConfirmOpenChange}
+        title={t('employeesPage.terminateEmployee', 'Terminate Employee')}
+        description={t('employeesPage.terminateDesc', 'Are you sure you want to terminate this employee?')}
           confirmText={t('actions.delete', 'Terminate')}
           onConfirm={confirmDeleteEmployee}
         />
