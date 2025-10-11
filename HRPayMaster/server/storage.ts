@@ -80,6 +80,8 @@ import {
   type InsertEmailAlert,
   type EmployeeEvent,
   type InsertEmployeeEvent,
+  type ReportSchedule,
+  type InsertReportSchedule,
   type DocumentExpiryCheck,
   type FleetExpiryCheck,
   type CarRepair,
@@ -140,6 +142,7 @@ import {
   cars,
   carAssignments,
   notifications,
+  reportSchedules,
   notificationRoutingRules,
   notificationEscalationSteps,
   emailAlerts,
@@ -219,6 +222,51 @@ const hasOwn = (obj: object, key: PropertyKey): boolean =>
 export const DEFAULT_OVERTIME_LIMIT_MINUTES = 120;
 
 const MINUTES_PER_DAY = 24 * 60;
+
+const DEFAULT_REPORT_RUN_TIME = { hours: 9, minutes: 0 } as const;
+
+const parseRunTime = (value?: string | null): { hours: number; minutes: number } | undefined => {
+  if (!value) return undefined;
+  const match = /^\s*(\d{1,2}):(\d{2})\s*$/.exec(value);
+  if (!match) return undefined;
+  const hours = Number.parseInt(match[1], 10);
+  const minutes = Number.parseInt(match[2], 10);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return undefined;
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return undefined;
+  return { hours, minutes };
+};
+
+const addCadence = (date: Date, cadence: string) => {
+  const normalized = cadence?.toLowerCase();
+  if (normalized === "daily") {
+    date.setDate(date.getDate() + 1);
+    return;
+  }
+  if (normalized === "weekly") {
+    date.setDate(date.getDate() + 7);
+    return;
+  }
+  if (normalized === "quarterly") {
+    date.setMonth(date.getMonth() + 3);
+    return;
+  }
+  date.setMonth(date.getMonth() + 1);
+};
+
+export const computeNextReportRun = (
+  cadence: string,
+  runTime?: string | null,
+  reference: Date = new Date(),
+): Date => {
+  const next = new Date(reference.getTime());
+  const time = parseRunTime(runTime) ?? DEFAULT_REPORT_RUN_TIME;
+  next.setSeconds(0, 0);
+  next.setHours(time.hours, time.minutes, 0, 0);
+  if (next <= reference) {
+    addCadence(next, cadence);
+  }
+  return next;
+};
 
 const toMinutesFromTimeValue = (value?: string | null): number | undefined => {
   if (!value) return undefined;
@@ -331,6 +379,58 @@ export interface EmployeeScheduleDetail extends EmployeeSchedule {
   actualMinutes: number;
   varianceMinutes: number;
   attendanceRecords: Attendance[];
+}
+
+export interface DepartmentCostPeriod {
+  period: string;
+  departmentId: string | null;
+  departmentName: string;
+  totals: {
+    grossPay: number;
+    netPay: number;
+    baseSalary: number;
+    bonuses: number;
+    overtimeEstimate: number;
+    deductions: {
+      tax: number;
+      socialSecurity: number;
+      healthInsurance: number;
+      loan: number;
+      other: number;
+    };
+  };
+}
+
+export interface DepartmentOvertimeMetric {
+  departmentId: string | null;
+  departmentName: string;
+  totalOvertimeHours: number;
+  averageOvertimeHours: number;
+  overtimeCostEstimate: number;
+  coverageRatio: number;
+  scheduleCount: number;
+}
+
+export interface DepartmentLoanExposureMetric {
+  departmentId: string | null;
+  departmentName: string;
+  activeLoans: number;
+  totalOriginalAmount: number;
+  totalOutstandingAmount: number;
+  overdueInstallments: number;
+  overdueBalance: number;
+}
+
+export interface AttendanceForecastMetric {
+  departmentId: string | null;
+  departmentName: string;
+  forecastPeriodStart: string;
+  forecastPeriodEnd: string;
+  projectedAbsenceHours: number;
+  projectedOvertimeHours: number;
+  confidence: number;
+  trailingAbsenceRate: number;
+  trailingOvertimeRate: number;
 }
 
 
@@ -782,6 +882,23 @@ export interface IStorage {
   getCompanyPayrollByDepartment(
     range: { startDate: string; endDate: string; groupBy: "month" | "year" }
   ): Promise<PayrollDepartmentSummaryRow[]>;
+  getDepartmentCostAnalytics(
+    range: {
+      startDate: string;
+      endDate: string;
+      groupBy: "month" | "year";
+      departmentIds?: string[];
+    }
+  ): Promise<DepartmentCostPeriod[]>;
+  getDepartmentOvertimeMetrics(
+    range: { startDate: string; endDate: string; departmentIds?: string[] }
+  ): Promise<DepartmentOvertimeMetric[]>;
+  getDepartmentLoanExposure(
+    range: { startDate: string; endDate: string; departmentIds?: string[] }
+  ): Promise<DepartmentLoanExposureMetric[]>;
+  getAttendanceForecast(
+    range: { startDate: string; endDate: string; departmentIds?: string[] }
+  ): Promise<AttendanceForecastMetric[]>;
   getLoanBalances(): Promise<LoanBalance[]>;
   getAssetUsageDetails(params: { startDate?: string; endDate?: string }): Promise<AssetUsage[]>;
   getFleetUsage(params: { startDate?: string; endDate?: string }): Promise<FleetUsage[]>;
@@ -818,6 +935,20 @@ export interface IStorage {
   ): Promise<EmployeeScheduleDetail | undefined>;
   deleteEmployeeSchedule(id: string): Promise<boolean>;
   getScheduleSummary(start: Date, end: Date): Promise<Record<string, EmployeeScheduleSummary>>;
+  getReportSchedules(): Promise<ReportSchedule[]>;
+  getReportSchedule(id: string): Promise<ReportSchedule | undefined>;
+  createReportSchedule(schedule: InsertReportSchedule): Promise<ReportSchedule>;
+  updateReportSchedule(
+    id: string,
+    updates: Partial<InsertReportSchedule> & {
+      status?: ReportSchedule["status"];
+      lastRunStatus?: ReportSchedule["lastRunStatus"] | null;
+      lastRunSummary?: ReportSchedule["lastRunSummary"] | null;
+      lastRunAt?: Date | string | null;
+      nextRunAt?: Date | string | null;
+    }
+  ): Promise<ReportSchedule | undefined>;
+  getDueReportSchedules(reference: Date): Promise<ReportSchedule[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -6378,6 +6509,223 @@ export class DatabaseStorage implements IStorage {
   }
 
 
+  async getReportSchedules(): Promise<ReportSchedule[]> {
+
+    return await db
+
+      .select()
+
+      .from(reportSchedules)
+
+      .orderBy(asc(reportSchedules.name));
+
+  }
+
+
+  async getReportSchedule(id: string): Promise<ReportSchedule | undefined> {
+
+    const [schedule] = await db
+
+      .select()
+
+      .from(reportSchedules)
+
+      .where(eq(reportSchedules.id, id));
+
+    return schedule || undefined;
+
+  }
+
+
+  async createReportSchedule(schedule: InsertReportSchedule): Promise<ReportSchedule> {
+
+    const now = new Date();
+
+    const cadence = schedule.cadence ?? "monthly";
+
+    const runTime = schedule.runTime;
+
+    const filters = schedule.filters ?? {};
+
+    const groupings = schedule.groupings ?? [];
+
+    const recipients = schedule.recipients ?? [];
+
+    const notifyEmployeeIds = schedule.notifyEmployeeIds ?? [];
+
+    const deliveryChannels = schedule.deliveryChannels ?? [];
+
+    const timezone = schedule.timezone ?? "UTC";
+
+    const nextRun = computeNextReportRun(cadence, runTime, now);
+
+    const [created] = await db
+
+      .insert(reportSchedules)
+
+      .values({
+
+        ...schedule,
+
+        cadence,
+
+        runTime,
+
+        filters,
+
+        groupings,
+
+        recipients,
+
+        notifyEmployeeIds,
+
+        deliveryChannels,
+
+        timezone,
+
+        nextRunAt: nextRun,
+
+        createdAt: now,
+
+        updatedAt: now,
+
+      })
+
+      .returning();
+
+    return created;
+
+  }
+
+
+  async updateReportSchedule(
+
+    id: string,
+
+    updates: Partial<InsertReportSchedule> & {
+
+      status?: ReportSchedule["status"];
+
+      lastRunStatus?: ReportSchedule["lastRunStatus"] | null;
+
+      lastRunSummary?: ReportSchedule["lastRunSummary"] | null;
+
+      lastRunAt?: Date | string | null;
+
+      nextRunAt?: Date | string | null;
+
+    },
+
+  ): Promise<ReportSchedule | undefined> {
+
+    const existing = await this.getReportSchedule(id);
+
+    if (!existing) {
+
+      return undefined;
+
+    }
+
+    const payload: Record<string, unknown> = {
+
+      ...updates,
+
+      updatedAt: new Date(),
+
+    };
+
+    if (updates.filters !== undefined) {
+
+      payload.filters = updates.filters ?? {};
+
+    }
+
+    if (updates.groupings !== undefined) {
+
+      payload.groupings = updates.groupings ?? [];
+
+    }
+
+    if (updates.recipients !== undefined) {
+
+      payload.recipients = updates.recipients ?? [];
+
+    }
+
+    if (updates.notifyEmployeeIds !== undefined) {
+
+      payload.notifyEmployeeIds = updates.notifyEmployeeIds ?? [];
+
+    }
+
+    if (updates.deliveryChannels !== undefined) {
+
+      payload.deliveryChannels = updates.deliveryChannels ?? [];
+
+    }
+
+    if (updates.lastRunAt !== undefined) {
+
+      payload.lastRunAt = updates.lastRunAt === null ? null : new Date(updates.lastRunAt);
+
+    }
+
+    if (updates.nextRunAt !== undefined) {
+
+      payload.nextRunAt = updates.nextRunAt === null ? null : new Date(updates.nextRunAt);
+
+    }
+
+    if ((updates.cadence !== undefined || updates.runTime !== undefined) && updates.nextRunAt === undefined) {
+
+      const cadence = updates.cadence ?? existing.cadence;
+
+      const runTime = updates.runTime ?? existing.runTime;
+
+      payload.nextRunAt = computeNextReportRun(cadence, runTime, new Date());
+
+    }
+
+    const sanitized = removeUndefined(payload);
+
+    const [updated] = await db
+
+      .update(reportSchedules)
+
+      .set(sanitized)
+
+      .where(eq(reportSchedules.id, id))
+
+      .returning();
+
+    return updated || undefined;
+
+  }
+
+
+  async getDueReportSchedules(reference: Date): Promise<ReportSchedule[]> {
+
+    const whereClause = and(
+
+      eq(reportSchedules.status, "active"),
+
+      or(isNull(reportSchedules.nextRunAt), lte(reportSchedules.nextRunAt, reference)),
+
+    );
+
+    return await db
+
+      .select()
+
+      .from(reportSchedules)
+
+      .where(whereClause)
+
+      .orderBy(asc(reportSchedules.nextRunAt));
+
+  }
+
+
 
   // Car assignment methods
 
@@ -7759,6 +8107,592 @@ export class DatabaseStorage implements IStorage {
       netPay: Number(r.net),
 
     }));
+
+  }
+
+
+
+  async getDepartmentCostAnalytics(
+
+    range: {
+
+      startDate: string;
+
+      endDate: string;
+
+      groupBy: "month" | "year";
+
+      departmentIds?: string[];
+
+    },
+
+  ): Promise<DepartmentCostPeriod[]> {
+
+    const { startDate, endDate, groupBy, departmentIds } = range;
+
+    const periodExpr = (column: AnyColumn) =>
+
+      groupBy === "year"
+
+        ? sql<string>`to_char(${column}, 'YYYY')`
+
+        : sql<string>`to_char(${column}, 'YYYY-MM')`;
+
+    const grossSum = sql<string>`coalesce(sum(${payrollEntries.grossPay}), 0)`;
+
+    const netSum = sql<string>`coalesce(sum(${payrollEntries.netPay}), 0)`;
+
+    const baseSum = sql<string>`coalesce(sum(${payrollEntries.baseSalary}), 0)`;
+
+    const bonusSum = sql<string>`coalesce(sum(${payrollEntries.bonusAmount}), 0)`;
+
+    const taxSum = sql<string>`coalesce(sum(${payrollEntries.taxDeduction}), 0)`;
+
+    const socialSum = sql<string>`coalesce(sum(${payrollEntries.socialSecurityDeduction}), 0)`;
+
+    const healthSum = sql<string>`coalesce(sum(${payrollEntries.healthInsuranceDeduction}), 0)`;
+
+    const loanSum = sql<string>`coalesce(sum(${payrollEntries.loanDeduction}), 0)`;
+
+    const otherSum = sql<string>`coalesce(sum(${payrollEntries.otherDeductions}), 0)`;
+
+    const conditions: SQL[] = [
+
+      gte(payrollRuns.startDate, startDate),
+
+      lte(payrollRuns.startDate, endDate),
+
+    ];
+
+    if (departmentIds && departmentIds.length > 0) {
+
+      conditions.push(inArray(employees.departmentId, departmentIds));
+
+    }
+
+    const whereClause = conditions.length === 1 ? conditions[0] : and(...conditions);
+
+    const rows = await db
+
+      .select({
+
+        period: periodExpr(payrollRuns.startDate),
+
+        departmentId: employees.departmentId,
+
+        departmentName: departments.name,
+
+        gross: grossSum,
+
+        net: netSum,
+
+        base: baseSum,
+
+        bonus: bonusSum,
+
+        tax: taxSum,
+
+        social: socialSum,
+
+        health: healthSum,
+
+        loan: loanSum,
+
+        other: otherSum,
+
+      })
+
+      .from(payrollEntries)
+
+      .innerJoin(payrollRuns, eq(payrollEntries.payrollRunId, payrollRuns.id))
+
+      .innerJoin(employees, eq(payrollEntries.employeeId, employees.id))
+
+      .leftJoin(departments, eq(employees.departmentId, departments.id))
+
+      .where(whereClause)
+
+      .groupBy(
+
+        periodExpr(payrollRuns.startDate),
+
+        employees.departmentId,
+
+        departments.name,
+
+      )
+
+      .orderBy(periodExpr(payrollRuns.startDate), asc(departments.name));
+
+    return rows.map(row => {
+
+      const gross = Number(row.gross ?? 0);
+
+      const base = Number(row.base ?? 0);
+
+      const bonuses = Number(row.bonus ?? 0);
+
+      const overtimeEstimate = Math.max(0, gross - base - bonuses);
+
+      return {
+
+        period: row.period,
+
+        departmentId: row.departmentId ?? null,
+
+        departmentName: row.departmentName ?? "Unassigned",
+
+        totals: {
+
+          grossPay: gross,
+
+          netPay: Number(row.net ?? 0),
+
+          baseSalary: base,
+
+          bonuses,
+
+          overtimeEstimate,
+
+          deductions: {
+
+            tax: Number(row.tax ?? 0),
+
+            socialSecurity: Number(row.social ?? 0),
+
+            healthInsurance: Number(row.health ?? 0),
+
+            loan: Number(row.loan ?? 0),
+
+            other: Number(row.other ?? 0),
+
+          },
+
+        },
+
+      } satisfies DepartmentCostPeriod;
+
+    });
+
+  }
+
+
+  private async getDepartmentScheduleAggregates(
+
+    range: { startDate: string; endDate: string; departmentIds?: string[] },
+
+  ): Promise<
+
+    Array<{
+
+      departmentId: string | null;
+
+      departmentName: string;
+
+      expectedMinutes: number;
+
+      overtimeMinutes: number;
+
+      recordedMinutes: number;
+
+      scheduleCount: number;
+
+      employeeCount: number;
+
+      salarySum: number;
+
+    }>
+
+  > {
+
+    const { startDate, endDate, departmentIds } = range;
+
+    const baseCondition = and(
+
+      gte(employeeSchedules.scheduleDate, startDate),
+
+      lte(employeeSchedules.scheduleDate, endDate),
+
+    );
+
+    const whereClause =
+
+      departmentIds && departmentIds.length > 0
+
+        ? and(baseCondition, inArray(employees.departmentId, departmentIds))
+
+        : baseCondition;
+
+    const expectedSum = sql<string>`coalesce(sum(${employeeSchedules.expectedMinutes}), 0)`;
+
+    const overtimeSum = sql<string>`coalesce(sum(${employeeSchedules.overtimeMinutes}), 0)`;
+
+    const recordedHours = sql<string>`coalesce(sum(${attendance.hours}), 0)`;
+
+    const scheduleCount = sql<string>`count(${employeeSchedules.id})`;
+
+    const employeeCount = sql<string>`count(distinct ${employeeSchedules.employeeId})`;
+
+    const salarySum = sql<string>`coalesce(sum(${employees.salary}), 0)`;
+
+    const rows = await db
+
+      .select({
+
+        departmentId: employees.departmentId,
+
+        departmentName: departments.name,
+
+        expected: expectedSum,
+
+        overtime: overtimeSum,
+
+        recorded: recordedHours,
+
+        schedules: scheduleCount,
+
+        employees: employeeCount,
+
+        salary: salarySum,
+
+      })
+
+      .from(employeeSchedules)
+
+      .innerJoin(employees, eq(employeeSchedules.employeeId, employees.id))
+
+      .leftJoin(departments, eq(employees.departmentId, departments.id))
+
+      .leftJoin(
+
+        attendance,
+
+        and(
+
+          eq(attendance.employeeId, employeeSchedules.employeeId),
+
+          eq(attendance.date, employeeSchedules.scheduleDate),
+
+        ),
+
+      )
+
+      .where(whereClause)
+
+      .groupBy(employees.departmentId, departments.name);
+
+    return rows.map(row => ({
+
+      departmentId: row.departmentId ?? null,
+
+      departmentName: row.departmentName ?? "Unassigned",
+
+      expectedMinutes: Number(row.expected ?? 0),
+
+      overtimeMinutes: Math.max(0, Number(row.overtime ?? 0)),
+
+      recordedMinutes: Math.max(0, Number(row.recorded ?? 0)) * 60,
+
+      scheduleCount: Number(row.schedules ?? 0),
+
+      employeeCount: Number(row.employees ?? 0),
+
+      salarySum: Number(row.salary ?? 0),
+
+    }));
+
+  }
+
+
+  async getDepartmentOvertimeMetrics(
+
+    range: { startDate: string; endDate: string; departmentIds?: string[] },
+
+  ): Promise<DepartmentOvertimeMetric[]> {
+
+    const aggregates = await this.getDepartmentScheduleAggregates(range);
+
+    if (aggregates.length === 0) {
+
+      return [];
+
+    }
+
+    return aggregates
+
+      .map(aggregate => {
+
+        const expected = Math.max(0, aggregate.expectedMinutes);
+
+        const recorded = Math.max(0, aggregate.recordedMinutes);
+
+        const storedOvertime = Math.max(0, aggregate.overtimeMinutes);
+
+        const computedOvertime = Math.max(0, recorded - expected);
+
+        const overtimeMinutes = Math.max(storedOvertime, computedOvertime);
+
+        const totalOvertimeHours = overtimeMinutes / 60;
+
+        const denominator = aggregate.employeeCount > 0 ? aggregate.employeeCount : Math.max(1, aggregate.scheduleCount);
+
+        const averageOvertimeHours = totalOvertimeHours / Math.max(1, denominator);
+
+        const averageHourlyRate = aggregate.employeeCount > 0
+
+          ? aggregate.salarySum / aggregate.employeeCount / 160
+
+          : aggregate.salarySum / Math.max(1, aggregate.scheduleCount) / 160;
+
+        const overtimeCostEstimate = totalOvertimeHours * Math.max(0, averageHourlyRate) * 1.5;
+
+        const coverageRatio = expected > 0 ? Math.min(1.5, recorded / expected) : 0;
+
+        return {
+
+          departmentId: aggregate.departmentId,
+
+          departmentName: aggregate.departmentName,
+
+          totalOvertimeHours,
+
+          averageOvertimeHours,
+
+          overtimeCostEstimate: Number.isFinite(overtimeCostEstimate) ? Number(overtimeCostEstimate.toFixed(2)) : 0,
+
+          coverageRatio: Number.isFinite(coverageRatio) ? Number(coverageRatio.toFixed(2)) : 0,
+
+          scheduleCount: aggregate.scheduleCount,
+
+        } satisfies DepartmentOvertimeMetric;
+
+      })
+
+      .sort((a, b) => b.totalOvertimeHours - a.totalOvertimeHours);
+
+  }
+
+
+  async getDepartmentLoanExposure(
+
+    range: { startDate: string; endDate: string; departmentIds?: string[] },
+
+  ): Promise<DepartmentLoanExposureMetric[]> {
+
+    const { startDate, endDate, departmentIds } = range;
+
+    const baseCondition = and(
+
+      lte(loans.startDate, endDate),
+
+      or(isNull(loans.endDate), gte(loans.endDate, startDate)),
+
+    );
+
+    const whereClause =
+
+      departmentIds && departmentIds.length > 0
+
+        ? and(baseCondition, inArray(employees.departmentId, departmentIds))
+
+        : baseCondition;
+
+    const activeCount = sql<string>`sum(case when ${loans.status} = 'active' then 1 else 0 end)`;
+
+    const originalSum = sql<string>`coalesce(sum(${loans.amount}), 0)`;
+
+    const outstandingSum = sql<string>`coalesce(sum(${loans.remainingAmount}), 0)`;
+
+    const rows = await db
+
+      .select({
+
+        departmentId: employees.departmentId,
+
+        departmentName: departments.name,
+
+        active: activeCount,
+
+        original: originalSum,
+
+        outstanding: outstandingSum,
+
+      })
+
+      .from(loans)
+
+      .innerJoin(employees, eq(loans.employeeId, employees.id))
+
+      .leftJoin(departments, eq(employees.departmentId, departments.id))
+
+      .where(whereClause)
+
+      .groupBy(employees.departmentId, departments.name);
+
+    if (rows.length === 0) {
+
+      return [];
+
+    }
+
+    const overdueRows = await db
+
+      .select({
+
+        departmentId: employees.departmentId,
+
+        overdueCount: sql<string>`sum(case when ${loanAmortizationSchedules.status} <> 'paid' and ${loanAmortizationSchedules.dueDate} <= ${endDate} and ${loanAmortizationSchedules.dueDate} >= ${startDate} then 1 else 0 end)`,
+
+        overdueBalance: sql<string>`coalesce(sum(case when ${loanAmortizationSchedules.status} <> 'paid' and ${loanAmortizationSchedules.dueDate} <= ${endDate} and ${loanAmortizationSchedules.dueDate} >= ${startDate} then ${loanAmortizationSchedules.remainingBalance} else 0 end), 0)`,
+
+      })
+
+      .from(loanAmortizationSchedules)
+
+      .innerJoin(loans, eq(loanAmortizationSchedules.loanId, loans.id))
+
+      .innerJoin(employees, eq(loans.employeeId, employees.id))
+
+      .leftJoin(departments, eq(employees.departmentId, departments.id))
+
+      .where(whereClause)
+
+      .groupBy(employees.departmentId);
+
+    const overdueMap = new Map<string | null, { count: number; balance: number }>();
+
+    overdueRows.forEach(row => {
+
+      const key = row.departmentId ?? null;
+
+      overdueMap.set(key, {
+
+        count: Number(row.overdueCount ?? 0),
+
+        balance: Number(row.overdueBalance ?? 0),
+
+      });
+
+    });
+
+    return rows
+
+      .map(row => {
+
+        const key = row.departmentId ?? null;
+
+        const overdue = overdueMap.get(key) ?? { count: 0, balance: 0 };
+
+        return {
+
+          departmentId: key,
+
+          departmentName: row.departmentName ?? "Unassigned",
+
+          activeLoans: Number(row.active ?? 0),
+
+          totalOriginalAmount: Number(row.original ?? 0),
+
+          totalOutstandingAmount: Number(row.outstanding ?? 0),
+
+          overdueInstallments: overdue.count,
+
+          overdueBalance: overdue.balance,
+
+        } satisfies DepartmentLoanExposureMetric;
+
+      })
+
+      .sort((a, b) => b.totalOutstandingAmount - a.totalOutstandingAmount);
+
+  }
+
+
+  async getAttendanceForecast(
+
+    range: { startDate: string; endDate: string; departmentIds?: string[] },
+
+  ): Promise<AttendanceForecastMetric[]> {
+
+    const aggregates = await this.getDepartmentScheduleAggregates(range);
+
+    if (aggregates.length === 0) {
+
+      return [];
+
+    }
+
+    const start = new Date(range.startDate);
+
+    const end = new Date(range.endDate);
+
+    const startMs = start.getTime();
+
+    const endMs = end.getTime();
+
+    const diffDays = Number.isFinite(startMs) && Number.isFinite(endMs)
+
+      ? Math.max(1, Math.round((endMs - startMs) / (24 * 60 * 60 * 1000)) + 1)
+
+      : 30;
+
+    const nextStart = new Date(Number.isFinite(endMs) ? endMs + 24 * 60 * 60 * 1000 : Date.now());
+
+    const nextEnd = new Date(nextStart.getTime() + diffDays * 24 * 60 * 60 * 1000 - 1);
+
+    const toDateString = (date: Date) => date.toISOString().split("T")[0];
+
+    return aggregates
+
+      .map(aggregate => {
+
+        const expected = Math.max(0, aggregate.expectedMinutes);
+
+        const recorded = Math.max(0, aggregate.recordedMinutes);
+
+        const storedOvertime = Math.max(0, aggregate.overtimeMinutes);
+
+        const overtimeMinutes = Math.max(storedOvertime, recorded - expected);
+
+        const absenceMinutes = Math.max(0, expected - recorded);
+
+        const absenceRate = expected > 0 ? absenceMinutes / expected : 0;
+
+        const overtimeRate = expected > 0 ? overtimeMinutes / expected : 0;
+
+        const projectedAbsenceHours = (absenceRate * expected) / 60;
+
+        const projectedOvertimeHours = (overtimeRate * expected) / 60;
+
+        const confidenceBase = Math.max(1, aggregate.scheduleCount);
+
+        const confidence = Math.min(1, confidenceBase / (diffDays * Math.max(1, aggregate.employeeCount)));
+
+        return {
+
+          departmentId: aggregate.departmentId,
+
+          departmentName: aggregate.departmentName,
+
+          forecastPeriodStart: toDateString(nextStart),
+
+          forecastPeriodEnd: toDateString(nextEnd),
+
+          projectedAbsenceHours: Number(projectedAbsenceHours.toFixed(2)),
+
+          projectedOvertimeHours: Number(projectedOvertimeHours.toFixed(2)),
+
+          confidence: Number(confidence.toFixed(2)),
+
+          trailingAbsenceRate: Number(absenceRate.toFixed(3)),
+
+          trailingOvertimeRate: Number(overtimeRate.toFixed(3)),
+
+        } satisfies AttendanceForecastMetric;
+
+      })
+
+      .sort((a, b) => b.projectedAbsenceHours - a.projectedAbsenceHours);
 
   }
 
