@@ -4,16 +4,20 @@ const {
   selectMock,
   transactionMock,
   insertMock,
+  updateMock,
   loanPaymentsFindManyMock,
   carAssignmentsFindManyMock,
   employeeEventsFindManyMock,
+  sickLeaveTrackingFindFirstMock,
 } = vi.hoisted(() => ({
   selectMock: vi.fn(),
   transactionMock: vi.fn(),
   insertMock: vi.fn(),
+  updateMock: vi.fn(),
   loanPaymentsFindManyMock: vi.fn(),
   carAssignmentsFindManyMock: vi.fn(),
   employeeEventsFindManyMock: vi.fn(),
+  sickLeaveTrackingFindFirstMock: vi.fn(),
 }));
 
 vi.mock('./db', () => ({
@@ -21,22 +25,26 @@ vi.mock('./db', () => ({
     select: selectMock,
     transaction: transactionMock,
     insert: insertMock,
+    update: updateMock,
     query: {
       loanPayments: { findMany: loanPaymentsFindManyMock },
       carAssignments: { findMany: carAssignmentsFindManyMock },
       employeeEvents: { findMany: employeeEventsFindManyMock },
+      sickLeaveTracking: { findFirst: sickLeaveTrackingFindFirstMock },
     },
   },
 }));
 
 import { storage } from './storage';
-import { loanPayments } from '@shared/schema';
+import { loanPayments, sickLeaveTracking } from '@shared/schema';
 
 describe('getMonthlyEmployeeSummary', () => {
   beforeEach(() => {
     selectMock.mockReset();
     transactionMock.mockReset();
     transactionMock.mockImplementation(async cb => cb({ select: selectMock }));
+    updateMock.mockReset();
+    sickLeaveTrackingFindFirstMock.mockReset();
   });
 
   it('returns payroll, loans, and events for the month', async () => {
@@ -450,6 +458,130 @@ describe('getCarAssignments', () => {
     expect(byVin).toEqual([
       expect.objectContaining({ id: 'assign-1' }),
     ]);
+  });
+});
+
+describe('sick leave balance methods', () => {
+  beforeEach(() => {
+    insertMock.mockReset();
+    updateMock.mockReset();
+    sickLeaveTrackingFindFirstMock.mockReset();
+  });
+
+  it('returns an existing balance record', async () => {
+    const record = {
+      id: 'bal-1',
+      employeeId: 'emp-1',
+      year: 2024,
+      totalSickDaysUsed: 2,
+      remainingSickDays: 12,
+      lastUpdated: new Date().toISOString(),
+    } as any;
+
+    sickLeaveTrackingFindFirstMock.mockResolvedValueOnce(record);
+
+    const result = await storage.getSickLeaveBalance('emp-1', 2024);
+
+    expect(sickLeaveTrackingFindFirstMock).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.any(Function) }),
+    );
+    expect(result).toEqual(record);
+  });
+
+  it('creates a new balance row', async () => {
+    insertMock.mockImplementationOnce(table => {
+      expect(table).toBe(sickLeaveTracking);
+      return {
+        values: (vals: any) => {
+          expect(vals).toEqual({
+            employeeId: 'emp-1',
+            year: 2024,
+            totalSickDaysUsed: 0,
+            remainingSickDays: 14,
+          });
+          return {
+            returning: vi.fn().mockResolvedValue([
+              { id: 'bal-1', ...vals },
+            ]),
+          };
+        },
+      };
+    });
+
+    const result = await storage.createSickLeaveBalance({
+      employeeId: 'emp-1',
+      year: 2024,
+      totalSickDaysUsed: 0,
+      remainingSickDays: 14,
+    });
+
+    expect(result).toEqual({
+      id: 'bal-1',
+      employeeId: 'emp-1',
+      year: 2024,
+      totalSickDaysUsed: 0,
+      remainingSickDays: 14,
+    });
+  });
+
+  it('updates an existing balance row', async () => {
+    updateMock.mockImplementationOnce(table => {
+      expect(table).toBe(sickLeaveTracking);
+      return {
+        set: (vals: any) => {
+          expect(vals).toMatchObject({
+            totalSickDaysUsed: 5,
+            remainingSickDays: 9,
+          });
+          expect(vals.lastUpdated).toBeInstanceOf(Date);
+          return {
+            where: vi.fn().mockReturnValue({
+              returning: vi.fn().mockResolvedValue([
+                {
+                  id: 'bal-1',
+                  employeeId: 'emp-1',
+                  year: 2024,
+                  totalSickDaysUsed: 5,
+                  remainingSickDays: 9,
+                  lastUpdated: vals.lastUpdated,
+                },
+              ]),
+            }),
+          };
+        },
+      };
+    });
+
+    const result = await storage.updateSickLeaveBalance('bal-1', {
+      totalSickDaysUsed: 5,
+      remainingSickDays: 9,
+    });
+
+    expect(result).toMatchObject({
+      id: 'bal-1',
+      totalSickDaysUsed: 5,
+      remainingSickDays: 9,
+    });
+  });
+
+  it('returns the persisted record when no update fields provided', async () => {
+    const record = {
+      id: 'bal-1',
+      employeeId: 'emp-1',
+      year: 2024,
+      totalSickDaysUsed: 1,
+      remainingSickDays: 13,
+      lastUpdated: new Date().toISOString(),
+    } as any;
+
+    sickLeaveTrackingFindFirstMock.mockResolvedValueOnce(record);
+
+    const result = await storage.updateSickLeaveBalance('bal-1', {});
+
+    expect(result).toEqual(record);
+    expect(sickLeaveTrackingFindFirstMock).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.any(Function) }),
+    );
   });
 });
 

@@ -76,6 +76,8 @@ import {
   type Attendance,
   type InsertAttendance,
   type User,
+  type SickLeaveTracking,
+  type InsertSickLeaveTracking,
   departments,
   companies,
   employees,
@@ -99,6 +101,7 @@ import {
   attendance,
   users,
   allowanceTypes,
+  sickLeaveTracking,
 } from "@shared/schema";
 
 
@@ -311,9 +314,15 @@ export interface IStorage {
   getPayrollEntries(payrollRunId: string): Promise<PayrollEntry[]>;
   createPayrollEntry(payrollEntry: InsertPayrollEntry): Promise<PayrollEntry>;
   updatePayrollEntry(id: string, payrollEntry: Partial<InsertPayrollEntry>): Promise<PayrollEntry | undefined>;
-  getSickLeaveBalance(employeeId: string, year: number): Promise<any>;
-  createSickLeaveBalance(data: any): Promise<any>;
-  updateSickLeaveBalance(id: string, data: any): Promise<any>;
+  getSickLeaveBalance(
+    employeeId: string,
+    year: number,
+  ): Promise<SickLeaveTracking | undefined>;
+  createSickLeaveBalance(data: InsertSickLeaveTracking): Promise<SickLeaveTracking>;
+  updateSickLeaveBalance(
+    id: string,
+    data: Partial<InsertSickLeaveTracking>,
+  ): Promise<SickLeaveTracking | undefined>;
 
   // Vacation request methods
   getVacationRequests(
@@ -2256,38 +2265,45 @@ export class DatabaseStorage implements IStorage {
 
   // Sick leave balance methods
 
-  async getSickLeaveBalance(employeeId: string, year: number): Promise<any> {
+  async getSickLeaveBalance(
+    employeeId: string,
+    year: number,
+  ): Promise<SickLeaveTracking | undefined> {
+    return await db.query.sickLeaveTracking.findFirst({
+      where: (record, { and, eq }) =>
+        and(eq(record.employeeId, employeeId), eq(record.year, year)),
+    });
+  }
 
-    // This would need a sick leave balance table - for now return mock data
+  async createSickLeaveBalance(
+    data: InsertSickLeaveTracking,
+  ): Promise<SickLeaveTracking> {
+    const [created] = await db.insert(sickLeaveTracking).values(data).returning();
+    return created;
+  }
 
-    return {
+  async updateSickLeaveBalance(
+    id: string,
+    data: Partial<InsertSickLeaveTracking>,
+  ): Promise<SickLeaveTracking | undefined> {
+    if (Object.keys(data).length === 0) {
+      return await db.query.sickLeaveTracking.findFirst({
+        where: (record, { eq }) => eq(record.id, id),
+      });
+    }
 
-      employeeId,
-
-      year,
-
-      totalSickDaysUsed: 0,
-
-      remainingSickDays: 14,
-
+    const updateData: Partial<InsertSickLeaveTracking> & { lastUpdated?: Date } = {
+      ...data,
+      lastUpdated: new Date(),
     };
 
-  }
+    const [updated] = await db
+      .update(sickLeaveTracking)
+      .set(updateData)
+      .where(eq(sickLeaveTracking.id, id))
+      .returning();
 
-
-
-  async createSickLeaveBalance(data: any): Promise<any> {
-
-    return data;
-
-  }
-
-
-
-  async updateSickLeaveBalance(id: string, data: any): Promise<any> {
-
-    return data;
-
+    return updated ?? undefined;
   }
 
 

@@ -77,16 +77,7 @@ export function VacationDayForm({
     mutationFn: async (data: any) => {
       const res = await apiPut(`/api/payroll/entries/${payrollEntryId}`, data);
       if (!res.ok) throw res;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
-      toast({
-        title: "Success",
-        description: "Vacation days updated successfully",
-      });
-      onSuccess();
-      onClose();
+      return res.data;
     },
     onError: (err) => {
       toastApiError(err as any, "Failed to update vacation days");
@@ -104,9 +95,22 @@ export function VacationDayForm({
     onError: (err) => toastApiError(err as any, "Failed to create vacation"),
   });
 
+  const updateSickLeaveMutation = useMutation({
+    mutationFn: async (data: Partial<SickLeaveTracking> & { year: number; daysUsed?: number }) => {
+      const res = await apiPost(`/api/employees/${employeeId}/sick-leave-balance`, data);
+      if (!res.ok) throw res;
+      return res.data as SickLeaveTracking;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: [`/api/employees/${employeeId}/sick-leave-balance`],
+      });
+    },
+    onError: (err) => toastApiError(err as any, "Failed to update sick leave balance"),
+  });
+
   const onSubmit = async (data: VacationFormData) => {
     try {
-      // Check sick leave limits
       if (data.leaveType === "sick") {
         const remainingSickDays = sickLeaveBalance?.remainingSickDays || 14;
         if (data.days > remainingSickDays) {
@@ -119,11 +123,12 @@ export function VacationDayForm({
         }
       }
 
-      // Create vacation request record
       const vacationRequestData = {
         employeeId,
         startDate: new Date().toISOString().split('T')[0],
-        endDate: new Date(Date.now() + (data.days * 24 * 60 * 60 * 1000)).toISOString().split('T')[0],
+        endDate: new Date(Date.now() + data.days * 24 * 60 * 60 * 1000)
+          .toISOString()
+          .split('T')[0],
         days: data.days,
         reason: data.reason || "",
         leaveType: data.leaveType,
@@ -134,30 +139,44 @@ export function VacationDayForm({
 
       await createVacationRequestMutation.mutateAsync(vacationRequestData);
 
-      // Update payroll entry
       const payrollUpdateData = {
         vacationDays: data.days,
         adjustmentReason: `${data.leaveType} leave: ${data.days} days`,
       };
 
-      // If it's emergency leave and user chose not to deduct, don't reduce salary
       if (data.leaveType === "emergency" && !data.deductFromSalary) {
         payrollUpdateData.adjustmentReason += " (no salary deduction)";
       }
 
       await updatePayrollMutation.mutateAsync(payrollUpdateData);
 
-      // Update sick leave balance if it's sick leave
       if (data.leaveType === "sick") {
-        await apiPost(`/api/employees/${employeeId}/sick-leave-balance`, {
-          daysUsed: data.days,
+        await updateSickLeaveMutation.mutateAsync({
           year: new Date().getFullYear(),
+          daysUsed: data.days,
         });
       }
 
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/payroll", payrollId],
+      });
+
+      toast({
+        title: "Success",
+        description: "Vacation days updated successfully",
+      });
+      onSuccess();
+      onClose();
     } catch (error) {
       console.error("Error processing vacation request:", error);
-      toastApiError(error as any, "Failed to process vacation request");
+      if (
+        error !== createVacationRequestMutation.error &&
+        error !== updatePayrollMutation.error &&
+        error !== updateSickLeaveMutation.error
+      ) {
+        toastApiError(error as any, "Failed to process vacation request");
+      }
     }
   };
 
