@@ -1,0 +1,26 @@
+# System Analysis
+
+## Current Capabilities Snapshot
+- **Unified React SPA with protected routing.** The client bootstraps authenticated users, loads company branding, and exposes navigation for dashboard, HR, finance, compliance, reports, settings, and chatbot features through a single layout. 【F:HRPayMaster/client/src/App.tsx†L24-L156】【F:HRPayMaster/client/src/components/layout/layout.tsx†L140-L194】
+- **Session-based Express API with scheduled compliance automation.** The server enforces local strategy authentication, ensures an admin seed user, configures scoped body limits, and periodically sends expiry and vacation return alerts. 【F:HRPayMaster/server/index.ts†L1-L200】【F:HRPayMaster/server/index.ts†L320-L359】
+- **Rich HR operations surface.** Tabs under People cover employees, departments, vacations, events, attendance, logs, and a document generator, while finance and compliance pages expose payroll, loans, fleet expiries, notifications, and approvals. 【F:HRPayMaster/client/src/pages/people.tsx†L13-L85】【F:HRPayMaster/client/src/pages/finance.tsx†L1-L38】【F:HRPayMaster/client/src/pages/compliance.tsx†L18-L224】
+- **Reporting API coverage.** Dedicated endpoints aggregate employee, payroll, loan, asset, and fleet metrics with consistent date filtering, enabling the client dashboards. 【F:HRPayMaster/server/routes/reports.ts†L6-L220】
+
+## Identified Gaps & Incomplete Areas
+1. **Single-company assumptions block multi-tenant scenarios.** `/api/company` always returns (or creates) the first company record and updates reuse that id, while the UI bootstraps a single company instance into global state. This leaves the `/api/companies` collection routes underused and prevents managing multiple legal entities. 【F:HRPayMaster/server/routes/employees.ts†L281-L335】【F:HRPayMaster/client/src/App.tsx†L58-L125】
+2. **Template administration is narrower than document generator options.** The generator lets HR choose NOC, salary certificate, clearance, offer, experience, and warning templates, but the settings screen only edits NOC, offer, warning, and experience. Salary and clearance letters cannot be customized, so saved documents may drift from corporate standards. 【F:HRPayMaster/client/src/pages/document-generator.tsx†L196-L238】【F:HRPayMaster/client/src/pages/settings.tsx†L406-L467】
+3. **Observability is limited to a single chatbot counter.** Prometheus registration exposes only `chatbot_monthly_summary_requests_total`, mirroring the short observability doc. Background jobs, payroll runs, and import endpoints lack metrics, making incident triage and capacity planning difficult. 【F:HRPayMaster/server/metrics.ts†L10-L22】【F:docs/observability.md†L1-L8】
+4. **Performance guidance is based on synthetic timing only.** The benchmarks compare sequential versus batched queries using a `setTimeout` simulation, so there is no visibility into real database latency, index efficiency, or end-to-end response times. 【F:docs/performance.md†L1-L10】
+5. **Attendance tracking relies on manual entry or CSV uploads.** The UI collects records through dialogs and CSV import templates, implying there is no integration with biometric devices or automated schedule reconciliation. That limits accuracy and increases HR overhead. 【F:HRPayMaster/client/src/pages/attendance.tsx†L27-L190】
+
+## Recommended Enhancements
+
+### Major Initiatives
+- **Introduce first-class multi-company support.** Expand the client to let admins switch or manage companies, persist company context per user, and update storage so routes operate on a selected company instead of the implicit first record. This unlocks deployments where one tenant serves multiple subsidiaries. 【F:HRPayMaster/server/routes/employees.ts†L281-L335】【F:HRPayMaster/client/src/App.tsx†L58-L125】
+- **Broaden observability coverage.** Add counters/histograms for payroll runs, imports, background schedulers, and notification deliveries, export job health gauges, and document dashboards/alerts so operations can detect regressions faster. 【F:HRPayMaster/server/index.ts†L320-L359】【F:HRPayMaster/server/metrics.ts†L10-L22】
+- **Automate attendance ingestion.** Provide APIs and adapters for time-clock hardware or SaaS attendance feeds, reconcile anomalies, and surface exception workflows in the Attendance tab to reduce manual data entry. 【F:HRPayMaster/client/src/pages/attendance.tsx†L38-L190】
+
+### Minor Improvements
+- **Expand template management coverage.** Allow administrators to edit salary certificates, clearance letters, and other templates surfaced in the generator so generated PDFs remain brand compliant. 【F:HRPayMaster/client/src/pages/document-generator.tsx†L196-L238】【F:HRPayMaster/client/src/pages/settings.tsx†L406-L467】
+- **Instrument real performance benchmarks.** Capture query timings, Drizzle/DB statistics, and client-perceived latency during typical workflows, replacing the simulated numbers in the performance guide with actionable baselines. 【F:docs/performance.md†L1-L10】
+- **Publish background job status in metrics.** Surface success/failure counters for document expiry and vacation return schedulers to confirm alerts run as expected and enable alerting when jobs stall. 【F:HRPayMaster/server/index.ts†L320-L359】【F:HRPayMaster/server/metrics.ts†L10-L22】
