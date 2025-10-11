@@ -1,14 +1,15 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useEffect } from "react";
-import { apiGet, apiPost, apiPut } from "@/lib/http";
+import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/http";
 import { defaultTemplates } from "@/lib/default-templates";
 import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
+import type { EmployeeCustomField } from "@shared/schema";
 
 export default function Settings() {
   const { t } = useTranslation();
@@ -105,6 +106,8 @@ export default function Settings() {
           <div className="flex justify-end"><Button onClick={()=>update.mutate()} disabled={update.isPending}>{t('actions.save')}</Button></div>
         </CardContent>
       </Card>
+
+      <CustomFieldsCard />
 
       <UsersCard />
 
@@ -398,6 +401,207 @@ function UsersCard() {
             </div>
           )}
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function CustomFieldsCard() {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [newFieldName, setNewFieldName] = useState("");
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+
+  const {
+    data: customFields = [],
+    isLoading,
+    error,
+  } = useQuery<EmployeeCustomField[]>({
+    queryKey: ["/api/employees/custom-fields"],
+    queryFn: async () => {
+      const res = await apiGet("/api/employees/custom-fields");
+      if (!res.ok) {
+        throw new Error(res.error || "Failed to load custom fields");
+      }
+      return res.data as EmployeeCustomField[];
+    },
+  });
+
+  useEffect(() => {
+    setDrafts(prev => {
+      const next: Record<string, string> = {};
+      for (const field of customFields) {
+        next[field.id] = Object.prototype.hasOwnProperty.call(prev, field.id)
+          ? prev[field.id]
+          : field.name;
+      }
+      return next;
+    });
+  }, [customFields]);
+
+  const createField = useMutation({
+    mutationFn: async (name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) throw new Error(t("settings.fieldNameRequired", "Field name is required"));
+      const res = await apiPost("/api/employees/custom-fields", { name: trimmed });
+      if (!res.ok) {
+        throw new Error(res.error || "Failed to create field");
+      }
+      return res.data as EmployeeCustomField;
+    },
+    onSuccess: () => {
+      setNewFieldName("");
+      queryClient.invalidateQueries({ queryKey: ["/api/employees/custom-fields"] });
+      toast({ title: t("settings.customFieldAdded", "Custom field added") });
+    },
+    onError: (err: any) => {
+      toast({
+        title: t("errors.errorTitle", "Error"),
+        description: err?.message || t("settings.customFieldAddFailed", "Could not add field"),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateField = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const trimmed = name.trim();
+      if (!trimmed) throw new Error(t("settings.fieldNameRequired", "Field name is required"));
+      const res = await apiPut(`/api/employees/custom-fields/${id}`, { name: trimmed });
+      if (!res.ok) {
+        throw new Error(res.error || "Failed to update field");
+      }
+      return res.data as EmployeeCustomField;
+    },
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/employees/custom-fields"] });
+      toast({ title: t("settings.customFieldUpdated", "Custom field updated") });
+      setDrafts(prev => ({ ...prev, [id]: prev[id]?.trim() ?? "" }));
+    },
+    onError: (err: any) => {
+      toast({
+        title: t("errors.errorTitle", "Error"),
+        description: err?.message || t("settings.customFieldUpdateFailed", "Could not update field"),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteField = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiDelete(`/api/employees/custom-fields/${id}`);
+      if (!res.ok) {
+        throw new Error(res.error || "Failed to delete field");
+      }
+      return id;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/employees/custom-fields"] });
+      toast({ title: t("settings.customFieldDeleted", "Custom field deleted") });
+    },
+    onError: (err: any) => {
+      toast({
+        title: t("errors.errorTitle", "Error"),
+        description: err?.message || t("settings.customFieldDeleteFailed", "Could not delete field"),
+        variant: "destructive",
+      });
+    },
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t("settings.customFieldsTitle", "Custom Employee Fields")}</CardTitle>
+        <CardDescription>
+          {t(
+            "settings.customFieldsDescription",
+            "Define organization-specific fields that appear on employee forms.",
+          )}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="w-full space-y-1 sm:max-w-xs">
+            <label className="text-sm text-muted-foreground" htmlFor="new-custom-field">
+              {t("settings.fieldName", "Field name")}
+            </label>
+            <Input
+              id="new-custom-field"
+              value={newFieldName}
+              onChange={(event) => setNewFieldName(event.target.value)}
+              placeholder={t("settings.fieldNamePlaceholder", "e.g. Favorite color")}
+            />
+          </div>
+          <Button
+            type="button"
+            onClick={() => createField.mutate(newFieldName)}
+            disabled={createField.isPending || newFieldName.trim() === ""}
+          >
+            {createField.isPending
+              ? t("settings.addingField", "Adding...")
+              : t("settings.addField", "Add field")}
+          </Button>
+        </div>
+
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">{t("settings.loadingFields", "Loading fields...")}</p>
+        ) : error ? (
+          <p className="text-sm text-red-500">
+            {error instanceof Error
+              ? error.message
+              : t("settings.customFieldLoadFailed", "Failed to load custom fields")}
+          </p>
+        ) : customFields.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {t("settings.noCustomFields", "No custom fields yet. Add one above to get started.")}
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {customFields.map((field) => {
+              const draft = drafts[field.id] ?? "";
+              const trimmed = draft.trim();
+              const unchanged = trimmed === field.name.trim();
+              return (
+                <div
+                  key={field.id}
+                  className="flex flex-col gap-3 rounded-md border border-border p-3 sm:flex-row sm:items-center"
+                >
+                  <Input
+                    value={draft}
+                    onChange={(event) =>
+                      setDrafts((prev) => ({
+                        ...prev,
+                        [field.id]: event.target.value,
+                      }))
+                    }
+                    className="sm:max-w-sm"
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => updateField.mutate({ id: field.id, name: draft })}
+                      disabled={updateField.isPending || trimmed === "" || unchanged}
+                    >
+                      {updateField.isPending ? t("actions.saving", "Saving...") : t("actions.save", "Save")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => deleteField.mutate(field.id)}
+                      disabled={deleteField.isPending}
+                    >
+                      {t("actions.delete", "Delete")}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

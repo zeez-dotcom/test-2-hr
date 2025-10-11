@@ -18,12 +18,15 @@ import {
   insertGenericDocumentSchema,
   insertAttendanceSchema,
   insertAllowanceTypeSchema,
+  insertEmployeeCustomFieldSchema,
+  employeeCustomValuePayloadSchema,
   type InsertEmployeeEvent,
   type InsertEmployee,
   type InsertCar,
   type InsertAssetAssignment,
   type InsertGenericDocument,
   type InsertSickLeaveTracking,
+  type EmployeeCustomValueMap,
 } from "@shared/schema";
 import {
   sendEmail,
@@ -158,6 +161,94 @@ const sickLeaveBalanceUpdateSchema = z
       path: ["daysUsed"],
     },
   );
+
+const employeeCustomFieldSchema = insertEmployeeCustomFieldSchema.extend({
+  name: z.string().trim().min(1, "Name is required"),
+});
+
+function normalizeCustomFieldValue(raw: unknown): string | null {
+  if (raw === null || raw === undefined) {
+    return null;
+  }
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (trimmed === "") {
+      return null;
+    }
+    return trimmed;
+  }
+  if (raw instanceof Date) {
+    return raw.toISOString();
+  }
+  if (typeof raw === "number" || typeof raw === "boolean") {
+    return String(raw);
+  }
+  return String(raw);
+}
+
+function mapCustomValuesToRecord(values: { fieldId: string; value: string | null }[]) {
+  const record: EmployeeCustomValueMap = {};
+  for (const value of values) {
+    record[value.fieldId] = value.value ?? null;
+  }
+  return record;
+}
+
+async function syncEmployeeCustomValues(
+  employeeId: string,
+  incoming?: Record<string, unknown>,
+): Promise<EmployeeCustomValueMap> {
+  if (!incoming || Object.keys(incoming).length === 0) {
+    const existing = await storage.getEmployeeCustomValues(employeeId);
+    return mapCustomValuesToRecord(existing);
+  }
+
+  const fields = await storage.getEmployeeCustomFields();
+  if (fields.length === 0) {
+    return {};
+  }
+  const validFieldIds = new Set(fields.map(field => field.id));
+
+  const existing = await storage.getEmployeeCustomValues(employeeId);
+  const existingByField = new Map(existing.map(value => [value.fieldId, value]));
+
+  for (const [fieldId, raw] of Object.entries(incoming)) {
+    if (!validFieldIds.has(fieldId)) {
+      throw new HttpError(400, `Unknown custom field: ${fieldId}`);
+    }
+
+    const normalized = normalizeCustomFieldValue(raw);
+    const existingValue = existingByField.get(fieldId);
+
+    if (normalized === null) {
+      if (existingValue) {
+        await storage.deleteEmployeeCustomValue(existingValue.id);
+        existingByField.delete(fieldId);
+      }
+      continue;
+    }
+
+    if (!existingValue) {
+      const created = await storage.createEmployeeCustomValue({
+        employeeId,
+        fieldId,
+        value: normalized,
+      });
+      existingByField.set(fieldId, created);
+      continue;
+    }
+
+    if (existingValue.value !== normalized) {
+      const updated = await storage.updateEmployeeCustomValue(existingValue.id, {
+        value: normalized,
+      });
+      existingByField.set(fieldId, updated ?? { ...existingValue, value: normalized });
+    }
+  }
+
+  const finalValues = await storage.getEmployeeCustomValues(employeeId);
+  return mapCustomValuesToRecord(finalValues);
+}
 
 export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
   "Employee Code/معرف الموظف",
@@ -538,7 +629,98 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
     ),
     paymentMethod: z.preprocess(v => (emptyToUndef(v) as string | undefined)?.toLowerCase(),
       z.enum(["bank", "cash", "link"]).optional()),
+    customFieldValues: employeeCustomValuePayloadSchema.optional(),
   });
+
+  employeesRouter.get("/api/employees/custom-fields", async (_req, res, next) => {
+    try {
+      const fields = await storage.getEmployeeCustomFields();
+      res.json(fields);
+    } catch (error) {
+      next(new HttpError(500, "Failed to fetch custom fields"));
+    }
+  });
+
+  employeesRouter.post(
+    "/api/employees/custom-fields",
+    requireRole(["admin", "hr"]),
+    async (req, res, next) => {
+      try {
+        const payload = employeeCustomFieldSchema.parse(req.body);
+        const created = await storage.createEmployeeCustomField(payload);
+        res.status(201).json(created);
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return next(new HttpError(400, "Invalid custom field data", error.errors));
+        }
+        if ((error as any)?.code === "23505") {
+          return next(new HttpError(409, "Custom field with this name already exists"));
+        }
+        next(new HttpError(500, "Failed to create custom field"));
+      }
+    },
+  );
+
+  employeesRouter.put(
+    "/api/employees/custom-fields/:id",
+    requireRole(["admin", "hr"]),
+    async (req, res, next) => {
+      try {
+        const payload = employeeCustomFieldSchema.parse(req.body);
+        const updated = await storage.updateEmployeeCustomField(req.params.id, payload);
+        if (!updated) {
+          return next(new HttpError(404, "Custom field not found"));
+        }
+        res.json(updated);
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return next(new HttpError(400, "Invalid custom field data", error.errors));
+        }
+        if ((error as any)?.code === "23505") {
+          return next(new HttpError(409, "Custom field with this name already exists"));
+        }
+        next(new HttpError(500, "Failed to update custom field"));
+      }
+    },
+  );
+
+  employeesRouter.delete(
+    "/api/employees/custom-fields/:id",
+    requireRole(["admin", "hr"]),
+    async (req, res, next) => {
+      try {
+        const deleted = await storage.deleteEmployeeCustomField(req.params.id);
+        if (!deleted) {
+          return next(new HttpError(404, "Custom field not found"));
+        }
+        res.status(204).send();
+      } catch (error) {
+        next(new HttpError(500, "Failed to delete custom field"));
+      }
+    },
+  );
+
+  employeesRouter.get(
+    "/api/employees/:id/custom-fields",
+    async (req, res, next) => {
+      try {
+        const employee = await storage.getEmployee(req.params.id);
+        if (!employee) {
+          return next(new HttpError(404, "Employee not found"));
+        }
+        const [fields, values] = await Promise.all([
+          storage.getEmployeeCustomFields(),
+          storage.getEmployeeCustomValues(employee.id),
+        ]);
+        res.json({
+          fields,
+          values: mapCustomValuesToRecord(values),
+        });
+      } catch (error) {
+        next(new HttpError(500, "Failed to fetch employee custom fields"));
+      }
+    },
+  );
 
   employeesRouter.post("/api/employees/import", upload.single("file"), async (req, res, next) => {
     const file = (req as Request & { file?: Express.Multer.File }).file;
@@ -929,7 +1111,11 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
       if (!employee) {
         return next(new HttpError(404, "Employee not found"));
       }
-      res.json(employee);
+      const customValues = await storage.getEmployeeCustomValues(employee.id);
+      res.json({
+        ...employee,
+        customFieldValues: mapCustomValuesToRecord(customValues),
+      });
     } catch (error) {
       next(new HttpError(500, "Failed to fetch employee"));
     }
@@ -1057,7 +1243,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
 
   employeesRouter.post("/api/employees", async (req, res, next) => {
     try {
-      const parsed = employeeSchema.parse(req.body);
+      const { customFieldValues, ...parsed } = employeeSchema.parse(req.body);
       const employee: any = Object.fromEntries(
         Object.entries(parsed).filter(([_, v]) => v !== undefined)
       );
@@ -1072,6 +1258,10 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
         ...employee,
         role: employee.role || "employee",
       });
+      const customValues = await syncEmployeeCustomValues(
+        newEmployee.id,
+        customFieldValues ?? undefined,
+      );
       // Log employee creation into events for visibility in Logs
       try {
         const addedBy = await getAddedBy(req);
@@ -1090,7 +1280,10 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
         // Non-fatal: creation succeeds even if event logging fails
         console.warn("Failed to log employee creation event", e);
       }
-      res.status(201).json(newEmployee);
+      res.status(201).json({
+        ...newEmployee,
+        customFieldValues: customValues,
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
         return next(new HttpError(400, "Invalid employee data", error.errors));
@@ -1125,8 +1318,9 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
         .omit({ employeeCode: true })
         .partial()
         .parse(req.body) as any;
+      const { customFieldValues, ...rawUpdates } = parsed;
       const updates: any = Object.fromEntries(
-        Object.entries(parsed).filter(([_, v]) => v !== undefined)
+        Object.entries(rawUpdates).filter(([_, v]) => v !== undefined)
       );
       await optimizeImages(updates);
       const updatedEmployee = await storage.updateEmployee(
@@ -1136,6 +1330,10 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
       if (!updatedEmployee) {
         return next(new HttpError(404, "Employee not found"));
       }
+      const customValues = await syncEmployeeCustomValues(
+        updatedEmployee.id,
+        customFieldValues ?? undefined,
+      );
       const changedFields = Object.keys(updates);
       if (changedFields.length > 0) {
         const documentFields = new Set([
@@ -1180,7 +1378,10 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
         await storage.createEmployeeEvent(event);
       }
 
-      res.json(updatedEmployee);
+      res.json({
+        ...updatedEmployee,
+        customFieldValues: customValues,
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
         return next(new HttpError(400, "Invalid employee data", error.errors));

@@ -1499,15 +1499,17 @@ export class DatabaseStorage implements IStorage {
 
 
   async deleteEmployeeCustomField(id: string): Promise<boolean> {
+    return await db.transaction(async tx => {
+      await tx
+        .delete(employeeCustomValues)
+        .where(eq(employeeCustomValues.fieldId, id));
 
-    const result = await db
+      const result = await tx
+        .delete(employeeCustomFields)
+        .where(eq(employeeCustomFields.id, id));
 
-      .delete(employeeCustomFields)
-
-      .where(eq(employeeCustomFields.id, id));
-
-    return (result.rowCount ?? 0) > 0;
-
+      return (result.rowCount ?? 0) > 0;
+    });
   }
 
 

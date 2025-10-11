@@ -15,13 +15,27 @@ import { apiPost, apiPut } from "@/lib/http";
 import { buildBilingualActionReceipt, buildAndEncodePdf } from "@/lib/pdf";
 import { useToast } from "@/hooks/use-toast";
 import { toastApiError } from "@/lib/toastError";
-import type { EmployeeWithDepartment, Department, InsertEmployee, Company } from "@shared/schema";
+import type {
+  EmployeeWithDepartment,
+  Department,
+  InsertEmployee,
+  Company,
+  EmployeeCustomValueMap,
+} from "@shared/schema";
 import { useLocation } from "wouter";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
 
 interface EmployeesProps {
   defaultStatus?: string;
 }
+
+type EmployeeMutationPayload = InsertEmployee & {
+  customFieldValues?: EmployeeCustomValueMap;
+};
+
+type EmployeeMutationUpdatePayload = Partial<InsertEmployee> & {
+  customFieldValues?: EmployeeCustomValueMap;
+};
 
 export default function Employees({ defaultStatus = "active" }: EmployeesProps) {
   const { t } = useTranslation();
@@ -83,7 +97,7 @@ export default function Employees({ defaultStatus = "active" }: EmployeesProps) 
   });
 
   const addEmployeeMutation = useMutation({
-    mutationFn: async (employee: InsertEmployee) => {
+    mutationFn: async (employee: EmployeeMutationPayload) => {
       const res = await apiPost("/api/employees", employee);
       if (!res.ok) throw res;
       return res.data;
@@ -92,6 +106,7 @@ export default function Employees({ defaultStatus = "active" }: EmployeesProps) 
       queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
       if (data?.id) {
         queryClient.invalidateQueries({ queryKey: ["/api/employees", data.id] });
+        queryClient.invalidateQueries({ queryKey: ["/api/employees", data.id, "custom-fields"] });
       }
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       setIsAddDialogOpen(false);
@@ -106,7 +121,7 @@ export default function Employees({ defaultStatus = "active" }: EmployeesProps) 
   });
 
   const updateEmployeeMutation = useMutation({
-    mutationFn: async ({ id, employee }: { id: string; employee: Partial<InsertEmployee> }) => {
+    mutationFn: async ({ id, employee }: { id: string; employee: EmployeeMutationUpdatePayload }) => {
       const res = await apiPut(`/api/employees/${id}`, employee);
       if (!res.ok) throw res;
       return id;
@@ -114,6 +129,7 @@ export default function Employees({ defaultStatus = "active" }: EmployeesProps) 
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
       queryClient.invalidateQueries({ queryKey: ["/api/employees", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/employees", id, "custom-fields"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       setIsEditDialogOpen(false);
       setEditingEmployee(null);
@@ -179,7 +195,7 @@ export default function Employees({ defaultStatus = "active" }: EmployeesProps) 
     }
   };
 
-  const handleAddEmployee = (employee: InsertEmployee) => {
+  const handleAddEmployee = (employee: EmployeeMutationPayload) => {
     addEmployeeMutation.mutate(employee);
   };
 
@@ -188,12 +204,12 @@ export default function Employees({ defaultStatus = "active" }: EmployeesProps) 
     setIsEditDialogOpen(true);
   };
 
-  const handleUpdateEmployee = (employee: InsertEmployee) => {
+  const handleUpdateEmployee = (employee: EmployeeMutationPayload) => {
     if (editingEmployee) {
       const { employeeCode, ...updates } = employee;
       updateEmployeeMutation.mutate({
         id: editingEmployee.id,
-        employee: updates,
+        employee: updates as EmployeeMutationUpdatePayload,
       });
     }
   };
