@@ -16,6 +16,8 @@ import {
   insertNotificationSchema,
   insertEmailAlertSchema,
   insertEmployeeEventSchema,
+  upsertNotificationRoutingRuleSchema,
+  notificationEscalationStepInputSchema,
   insertAttendanceSchema,
   insertAllowanceTypeSchema,
   insertEmployeeCustomFieldSchema,
@@ -48,6 +50,9 @@ import {
   generateExpiryWarningEmail,
   calculateDaysUntilExpiry,
   shouldSendAlert,
+  sendNotificationDigest,
+  escalateNotification as escalateNotificationService,
+  escalateOverdueNotifications,
 } from "../emailService";
 import { z } from "zod";
 import multer from "multer";
@@ -3244,6 +3249,68 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
   });
 
   // Notification routes
+  employeesRouter.get("/api/notifications/rules", async (_req, res, next) => {
+    try {
+      const rules = await storage.getNotificationRoutingRules();
+      res.json(rules);
+    } catch (error) {
+      next(new HttpError(500, "Failed to fetch notification rules"));
+    }
+  });
+
+  employeesRouter.post("/api/notifications/rules", async (req, res, next) => {
+    try {
+      const payload = upsertNotificationRoutingRuleSchema.parse(req.body);
+      const { steps = [], id, ...rule } = payload;
+      const sanitizedSteps = steps.map(step => {
+        const parsed = notificationEscalationStepInputSchema.parse(step);
+        const { id: _stepId, ruleId: _ruleId, ...rest } = parsed;
+        return rest;
+      });
+      const saved = await storage.upsertNotificationRoutingRule({
+        ...rule,
+        id,
+        steps: sanitizedSteps,
+      });
+      res.status(201).json(saved);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return next(
+          new HttpError(400, "Invalid routing rule payload", error.errors),
+        );
+      }
+      next(new HttpError(500, "Failed to save notification rule"));
+    }
+  });
+
+  employeesRouter.put("/api/notifications/rules/:id", async (req, res, next) => {
+    try {
+      const payload = upsertNotificationRoutingRuleSchema.parse({
+        ...req.body,
+        id: req.params.id,
+      });
+      const { steps = [], id, ...rule } = payload;
+      const sanitizedSteps = steps.map(step => {
+        const parsed = notificationEscalationStepInputSchema.parse(step);
+        const { id: _stepId, ruleId: _ruleId, ...rest } = parsed;
+        return rest;
+      });
+      const saved = await storage.upsertNotificationRoutingRule({
+        ...rule,
+        id,
+        steps: sanitizedSteps,
+      });
+      res.json(saved);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return next(
+          new HttpError(400, "Invalid routing rule payload", error.errors),
+        );
+      }
+      next(new HttpError(500, "Failed to update notification rule"));
+    }
+  });
+
   employeesRouter.get("/api/notifications", async (req, res, next) => {
     try {
       const notifications = await storage.getNotifications();
@@ -3296,10 +3363,27 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
 
   employeesRouter.put("/api/notifications/:id/snooze", async (req, res, next) => {
     try {
-      const until = (req.body?.snoozedUntil as string) || new Date(Date.now() + 7 * 86400000).toISOString();
-      const updated = await storage.updateNotification(req.params.id, { snoozedUntil: new Date(until) as any, status: 'unread' });
-      if (!updated) return next(new HttpError(404, "Notification not found"));
-      res.json({ message: "Notification snoozed", snoozedUntil: until });
+      const body = req.body ?? {};
+      const durationMinutes = body.durationMinutes
+        ? Number(body.durationMinutes)
+        : undefined;
+      const candidate = body.snoozedUntil ? new Date(body.snoozedUntil) : undefined;
+      const untilDate =
+        candidate && !Number.isNaN(candidate.getTime())
+          ? candidate
+          : durationMinutes && !Number.isNaN(durationMinutes)
+          ? new Date(Date.now() + durationMinutes * 60_000)
+          : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const iso = untilDate.toISOString();
+      const updated = await storage.updateNotification(req.params.id, {
+        snoozedUntil: untilDate,
+        status: 'unread',
+        escalationStatus: 'pending',
+        slaDueAt: untilDate,
+      });
+      if (!updated)
+        return next(new HttpError(404, "Notification not found"));
+      res.json({ message: "Notification snoozed", snoozedUntil: iso });
     } catch (error) {
       next(new HttpError(500, "Failed to snooze notification"));
     }
@@ -3316,6 +3400,89 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
       next(new HttpError(500, "Failed to delete notification"));
     }
   });
+
+  employeesRouter.post(
+    "/api/notifications/:id/escalate",
+    async (req, res, next) => {
+      try {
+        const notifications = await storage.getNotifications();
+        const notification = notifications.find(n => n.id === req.params.id);
+        if (!notification) {
+          return next(new HttpError(404, "Notification not found"));
+        }
+
+        const reason = typeof req.body?.reason === 'string' ? req.body.reason : undefined;
+        const result = await escalateNotificationService({
+          storage,
+          notification,
+          reason,
+        });
+
+        if (!result.step) {
+          return res.json({ message: "No further escalation required" });
+        }
+
+        try {
+          await storage.createEmployeeEvent({
+            employeeId: notification.employeeId,
+            eventType: 'workflow',
+            title: `Escalation level ${result.step.level}: ${notification.title}`,
+            description:
+              reason ||
+              result.step.messageTemplate ||
+              `Escalated via ${result.step.channel}`,
+            amount: '0',
+            eventDate: new Date().toISOString().split('T')[0],
+            affectsPayroll: false,
+            recurrenceType: 'none',
+            status: 'active',
+          });
+        } catch (eventError) {
+          console.warn('Failed to create escalation follow-up event', eventError);
+        }
+
+        res.json({
+          message: 'Escalation triggered',
+          step: result.step,
+          historyEntry: result.historyEntry,
+        });
+      } catch (error) {
+        next(new HttpError(500, 'Failed to escalate notification'));
+      }
+    },
+  );
+
+  employeesRouter.post(
+    "/api/notifications/digest",
+    async (req, res, next) => {
+      try {
+        const email = req.body?.recipientEmail as string | undefined;
+        if (!email) {
+          return next(new HttpError(400, "Recipient email is required"));
+        }
+        const unread = await storage.getUnreadNotifications();
+        const delivered = await sendNotificationDigest({
+          notifications: unread,
+          recipientEmail: email,
+        });
+        res.json({ delivered, count: unread.length });
+      } catch (error) {
+        next(new HttpError(500, "Failed to send notification digest"));
+      }
+    },
+  );
+
+  employeesRouter.post(
+    "/api/notifications/run-escalations",
+    async (_req, res, next) => {
+      try {
+        const escalated = await escalateOverdueNotifications(storage);
+        res.json({ escalated });
+      } catch (error) {
+        next(new HttpError(500, "Failed to process escalations"));
+      }
+    },
+  );
 
   // Notification approvals for documents
   employeesRouter.put("/api/notifications/:id/approve", async (req, res, next) => {
@@ -3401,6 +3568,8 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
           expiryDate: created.toISOString().split('T')[0],
           daysUntilExpiry: 0,
           emailSent: false,
+          deliveryChannels: ['email'],
+          escalationHistory: [],
           documentEventId: newEvent.id as any,
           documentUrl: pdfDataUrl,
         });
@@ -3567,7 +3736,9 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
             priority: check.visa.daysUntilExpiry <= 7 ? 'critical' : check.visa.daysUntilExpiry <= 30 ? 'high' : 'medium',
             expiryDate: check.visa.expiryDate,
             daysUntilExpiry: check.visa.daysUntilExpiry,
-            emailSent: false
+            emailSent: false,
+            deliveryChannels: ['email'],
+            escalationHistory: [],
           });
 
           // Send email if configured
@@ -3601,7 +3772,9 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
             priority: check.civilId.daysUntilExpiry <= 7 ? 'critical' : check.civilId.daysUntilExpiry <= 30 ? 'high' : 'medium',
             expiryDate: check.civilId.expiryDate,
             daysUntilExpiry: check.civilId.daysUntilExpiry,
-            emailSent: false
+            emailSent: false,
+            deliveryChannels: ['email'],
+            escalationHistory: [],
           });
 
           const emailSent = await sendEmail({
@@ -3634,7 +3807,9 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
             priority: check.passport.daysUntilExpiry <= 7 ? 'critical' : check.passport.daysUntilExpiry <= 30 ? 'high' : 'medium',
             expiryDate: check.passport.expiryDate,
             daysUntilExpiry: check.passport.daysUntilExpiry,
-            emailSent: false
+            emailSent: false,
+            deliveryChannels: ['email'],
+            escalationHistory: [],
           });
 
           const emailSent = await sendEmail({
@@ -3673,6 +3848,8 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
             expiryDate: (check as any).drivingLicense.expiryDate,
             daysUntilExpiry: (check as any).drivingLicense.daysUntilExpiry,
             emailSent: false,
+            deliveryChannels: ['email'],
+            escalationHistory: [],
           });
 
           const emailSent = await sendEmail({

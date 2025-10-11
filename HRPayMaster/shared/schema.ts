@@ -732,6 +732,67 @@ export const loanPayments = pgTable("loan_payments", {
 });
 
 // Notifications table for document expiry alerts
+const notificationChannelSchema = z.enum(["email", "sms", "chat", "push"]);
+
+export type NotificationChannel = z.infer<typeof notificationChannelSchema>;
+
+export const notificationRoutingRules = pgTable("notification_routing_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  triggerType: text("trigger_type").notNull(),
+  description: text("description"),
+  slaMinutes: integer("sla_minutes").notNull().default(60),
+  deliveryChannels: jsonb("delivery_channels")
+    .$type<NotificationChannel[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
+  escalationStrategy: text("escalation_strategy").notNull().default("sequential"),
+  metadata: jsonb("metadata")
+    .$type<Record<string, unknown>>()
+    .notNull()
+    .default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const notificationEscalationSteps = pgTable("notification_escalation_steps", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ruleId: varchar("rule_id")
+    .references(() => notificationRoutingRules.id)
+    .notNull(),
+  level: integer("level").notNull().default(1),
+  escalateAfterMinutes: integer("escalate_after_minutes").notNull().default(0),
+  targetRole: text("target_role").notNull(),
+  channel: text("channel").notNull(),
+  messageTemplate: text("message_template"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+const notificationEscalationStatusSchema = z.enum([
+  "pending",
+  "acknowledged",
+  "escalated",
+  "resolved",
+  "closed",
+]);
+
+export type NotificationEscalationStatus = z.infer<
+  typeof notificationEscalationStatusSchema
+>;
+
+const notificationEscalationHistoryEntrySchema = z.object({
+  level: z.number().int().nonnegative(),
+  channel: notificationChannelSchema,
+  recipient: z.string(),
+  escalatedAt: z.string(),
+  status: notificationEscalationStatusSchema.default("escalated"),
+  notes: z.string().optional().nullable(),
+});
+
+export type NotificationEscalationHistoryEntry = z.infer<
+  typeof notificationEscalationHistoryEntrySchema
+>;
+
 export const notifications = pgTable("notifications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   employeeId: varchar("employee_id").references(() => employees.id).notNull(),
@@ -746,6 +807,23 @@ export const notifications = pgTable("notifications", {
   snoozedUntil: timestamp("snoozed_until"),
   documentEventId: varchar("document_event_id"),
   documentUrl: text("document_url"),
+  routingRuleId: varchar("routing_rule_id").references(
+    () => notificationRoutingRules.id,
+  ),
+  deliveryChannels: jsonb("delivery_channels")
+    .$type<NotificationChannel[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
+  slaDueAt: timestamp("sla_due_at"),
+  escalationLevel: integer("escalation_level").notNull().default(0),
+  escalationStatus: text("escalation_status")
+    .notNull()
+    .default("pending"),
+  lastEscalatedAt: timestamp("last_escalated_at"),
+  escalationHistory: jsonb("escalation_history")
+    .$type<NotificationEscalationHistoryEntry[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -1438,10 +1516,56 @@ export const insertTemplateSchema = createInsertSchema(templates).omit({
   updatedAt: true,
 });
 
-export const insertNotificationSchema = createInsertSchema(notifications).omit({
+const baseInsertNotificationSchema = createInsertSchema(notifications).omit({
   id: true,
   createdAt: true,
 });
+
+export const insertNotificationSchema = baseInsertNotificationSchema.extend({
+  deliveryChannels: parseJsonInput(z.array(notificationChannelSchema)).default([]),
+  escalationHistory: parseJsonInput(
+    z.array(notificationEscalationHistoryEntrySchema),
+  ).default([]),
+  escalationStatus: notificationEscalationStatusSchema.optional(),
+});
+
+export const insertNotificationRoutingRuleSchema = createInsertSchema(
+  notificationRoutingRules,
+).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertNotificationEscalationStepSchema = createInsertSchema(
+  notificationEscalationSteps,
+).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const notificationEscalationStepInputSchema =
+  insertNotificationEscalationStepSchema
+    .omit({
+      ruleId: true,
+    })
+    .extend({
+      id: z.string().optional(),
+      ruleId: z.string().optional(),
+      level: z.number().int().min(1).optional(),
+    });
+
+export const upsertNotificationRoutingRuleSchema =
+  insertNotificationRoutingRuleSchema
+    .extend({
+      id: z.string().optional(),
+      deliveryChannels: parseJsonInput(
+        z.array(notificationChannelSchema),
+      ).default([]),
+    })
+    .extend({
+      steps: z.array(notificationEscalationStepInputSchema).optional().default([]),
+    });
 
 export const insertEmailAlertSchema = createInsertSchema(emailAlerts).omit({
   id: true,
@@ -1626,6 +1750,28 @@ export type InsertCarAssignment = z.infer<typeof insertCarAssignmentSchema>;
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 
+export type NotificationRoutingRule = typeof notificationRoutingRules.$inferSelect;
+export type InsertNotificationRoutingRule = z.infer<
+  typeof insertNotificationRoutingRuleSchema
+>;
+
+export type NotificationEscalationStep = typeof notificationEscalationSteps.$inferSelect;
+export type InsertNotificationEscalationStep = z.infer<
+  typeof insertNotificationEscalationStepSchema
+>;
+
+export type NotificationEscalationStepInput = z.infer<
+  typeof notificationEscalationStepInputSchema
+>;
+
+export type UpsertNotificationRoutingRule = z.infer<
+  typeof upsertNotificationRoutingRuleSchema
+>;
+
+export type NotificationRoutingRuleWithSteps = NotificationRoutingRule & {
+  steps: NotificationEscalationStep[];
+};
+
 export type EmailAlert = typeof emailAlerts.$inferSelect;
 export type InsertEmailAlert = z.infer<typeof insertEmailAlertSchema>;
 
@@ -1718,6 +1864,7 @@ export type InsertSickLeaveTracking = z.infer<typeof insertSickLeaveTrackingSche
 // Extended types with relations
 export type NotificationWithEmployee = Notification & {
   employee: Employee;
+  routingRule?: NotificationRoutingRuleWithSteps | null;
 };
 
 export type DocumentExpiryCheck = {
@@ -1843,6 +1990,24 @@ export const employeesRelations = relations(employees, ({ one, many }) => ({
   emailAlerts: many(emailAlerts),
   customValues: many(employeeCustomValues),
 }));
+
+export const notificationRoutingRulesRelations = relations(
+  notificationRoutingRules,
+  ({ many }) => ({
+    notifications: many(notifications),
+    steps: many(notificationEscalationSteps),
+  }),
+);
+
+export const notificationEscalationStepsRelations = relations(
+  notificationEscalationSteps,
+  ({ one }) => ({
+    rule: one(notificationRoutingRules, {
+      fields: [notificationEscalationSteps.ruleId],
+      references: [notificationRoutingRules.id],
+    }),
+  }),
+);
 
 export const employeeCustomFieldsRelations = relations(employeeCustomFields, ({ many }) => ({
   values: many(employeeCustomValues),
@@ -2040,6 +2205,10 @@ export const notificationsRelations = relations(notifications, ({ one, many }) =
   employee: one(employees, {
     fields: [notifications.employeeId],
     references: [employees.id],
+  }),
+  routingRule: one(notificationRoutingRules, {
+    fields: [notifications.routingRuleId],
+    references: [notificationRoutingRules.id],
   }),
   emailAlerts: many(emailAlerts),
 }));

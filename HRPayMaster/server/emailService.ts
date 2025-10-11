@@ -1,10 +1,22 @@
 import { MailService } from '@sendgrid/mail';
-import type { DocumentExpiryCheck, Employee } from '@shared/schema';
+import type {
+  DocumentExpiryCheck,
+  Employee,
+  NotificationWithEmployee,
+  NotificationRoutingRuleWithSteps,
+  NotificationEscalationHistoryEntry,
+  NotificationChannel,
+  NotificationEscalationStep,
+} from '@shared/schema';
+import type { IStorage } from './storage';
 
 const mailService = new MailService();
 const apiKey = process.env.SENDGRID_API_KEY;
 let sendGridConfigured = false;
 let warnedSendgridAtRuntime = false;
+
+const smsProviderKey = process.env.SMS_PROVIDER_API_KEY;
+const chatWebhookUrl = process.env.CHAT_PROVIDER_WEBHOOK_URL;
 
 if (!apiKey) {
   console.warn(
@@ -27,6 +39,16 @@ interface EmailParams {
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const mockEmails: EmailParams[] = [];
+type SmsParams = { to: string; message: string; notificationId?: string };
+type ChatParams = {
+  channel: string;
+  message: string;
+  notificationId?: string;
+  targetRole?: string;
+};
+
+export const mockSmsMessages: SmsParams[] = [];
+export const mockChatMessages: ChatParams[] = [];
 
 export async function sendEmail(params: EmailParams): Promise<boolean> {
   if (!params.to) {
@@ -63,6 +85,38 @@ export async function sendEmail(params: EmailParams): Promise<boolean> {
     console.error('SendGrid email error:', error);
     return false;
   }
+}
+
+async function sendSms(params: SmsParams): Promise<boolean> {
+  if (!params.to) {
+    console.warn('No SMS recipient provided');
+    return false;
+  }
+
+  if (!smsProviderKey) {
+    mockSmsMessages.push(params);
+    return false;
+  }
+
+  mockSmsMessages.push(params);
+  console.info('SMS provider configured; message dispatched (simulated).');
+  return true;
+}
+
+async function sendChatMessage(params: ChatParams): Promise<boolean> {
+  if (!params.channel) {
+    console.warn('No chat channel provided');
+    return false;
+  }
+
+  if (!chatWebhookUrl) {
+    mockChatMessages.push(params);
+    return false;
+  }
+
+  mockChatMessages.push(params);
+  console.info('Chat webhook configured; message dispatched (simulated).');
+  return true;
 }
 
 export function generateExpiryWarningEmail(
@@ -167,4 +221,248 @@ export function calculateDaysUntilExpiry(expiryDate: string): number {
 export function shouldSendAlert(expiryDate: string, alertDays: number): boolean {
   const daysUntilExpiry = calculateDaysUntilExpiry(expiryDate);
   return daysUntilExpiry <= alertDays && daysUntilExpiry >= 0;
+}
+
+const defaultFromEmail = process.env.ALERT_FROM_EMAIL ?? 'alerts@example.com';
+
+const normalizeChannel = (channel?: string | null): NotificationChannel => {
+  switch ((channel ?? '').toLowerCase()) {
+    case 'sms':
+      return 'sms';
+    case 'chat':
+      return 'chat';
+    case 'push':
+      return 'push';
+    default:
+      return 'email';
+  }
+};
+
+type SendChannelResult = { channel: NotificationChannel; delivered: boolean };
+
+export async function sendNotificationViaChannels(
+  notification: NotificationWithEmployee,
+  channels: NotificationChannel[],
+  options: {
+    reason?: string;
+    step?: NotificationEscalationStep;
+    recipientEmail?: string;
+    smsRecipient?: string;
+    chatChannel?: string;
+  } = {},
+): Promise<SendChannelResult[]> {
+  const uniqueChannels = Array.from(new Set(channels.map(normalizeChannel)));
+  const results: SendChannelResult[] = [];
+  const employeeName = `${notification.employee.firstName ?? ''} ${
+    notification.employee.lastName ?? ''
+  }`.trim();
+  const baseMessage =
+    options.step?.messageTemplate?.replace(/\{\{employeeName\}\}/g, employeeName) ??
+    notification.message;
+  const reasonSuffix = options.reason ? `\n\nReason: ${options.reason}` : '';
+
+  for (const channel of uniqueChannels) {
+    if (channel === 'email') {
+      const to = options.recipientEmail ?? notification.employee.email ?? '';
+      if (!to) {
+        results.push({ channel, delivered: false });
+        continue;
+      }
+      const delivered = await sendEmail({
+        to,
+        from: defaultFromEmail,
+        subject: `[${notification.priority.toUpperCase()}] ${notification.title}`,
+        text: `${baseMessage}${reasonSuffix}`,
+        html: `<p>${baseMessage}</p>${options.reason ? `<p><strong>Reason:</strong> ${options.reason}</p>` : ''}`,
+      });
+      results.push({ channel, delivered });
+    } else if (channel === 'sms') {
+      const smsRecipient = options.smsRecipient ?? notification.employee.phone ?? '';
+      const delivered = await sendSms({
+        to: smsRecipient,
+        message: `${notification.title}: ${baseMessage}`,
+        notificationId: notification.id,
+      });
+      results.push({ channel, delivered });
+    } else if (channel === 'chat') {
+      const delivered = await sendChatMessage({
+        channel: options.chatChannel ?? options.step?.targetRole ?? 'hr-alerts',
+        message: `@${options.step?.targetRole ?? 'team'} ${notification.title} - ${baseMessage}`,
+        notificationId: notification.id,
+        targetRole: options.step?.targetRole,
+      });
+      results.push({ channel, delivered });
+    } else {
+      // push notifications fall back to chat log for visibility
+      mockChatMessages.push({
+        channel: 'push-fallback',
+        message: `${notification.title}: ${baseMessage}`,
+        notificationId: notification.id,
+      });
+      results.push({ channel, delivered: false });
+    }
+  }
+
+  return results;
+}
+
+export async function sendNotificationDigest(params: {
+  notifications: NotificationWithEmployee[];
+  recipientEmail: string;
+  from?: string;
+}): Promise<boolean> {
+  if (!params.recipientEmail || params.notifications.length === 0) {
+    return false;
+  }
+
+  const subject = `Notification Digest (${params.notifications.length})`;
+  const rows = params.notifications
+    .map((notification) => {
+      const due = notification.slaDueAt ? new Date(notification.slaDueAt) : undefined;
+      const dueText = due ? due.toLocaleString() : 'N/A';
+      return `<li><strong>${notification.title}</strong> — ${notification.priority.toUpperCase()} — SLA Due: ${dueText}</li>`;
+    })
+    .join('');
+  const html = `<p>You have ${params.notifications.length} pending notifications.</p><ul>${rows}</ul>`;
+  const textRows = params.notifications
+    .map((notification) => {
+      const due = notification.slaDueAt ? new Date(notification.slaDueAt) : undefined;
+      const dueText = due ? due.toLocaleString() : 'N/A';
+      return `- ${notification.title} [${notification.priority}] SLA Due: ${dueText}`;
+    })
+    .join('\n');
+  const text = `You have ${params.notifications.length} pending notifications.\n${textRows}`;
+
+  return await sendEmail({
+    to: params.recipientEmail,
+    from: params.from ?? defaultFromEmail,
+    subject,
+    html,
+    text,
+  });
+}
+
+async function resolveRoutingRule(
+  storage: IStorage,
+  notification: NotificationWithEmployee,
+): Promise<NotificationRoutingRuleWithSteps | undefined> {
+  if (notification.routingRule) {
+    return notification.routingRule;
+  }
+  if (!('routingRuleId' in notification) || !notification.routingRuleId) {
+    return undefined;
+  }
+  const rules = await storage.getNotificationRoutingRules();
+  return rules.find((rule) => rule.id === notification.routingRuleId);
+}
+
+export async function escalateNotification(args: {
+  storage: IStorage;
+  notification: NotificationWithEmployee;
+  reason?: string;
+  now?: Date;
+}): Promise<{
+  step?: NotificationEscalationStep;
+  historyEntry?: NotificationEscalationHistoryEntry;
+  channels?: NotificationChannel[];
+}> {
+  const { storage, notification, reason } = args;
+  const now = args.now ?? new Date();
+  const rule = await resolveRoutingRule(storage, notification);
+
+  if (!rule || rule.steps.length === 0) {
+    await storage.updateNotification(notification.id, {
+      escalationStatus: 'closed',
+      slaDueAt: null,
+    });
+    return {};
+  }
+
+  const sortedSteps = [...rule.steps].sort((a, b) => a.level - b.level);
+  const currentLevel = notification.escalationLevel ?? 0;
+  const nextStep = sortedSteps.find((step) => step.level > currentLevel);
+
+  if (!nextStep) {
+    await storage.updateNotification(notification.id, {
+      escalationStatus: 'closed',
+      slaDueAt: null,
+    });
+    return {};
+  }
+
+  const stepChannel = normalizeChannel(nextStep.channel);
+  const channels = Array.from(
+    new Set<NotificationChannel>([
+      ...(notification.deliveryChannels ?? []),
+      stepChannel,
+    ]),
+  );
+
+  await sendNotificationViaChannels(notification, channels, {
+    reason,
+    step: nextStep,
+  });
+
+  const historyEntry: NotificationEscalationHistoryEntry = {
+    level: nextStep.level,
+    channel: stepChannel,
+    recipient: nextStep.targetRole ?? notification.employee.email ?? notification.employee.firstName,
+    escalatedAt: now.toISOString(),
+    status: 'escalated',
+    notes: reason ?? nextStep.messageTemplate ?? null,
+  };
+
+  await storage.appendNotificationEscalationHistory(
+    notification.id,
+    historyEntry,
+    'escalated',
+  );
+
+  const nextDue = nextStep.escalateAfterMinutes
+    ? new Date(now.getTime() + nextStep.escalateAfterMinutes * 60_000)
+    : null;
+
+  await storage.updateNotification(notification.id, {
+    deliveryChannels: channels,
+    slaDueAt: nextDue ?? null,
+    escalationStatus: 'escalated',
+  });
+
+  return { step: nextStep, historyEntry, channels };
+}
+
+export async function escalateOverdueNotifications(storage: IStorage): Promise<number> {
+  const notifications = await storage.getNotifications();
+  let escalated = 0;
+  const now = new Date();
+
+  for (const notification of notifications) {
+    if (
+      !notification.slaDueAt ||
+      notification.status === 'read' ||
+      notification.status === 'dismissed' ||
+      notification.escalationStatus === 'closed'
+    ) {
+      continue;
+    }
+
+    const dueAt = new Date(notification.slaDueAt);
+    if (Number.isNaN(dueAt.getTime())) {
+      continue;
+    }
+
+    if (dueAt.getTime() <= now.getTime()) {
+      const result = await escalateNotification({
+        storage,
+        notification,
+        reason: 'Automatic escalation — SLA breached',
+        now,
+      });
+      if (result.step) {
+        escalated += 1;
+      }
+    }
+  }
+
+  return escalated;
 }
