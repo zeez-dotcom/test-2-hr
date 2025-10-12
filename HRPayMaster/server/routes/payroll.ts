@@ -32,8 +32,27 @@ import {
 } from "../utils/payroll";
 import { shouldPauseLoanForLeave } from "../utils/loans";
 import { buildPayrollExports, type PayrollExportRequest } from "../utils/payrollExports";
+import {
+  createRouteMetricsMiddleware,
+  payrollPreviewRequestsTotal,
+  payrollPreviewDurationSeconds,
+  payrollGenerateRequestsTotal,
+  payrollGenerateDurationSeconds,
+} from "../metrics";
 
 export const payrollRouter = Router();
+
+const trackPayrollPreviewMetrics = createRouteMetricsMiddleware({
+  counter: payrollPreviewRequestsTotal,
+  histogram: payrollPreviewDurationSeconds,
+  resolveLabels: req => ({ method: req.method }),
+});
+
+const trackPayrollGenerateMetrics = createRouteMetricsMiddleware({
+  counter: payrollGenerateRequestsTotal,
+  histogram: payrollGenerateDurationSeconds,
+  resolveLabels: req => ({ method: req.method }),
+});
 
 const deductionsSchema = z.object({
   taxDeduction: z.number().optional(),
@@ -804,6 +823,7 @@ payrollRouter.post(
 payrollRouter.post(
   "/preview",
   requirePermission("payroll:manage"),
+  trackPayrollPreviewMetrics,
   async (req, res, next) => {
     try {
       const parsed = previewPayrollSchema.parse(req.body ?? {});
@@ -991,7 +1011,11 @@ payrollRouter.post(
 );
 
 
-payrollRouter.post("/generate", requirePermission("payroll:manage"), async (req, res, next) => {
+payrollRouter.post(
+  "/generate",
+  requirePermission("payroll:manage"),
+  trackPayrollGenerateMetrics,
+  async (req, res, next) => {
   try {
     const parsed = generatePayrollSchema.parse(req.body ?? {});
 

@@ -7,6 +7,7 @@ import sharp from 'sharp';
 import { mapHeader } from './utils/normalize';
 import { insertEmployeeSchema } from '@shared/schema';
 import { EMPLOYEE_IMPORT_TEMPLATE_HEADERS } from './routes/employees';
+import { loanRequestsTotal } from './metrics';
 
 vi.mock('./storage', () => {
   class DuplicateEmployeeCodeError extends Error {}
@@ -148,6 +149,7 @@ describe('employee routes', () => {
     await registerRoutes(app);
     app.use(errorHandler);
     vi.clearAllMocks();
+    loanRequestsTotal.reset();
   });
 
   it('GET /api/employees returns employees list', async () => {
@@ -1021,6 +1023,13 @@ describe('employee routes', () => {
     const res = await request(app).get('/api/loans');
     expect(res.status).toBe(200);
     expect(res.body).toEqual(mockLoans);
+
+    const loanMetric = loanRequestsTotal.get();
+    const listObservation = loanMetric.values.find(
+      metric => metric.labels.status === '200' && metric.labels.operation === 'list',
+    );
+    expect(listObservation).toBeDefined();
+    expect(listObservation?.value).toBe(1);
   });
 
   it('POST /api/loans defaults remainingAmount to amount', async () => {

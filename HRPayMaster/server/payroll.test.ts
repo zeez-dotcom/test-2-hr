@@ -11,6 +11,7 @@ import {
   loanPayments as loanPaymentsTable,
   loans as loansTable,
 } from '@shared/schema';
+import { payrollPreviewRequestsTotal, payrollGenerateRequestsTotal } from './metrics';
 
 vi.mock('./storage', () => ({
   storage: {
@@ -51,6 +52,9 @@ describe('payroll generate', () => {
 
     await registerRoutes(app);
     app.use(errorHandler);
+
+    payrollPreviewRequestsTotal.reset();
+    payrollGenerateRequestsTotal.reset();
 
     vi.mocked(storage.getEmployees).mockReset();
     vi.mocked(storage.getLoans).mockReset();
@@ -174,6 +178,13 @@ describe('payroll generate', () => {
         expect.objectContaining({ id: 'evt-allowance-recurring', source: 'recurring', amount: 50 }),
       ]),
     );
+
+    const previewMetric = payrollPreviewRequestsTotal.get();
+    const previewCount = previewMetric.values.find(
+      metric => metric.labels.status === '200' && metric.labels.method === 'POST',
+    );
+    expect(previewCount).toBeDefined();
+    expect(previewCount?.value).toBe(1);
   });
 
   it('returns 409 when overlapping payroll run exists', async () => {
@@ -343,6 +354,13 @@ describe('payroll generate', () => {
     expect(storage.createNotification).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'loan_deduction' }),
     );
+
+    const generateMetric = payrollGenerateRequestsTotal.get();
+    const generateCount = generateMetric.values.find(
+      metric => metric.labels.status === '201' && metric.labels.method === 'POST',
+    );
+    expect(generateCount).toBeDefined();
+    expect(generateCount?.value).toBe(1);
 
     expect(updateSetCalls).toEqual([
       { remainingAmount: '125.00', status: 'active' },
