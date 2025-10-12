@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -10,18 +9,32 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { apiPut, apiPost } from "@/lib/http";
+import { apiPost } from "@/lib/http";
 import { Calendar, AlertTriangle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toastApiError } from "@/lib/toastError";
 import { generateEventReceipt } from "@/lib/event-receipts";
 import type { Employee, EmployeeEvent } from "@shared/schema";
+import { submitPayrollVacationOverride } from "@/lib/payroll-vacation";
 
-const vacationFormSchema = z.object({
-  days: z.number().min(1, "Days must be at least 1"),
-  leaveType: z.enum(["annual", "sick", "emergency", "unpaid"]),
-  deductFromSalary: z.boolean().default(false),
-});
+const vacationFormSchema = z
+  .object({
+    startDate: z.string().min(1, "Start date is required"),
+    endDate: z.string().min(1, "End date is required"),
+    leaveType: z.enum(["annual", "sick", "emergency", "unpaid"]),
+    deductFromSalary: z.boolean().default(false),
+  })
+  .refine(data => {
+    const start = new Date(data.startDate);
+    const end = new Date(data.endDate);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      return false;
+    }
+    return start <= end;
+  }, {
+    path: ["endDate"],
+    message: "End date must be on or after the start date",
+  });
 
 interface SmartVacationFormProps {
   isOpen: boolean;
@@ -45,64 +58,90 @@ export function SmartVacationForm({
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  const today = new Date();
+  const defaultStartDate = today.toISOString().split("T")[0];
+  const defaultEndDate = new Date(today);
+  if (currentVacationDays > 1) {
+    defaultEndDate.setDate(defaultEndDate.getDate() + (currentVacationDays - 1));
+  }
+  const defaultEndDateString = defaultEndDate.toISOString().split("T")[0];
+
   const form = useForm<z.infer<typeof vacationFormSchema>>({
     resolver: zodResolver(vacationFormSchema),
     defaultValues: {
-      days: currentVacationDays || 1,
+      startDate: defaultStartDate,
+      endDate: defaultEndDateString,
       leaveType: "annual",
       deductFromSalary: false,
     },
   });
 
   const updatePayrollMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const res = await apiPut(`/api/payroll/entries/${payrollEntryId}`, data);
-      if (!res.ok) throw res;
+    mutationFn: async (data: {
+      startDate: string;
+      endDate: string;
+      leaveType: "annual" | "sick" | "emergency" | "unpaid";
+      deductFromSalary: boolean;
+      reason: string;
+    }) => {
+      await submitPayrollVacationOverride(payrollEntryId, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
       queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
       toast({
         title: "Success",
-        description: "Vacation days updated successfully",
+        description: "Vacation updated successfully",
       });
       onSuccess();
       onClose();
     },
     onError: (err) => {
-      toastApiError(err as any, "Failed to update vacation days");
+      toastApiError(err as any, "Failed to update vacation override");
     },
   });
 
   const onSubmit = async (data: z.infer<typeof vacationFormSchema>) => {
-    const updateData = {
-      vacationDays: data.days,
-      adjustmentReason: `${data.leaveType} leave: ${data.days} days${
-        data.leaveType === "emergency" && !data.deductFromSalary ? " (no salary deduction)" : ""
-      }`,
-    };
+    const start = new Date(data.startDate);
+    const end = new Date(data.endDate);
+    const totalDays =
+      Math.max(0, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))) + 1;
 
-    // Create corresponding employee event for tracking
+    const reason = `${data.leaveType} leave: ${totalDays} day${totalDays === 1 ? "" : "s"} (${data.startDate} → ${data.endDate})${
+      data.leaveType === "emergency" && !data.deductFromSalary ? " (no salary deduction)" : ""
+    }`;
+
+    try {
+      await updatePayrollMutation.mutateAsync({
+        startDate: data.startDate,
+        endDate: data.endDate,
+        leaveType: data.leaveType,
+        deductFromSalary: data.deductFromSalary,
+        reason,
+      });
+    } catch {
+      return;
+    }
+
     const eventData = {
       employeeId,
       eventType: "vacation",
       title: `${data.leaveType.charAt(0).toUpperCase() + data.leaveType.slice(1)} Leave`,
-      description: `${data.days} days of ${data.leaveType} leave${
+      description: `${totalDays} day${totalDays === 1 ? "" : "s"} of ${data.leaveType} leave (${data.startDate} → ${data.endDate})${
         data.leaveType === "emergency" && !data.deductFromSalary ? " (no salary deduction)" : ""
       }`,
       amount: "0",
-      eventDate: new Date().toISOString().split('T')[0],
+      eventDate: data.startDate,
       affectsPayroll: data.leaveType !== "emergency" || data.deductFromSalary,
       status: "active",
     };
 
-    // Create event first, then update payroll
     try {
       const res = await apiPost("/api/employee-events", eventData);
       if (!res.ok) throw res;
       const createdEvent = res.data as EmployeeEvent;
       const employees = queryClient.getQueryData<Employee[]>(["/api/employees"]);
-      const employee = employees?.find((e) => e.id === employeeId);
+      const employee = employees?.find(e => e.id === employeeId);
       try {
         await generateEventReceipt({ event: createdEvent, employee, queryClient });
       } catch (receiptError) {
@@ -117,11 +156,20 @@ export function SmartVacationForm({
       console.error("Failed to create employee event:", error);
       toastApiError(error as any, "Failed to create employee event");
     }
-
-    await updatePayrollMutation.mutateAsync(updateData);
   };
 
   const watchedLeaveType = form.watch("leaveType");
+  const watchedStart = form.watch("startDate");
+  const watchedEnd = form.watch("endDate");
+
+  let computedDays = 0;
+  if (watchedStart && watchedEnd) {
+    const start = new Date(watchedStart);
+    const end = new Date(watchedEnd);
+    if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && start <= end) {
+      computedDays = Math.max(0, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))) + 1;
+    }
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -135,24 +183,41 @@ export function SmartVacationForm({
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="days"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Number of Days</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      min="1"
-                      {...field}
-                      onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="startDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Start Date</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="endDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>End Date</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+              {computedDays > 0
+                ? `${computedDays} day${computedDays === 1 ? "" : "s"} selected`
+                : "Select a valid date range to calculate days"}
+            </div>
 
             <FormField
               control={form.control}
