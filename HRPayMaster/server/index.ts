@@ -9,7 +9,12 @@ import { setupVite, serveStatic, log } from "./vite";
 import { resolveInterFontFilesPath } from "./fontStatic";
 import { errorHandler } from "./errorHandler";
 import { storage } from "./storage";
-import { generateExpiryWarningEmail, shouldSendAlert, sendEmail } from "./emailService";
+import {
+  generateExpiryWarningEmail,
+  shouldSendAlert,
+  sendEmail,
+  escalateOverdueNotifications,
+} from "./emailService";
 import { processVacationReturnAlerts } from "./vacationReturnScheduler";
 import { processAttendanceAlerts } from "./attendanceScheduler";
 import type { SessionUser, UserWithPermissions } from "@shared/schema";
@@ -413,4 +418,36 @@ app.use((req, res, next) => {
   setInterval(() => {
     void runScheduledReports();
   }, 15 * 60 * 1000);
+
+  let notificationEscalationRun: Promise<void> | null = null;
+
+  const runNotificationEscalations = (): Promise<void> => {
+    if (notificationEscalationRun) {
+      log("info: notification escalation run skipped (already running)");
+      return notificationEscalationRun;
+    }
+
+    notificationEscalationRun = (async () => {
+      try {
+        const escalated = await escalateOverdueNotifications(storage);
+        if (escalated > 0) {
+          const suffix = escalated === 1 ? "notification" : "notifications";
+          log(`notification escalation run escalated ${escalated} ${suffix}`);
+        } else {
+          log("notification escalation run completed (no escalations due)");
+        }
+      } catch (err) {
+        log(`warning: notification escalation run failed: ${String(err)}`);
+      } finally {
+        notificationEscalationRun = null;
+      }
+    })();
+
+    return notificationEscalationRun;
+  };
+
+  runNotificationEscalations();
+  setInterval(() => {
+    void runNotificationEscalations();
+  }, 12 * 60 * 1000);
 })();
