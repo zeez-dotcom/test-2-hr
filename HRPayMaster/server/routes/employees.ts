@@ -53,8 +53,8 @@ import {
   shouldSendAlert,
   sendNotificationDigest,
   escalateNotification as escalateNotificationService,
-  escalateOverdueNotifications,
 } from "../emailService";
+import { runNotificationEscalations } from "../notificationEscalationScheduler";
 import { z } from "zod";
 import multer from "multer";
 import * as XLSX from "xlsx";
@@ -3545,7 +3545,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
     "/api/notifications/run-escalations",
     async (_req, res, next) => {
       try {
-        const escalated = await escalateOverdueNotifications(storage);
+        const escalated = await runNotificationEscalations(storage);
         res.json({ escalated });
       } catch (error) {
         next(new HttpError(500, "Failed to process escalations"));
