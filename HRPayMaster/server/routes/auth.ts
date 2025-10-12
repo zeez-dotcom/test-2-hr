@@ -3,6 +3,7 @@ import { log } from "../vite";
 import passport from "passport";
 import { HttpError } from "../errorHandler";
 import type { PermissionKey, SessionUser } from "@shared/schema";
+import { storage } from "../storage";
 
 export const authRouter = Router();
 
@@ -17,15 +18,56 @@ authRouter.post("/login", (req, res, next) => {
   }
   passport.authenticate(
     "local",
-    (err: unknown, user: Express.User | false, info: unknown) => {
+    async (err: unknown, user: Express.User | false) => {
       if (err) return next(err);
       if (!user) return res.status(401).json({ error: "Invalid credentials" });
-      req.logIn(user, (err: unknown) => {
-        if (err) return next(err);
-        res.json({ user });
+
+      const sessionUser = user as SessionUser;
+      try {
+        if (sessionUser?.mfa?.enabled && sessionUser?.mfa?.method) {
+          const challenge = await storage.createMfaChallenge(sessionUser.id);
+          if (challenge) {
+            return res.json({
+              mfaRequired: true,
+              challenge: {
+                id: challenge.id,
+                method: challenge.method,
+                expiresAt: challenge.expiresAt.toISOString(),
+                deliveryHint: challenge.deliveryHint ?? null,
+              },
+            });
+          }
+        }
+      } catch (challengeError) {
+        return next(challengeError);
+      }
+
+      req.logIn(user, (loginErr: unknown) => {
+        if (loginErr) return next(loginErr);
+        res.json({ user: sessionUser });
       });
     },
   )(req, res, next);
+});
+
+authRouter.post("/login/mfa", async (req, res, next) => {
+  const { challengeId, code } = req.body ?? {};
+  if (typeof challengeId !== "string" || typeof code !== "string") {
+    return res.status(400).json({ error: "challengeId and code are required" });
+  }
+  try {
+    const result = await storage.verifyMfaChallenge(challengeId, code);
+    if (!result.success || !result.user) {
+      const status = result.reason === "expired" ? 410 : 401;
+      return res.status(status).json({ error: "Invalid or expired code" });
+    }
+    req.logIn(result.user, (err: unknown) => {
+      if (err) return next(err);
+      res.json({ user: result.user });
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 authRouter.post("/logout", (req, res, next) => {

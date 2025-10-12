@@ -71,6 +71,10 @@ export const defaultRolePermissions: Record<string, PermissionKey[]> = {
   employee: ["security:access:request"],
 };
 
+export const mfaMethods = ["totp", "email_otp"] as const;
+
+export type MfaMethod = (typeof mfaMethods)[number];
+
 const parseDate = (v: unknown) => parseDateToISO(v).value;
 
 const parseJsonInput = <T>(schema: z.ZodType<T>) =>
@@ -181,6 +185,13 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   role: text("role").notNull().default("viewer"),
   active: boolean("active").notNull().default(true),
+  mfaEnabled: boolean("mfa_enabled").notNull().default(false),
+  mfaMethod: text("mfa_method"),
+  mfaTotpSecret: text("mfa_totp_secret"),
+  mfaBackupCodes: jsonb("mfa_backup_codes")
+    .$type<string[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
 });
 
 export const permissionSets = pgTable("permission_sets", {
@@ -1866,9 +1877,16 @@ export type UserPermissionGrantWithSet = UserPermissionGrant & {
   permissionSet?: PermissionSet | null;
 };
 
-export type SessionUser = Omit<User, "passwordHash"> & {
+export type UserMfaState = {
+  enabled: boolean;
+  method: MfaMethod | null;
+  backupCodesRemaining: number;
+};
+
+export type SessionUser = Omit<User, "passwordHash" | "mfaTotpSecret" | "mfaBackupCodes"> & {
   permissions: PermissionKey[];
   activeGrants: UserPermissionGrantWithSet[];
+  mfa: UserMfaState;
 };
 
 export type UserWithPermissions = User & {

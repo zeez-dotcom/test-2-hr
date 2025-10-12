@@ -23,9 +23,26 @@ import { processScheduledReports } from "./reportScheduler";
 import { trackBackgroundJob } from "./metrics";
 type AuthUser = SessionUser;
 
+const normalizeMfaMethod = (
+  method: string | null | undefined,
+): SessionUser["mfa"]["method"] => {
+  if (method === "totp" || method === "email_otp") {
+    return method;
+  }
+  return null;
+};
+
 const toAuthUser = (user: UserWithPermissions): AuthUser => {
-  const { passwordHash, ...safe } = user;
-  return safe;
+  const { passwordHash, mfaTotpSecret, mfaBackupCodes, ...safe } = user;
+  const codes = Array.isArray(mfaBackupCodes) ? mfaBackupCodes : [];
+  return {
+    ...safe,
+    mfa: {
+      enabled: safe.mfaEnabled ?? false,
+      method: normalizeMfaMethod(safe.mfaMethod),
+      backupCodesRemaining: codes.length,
+    },
+  };
 };
 
 declare global {

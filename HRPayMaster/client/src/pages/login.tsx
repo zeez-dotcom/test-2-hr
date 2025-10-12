@@ -9,6 +9,14 @@ import { apiPost } from "@/lib/http";
 import { useLocation } from "wouter";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import MfaChallengeForm from "@/components/mfa-challenge";
+
+type MfaChallenge = {
+  id: string;
+  method: "totp" | "email_otp";
+  expiresAt: string;
+  deliveryHint?: string | null;
+};
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -26,6 +34,10 @@ export default function Login() {
     }
   });
   const [usernameHydrated, setUsernameHydrated] = useState(false);
+  const [mfaChallenge, setMfaChallenge] = useState<MfaChallenge | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaError, setMfaError] = useState("");
+  const [isVerifyingMfa, setIsVerifyingMfa] = useState(false);
   const { t } = useTranslation();
 
   // Pre-fill username if remembered
@@ -40,7 +52,12 @@ export default function Login() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (mfaChallenge) {
+      await handleMfaSubmit();
+      return;
+    }
     setError("");
+    setMfaError("");
     if (!username || !password) {
       setError(t("errors.loginRequired"));
       return;
@@ -49,16 +66,14 @@ export default function Login() {
       setIsSubmitting(true);
       const res = await apiPost("/login", { username, password });
       if (!res.ok) throw new Error(res.error || t("login.loginFailed"));
-      // Remember username locally if opted in
-      try {
-        if (remember) {
-          localStorage.setItem("rememberedUsername", username);
-          localStorage.setItem("rememberUsername", "1");
-        } else {
-          localStorage.removeItem("rememberedUsername");
-          localStorage.removeItem("rememberUsername");
-        }
-      } catch {}
+      const data = res.data as any;
+      if (data?.mfaRequired && data?.challenge) {
+        setMfaChallenge(data.challenge as MfaChallenge);
+        setMfaCode("");
+        setMfaError("");
+        return;
+      }
+      persistRememberChoice(username);
       await queryClient.invalidateQueries({ queryKey: ["/api/me"] });
       navigate("/");
     } catch (err: any) {
@@ -66,6 +81,48 @@ export default function Login() {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  function persistRememberChoice(name: string) {
+    try {
+      if (remember) {
+        localStorage.setItem("rememberedUsername", name);
+        localStorage.setItem("rememberUsername", "1");
+      } else {
+        localStorage.removeItem("rememberedUsername");
+        localStorage.removeItem("rememberUsername");
+      }
+    } catch {}
+  }
+
+  async function handleMfaSubmit() {
+    if (!mfaChallenge) return;
+    const trimmed = mfaCode.trim();
+    if (!trimmed) {
+      setMfaError(t("login.mfaCodeRequired"));
+      return;
+    }
+    try {
+      setIsVerifyingMfa(true);
+      const res = await apiPost("/login/mfa", {
+        challengeId: mfaChallenge.id,
+        code: trimmed,
+      });
+      if (!res.ok) throw new Error(res.error || t("login.mfaError"));
+      persistRememberChoice(username);
+      await queryClient.invalidateQueries({ queryKey: ["/api/me"] });
+      navigate("/");
+    } catch (err: any) {
+      setMfaError(err.message || t("login.mfaError"));
+    } finally {
+      setIsVerifyingMfa(false);
+    }
+  }
+
+  function handleBackToLogin() {
+    setMfaChallenge(null);
+    setMfaCode("");
+    setMfaError("");
   }
 
   return (
@@ -86,7 +143,31 @@ export default function Login() {
           <CardDescription>{t("login.subtitle")}</CardDescription>
         </CardHeader>
         <CardContent className="pt-0">
-          <form onSubmit={onSubmit} className="space-y-4">
+          {mfaChallenge ? (
+            <MfaChallengeForm
+              value={mfaCode}
+              onChange={setMfaCode}
+              onSubmit={handleMfaSubmit}
+              onBack={handleBackToLogin}
+              isSubmitting={isVerifyingMfa}
+              error={mfaError}
+              title={t("login.mfaTitle")}
+              description={
+                mfaChallenge.method === "totp"
+                  ? t("login.mfaDescriptionTotp")
+                  : mfaChallenge.deliveryHint
+                    ? t("login.mfaDescriptionEmail", { target: mfaChallenge.deliveryHint })
+                    : t("login.mfaDescriptionEmailGeneric")
+              }
+              backupHint={t("login.mfaBackupHint")}
+              codeLabel={t("login.mfaCodeLabel")}
+              verifyLabel={t("login.mfaVerify")}
+              verifyingLabel={t("login.mfaVerifying")}
+              backLabel={t("login.mfaBack")}
+              resendLabel={t("login.mfaResend")}
+            />
+          ) : (
+            <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="username">{t("login.username")}</Label>
               <Input
@@ -159,10 +240,11 @@ export default function Login() {
                 t("login.submit")
               )}
             </Button>
-            <p className="text-xs text-gray-500 text-center">
-              {t("login.hint")}
-            </p>
-          </form>
+              <p className="text-xs text-gray-500 text-center">
+                {t("login.hint")}
+              </p>
+            </form>
+          )}
         </CardContent>
       </Card>
     </div>
