@@ -467,7 +467,8 @@ export default function NotificationsPage() {
         <div>
           <h1 className="text-3xl font-bold">Notifications</h1>
           <p className="text-sm text-muted-foreground">
-            Configure routing rules, send stakeholder digests, and monitor escalation paths.
+            Configure routing rules, send stakeholder digests, and monitor escalation paths.{" "}
+            Escalations automatically run every 12 minutes, but you can still trigger them manually when needed.
           </p>
         </div>
         <div className="flex flex-col gap-2 md:flex-row md:items-center">
@@ -713,7 +714,8 @@ export default function NotificationsPage() {
                 <CardHeader>
                   <CardTitle>{draftRule.id ? 'Edit rule' : 'Create rule'}</CardTitle>
                   <CardDescription>
-                    Define SLA targets, delivery channels, and escalation sequencing.
+                    Define SLA targets, delivery channels, and escalation sequencing. Overdue alerts are
+                    escalated automatically approximately every 12 minutes.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
