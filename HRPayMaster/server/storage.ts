@@ -15,7 +15,7 @@ import {
   type SQL,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { db } from "./db";
 import { normalizeAllowanceTitle } from "./utils/payroll";
 import { CHATBOT_EVENT_TYPES, emitChatbotNotification } from "./chatbotEvents";
@@ -47,6 +47,7 @@ type MfaChallengeRecord = {
 
 const MFA_CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const MFA_MAX_ATTEMPTS = 5;
+const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
 export interface MfaChallengeInfo {
   id: string;
@@ -59,6 +60,11 @@ export interface MfaVerificationResult {
   success: boolean;
   user?: SessionUser;
   reason?: "expired" | "invalid" | "not_found" | "user_inactive";
+}
+
+export interface PasswordResetResult {
+  success: boolean;
+  reason?: "invalid" | "expired" | "used";
 }
 import {
   type Department,
@@ -169,6 +175,7 @@ import {
   type InsertLeaveBalance,
   type LeaveAccrualLedgerEntry,
   type InsertLeaveAccrualLedgerEntry,
+  type PasswordResetToken,
   departments,
   companies,
   employees,
@@ -205,6 +212,7 @@ import {
   shiftTemplates,
   employeeSchedules,
   users,
+  passwordResetTokens,
   permissionSets,
   userPermissionGrants,
   accessRequests,
@@ -631,6 +639,7 @@ export interface IStorage {
   // User methods
   getUserById(id: string): Promise<UserWithPermissions | undefined>;
   getUserByUsername(username: string): Promise<UserWithPermissions | undefined>;
+  getUserByEmail(email: string): Promise<UserWithPermissions | undefined>;
   getUsers(): Promise<UserWithPermissions[]>;
   createUser(user: typeof users.$inferInsert): Promise<UserWithPermissions>;
   updateUser(
@@ -638,6 +647,14 @@ export interface IStorage {
     user: Partial<typeof users.$inferInsert>,
   ): Promise<UserWithPermissions | undefined>;
   getSessionUser(id: string): Promise<SessionUser | undefined>;
+  createPasswordResetToken(
+    userId: string,
+    options?: { expiresInMs?: number },
+  ): Promise<{ token: string; expiresAt: Date }>;
+  resetPasswordWithToken(
+    token: string,
+    passwordHash: string,
+  ): Promise<PasswordResetResult>;
   getPermissionSets(): Promise<PermissionSet[]>;
   getPermissionSetByKey(key: string): Promise<PermissionSet | undefined>;
   getActivePermissionGrants(
@@ -1180,6 +1197,10 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
+  private hashToken(token: string): string {
+    return createHash("sha256").update(token).digest("hex");
+  }
+
   async getUserById(id: string): Promise<UserWithPermissions | undefined> {
     const [row] = await db.select().from(users).where(eq(users.id, id));
     return this.hydrateUser(row);
@@ -1193,6 +1214,13 @@ export class DatabaseStorage implements IStorage {
 
   async getUserByUsername(username: string): Promise<UserWithPermissions | undefined> {
     const [row] = await db.select().from(users).where(eq(users.username, username));
+    return this.hydrateUser(row);
+  }
+
+  async getUserByEmail(email: string): Promise<UserWithPermissions | undefined> {
+    const normalized = typeof email === "string" ? email.trim().toLowerCase() : email;
+    const target = typeof normalized === "string" && normalized.length > 0 ? normalized : email;
+    const [row] = await db.select().from(users).where(eq(users.email, target));
     return this.hydrateUser(row);
   }
 
@@ -1216,6 +1244,88 @@ export class DatabaseStorage implements IStorage {
   async getSessionUser(id: string): Promise<SessionUser | undefined> {
     const user = await this.getUserById(id);
     return user ? this.toSessionUser(user) : undefined;
+  }
+
+  async createPasswordResetToken(
+    userId: string,
+    options: { expiresInMs?: number } = {},
+  ): Promise<{ token: string; expiresAt: Date }> {
+    const ttl = options.expiresInMs && options.expiresInMs > 0 ? options.expiresInMs : PASSWORD_RESET_TOKEN_TTL_MS;
+    const expiresAt = new Date(Date.now() + ttl);
+    const token = randomBytes(32).toString("hex");
+    const tokenHash = this.hashToken(token);
+    const now = new Date();
+
+    await db.transaction(async tx => {
+      await tx
+        .update(passwordResetTokens)
+        .set({ consumedAt: now })
+        .where(
+          and(
+            eq(passwordResetTokens.userId, userId),
+            isNull(passwordResetTokens.consumedAt),
+          ),
+        );
+
+      await tx.insert(passwordResetTokens).values({
+        userId,
+        tokenHash,
+        expiresAt,
+        createdAt: now,
+      });
+    });
+
+    return { token, expiresAt };
+  }
+
+  async resetPasswordWithToken(token: string, passwordHash: string): Promise<PasswordResetResult> {
+    const tokenHash = this.hashToken(token);
+    const now = new Date();
+
+    return db.transaction(async tx => {
+      const [record] = await tx
+        .select()
+        .from(passwordResetTokens)
+        .where(eq(passwordResetTokens.tokenHash, tokenHash));
+
+      if (!record) {
+        return { success: false, reason: "invalid" };
+      }
+
+      if (record.consumedAt) {
+        return { success: false, reason: "used" };
+      }
+
+      if (record.expiresAt.getTime() <= now.getTime()) {
+        await tx
+          .update(passwordResetTokens)
+          .set({ consumedAt: now })
+          .where(eq(passwordResetTokens.id, record.id));
+        return { success: false, reason: "expired" };
+      }
+
+      await tx
+        .update(users)
+        .set({ passwordHash })
+        .where(eq(users.id, record.userId));
+
+      await tx
+        .update(passwordResetTokens)
+        .set({ consumedAt: now })
+        .where(eq(passwordResetTokens.id, record.id));
+
+      await tx
+        .update(passwordResetTokens)
+        .set({ consumedAt: now })
+        .where(
+          and(
+            eq(passwordResetTokens.userId, record.userId),
+            isNull(passwordResetTokens.consumedAt),
+          ),
+        );
+
+      return { success: true };
+    });
   }
 
   async getPermissionSets(): Promise<PermissionSet[]> {

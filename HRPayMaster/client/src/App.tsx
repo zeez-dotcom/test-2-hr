@@ -1,5 +1,5 @@
 import { Switch, Route, Link, useLocation } from "wouter";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useTranslation } from "@/lib/i18n";
 import { queryClient, getQueryFn } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
@@ -17,6 +17,8 @@ import AssetFile from "@/pages/asset-file";
 import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
+import PasswordResetRequest from "@/pages/password-reset-request";
+import PasswordReset from "@/pages/password-reset";
 import Chatbot from "@/components/chatbot";
 import type { SessionUser } from "@shared/schema";
 import { apiGet } from "@/lib/http";
@@ -28,25 +30,38 @@ function Router() {
     queryFn: getQueryFn<SessionUser | null>({ on401: "returnNull" }),
   });
   const [location, navigate] = useLocation();
+  const publicPrefixes = useMemo(() => ["/login", "/forgot-password", "/reset-password"], []);
 
   useEffect(() => {
     if (isLoading) return;
-    if (!user && location !== "/login") {
+    if (!user && !publicPrefixes.some(prefix => location.startsWith(prefix))) {
       navigate("/login");
     }
-  }, [isLoading, user, location, navigate]);
+  }, [isLoading, user, location, navigate, publicPrefixes]);
 
   useEffect(() => {
     if (isLoading) return;
-    if (user && location === "/login") {
+    if (user && publicPrefixes.some(prefix => location.startsWith(prefix))) {
       navigate("/");
     }
-  }, [isLoading, user, location, navigate]);
+  }, [isLoading, user, location, navigate, publicPrefixes]);
 
   if (isLoading) return null;
 
   if (!user) {
-    return <Login />;
+    return (
+      <Switch>
+        <Route path="/login" component={Login} />
+        <Route path="/forgot-password" component={PasswordResetRequest} />
+        <Route path="/reset-password/:token">
+          {(params) => <PasswordReset initialToken={params.token} />}
+        </Route>
+        <Route path="/reset-password" component={PasswordReset} />
+        <Route>
+          <Login />
+        </Route>
+      </Switch>
+    );
   }
 
   const Redirect = ({ to }: { to: string }) => {

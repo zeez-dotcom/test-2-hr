@@ -221,9 +221,13 @@ export default function Login() {
                 />
                 {t("login.rememberMe")}
               </label>
-              <a className="text-sm text-primary hover:underline" href="#" onClick={(e) => e.preventDefault()}>
+              <button
+                type="button"
+                className="text-sm text-primary hover:underline"
+                onClick={() => navigate("/forgot-password")}
+              >
                 {t("login.forgotPassword")}
-              </a>
+              </button>
             </div>
             {error && (
               <p className="text-sm text-red-600" data-testid="form-error" id="login-error">
