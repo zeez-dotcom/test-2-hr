@@ -1218,9 +1218,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserByEmail(email: string): Promise<UserWithPermissions | undefined> {
-    const normalized = typeof email === "string" ? email.trim().toLowerCase() : email;
-    const target = typeof normalized === "string" && normalized.length > 0 ? normalized : email;
-    const [row] = await db.select().from(users).where(eq(users.email, target));
+    if (typeof email !== "string") {
+      return undefined;
+    }
+
+    const trimmed = email.trim();
+    if (trimmed.length === 0) {
+      return undefined;
+    }
+
+    const normalized = trimmed.toLowerCase();
+    const [row] = await db
+      .select()
+      .from(users)
+      .where(sql`lower(${users.email}) = ${normalized}`);
     return this.hydrateUser(row);
   }
 
