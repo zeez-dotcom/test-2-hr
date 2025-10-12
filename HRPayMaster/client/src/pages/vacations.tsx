@@ -80,6 +80,8 @@ const calcDays = (start: string, end: string) =>
 const omitUndefined = <T extends Record<string, unknown>>(value: T): T =>
   Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined && v !== "")) as T;
 
+const NO_POLICY_SENTINEL = "__no_policy__";
+
 export default function Vacations() {
   const { t } = useTranslation();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -181,7 +183,7 @@ export default function Vacations() {
       leaveType: "vacation",
       reason: "",
       pauseLoans: false,
-      appliesPolicyId: "",
+      appliesPolicyId: NO_POLICY_SENTINEL,
       autoPauseAllowances: false,
     },
   });
@@ -327,6 +329,9 @@ export default function Vacations() {
   });
 
   const onSubmit = async (data: z.infer<typeof vacationRequestSchema>) => {
+    const appliesPolicyId =
+      data.appliesPolicyId === NO_POLICY_SENTINEL ? "" : data.appliesPolicyId;
+
     const payload = {
       employeeId: data.employeeId,
       startDate: data.start,
@@ -335,7 +340,7 @@ export default function Vacations() {
       leaveType: data.leaveType,
       reason: `${data.reason || ""}${data.pauseLoans ? (data.reason ? " " : "") + "[pause-loans]" : ""}`,
       status: "pending",
-      appliesPolicyId: data.appliesPolicyId || undefined,
+      appliesPolicyId: appliesPolicyId || undefined,
       autoPauseAllowances: data.autoPauseAllowances ?? false,
     };
 
@@ -569,7 +574,7 @@ export default function Vacations() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">No policy</SelectItem>
+                          <SelectItem value={NO_POLICY_SENTINEL}>No policy</SelectItem>
                           {policies.map(policy => (
                             <SelectItem key={policy.id} value={policy.id}>
                               {policy.name} · {policy.leaveType}

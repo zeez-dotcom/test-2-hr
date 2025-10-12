@@ -76,6 +76,11 @@ const signatureStatusOptions = [
   ...documentSignatureStatusSchema.options,
 ] as const;
 
+const ALL_CATEGORIES_VALUE = "__all_categories__";
+const ALL_TAGS_VALUE = "__all_tags__";
+const ALL_EMPLOYEES_VALUE = "__all_employees__";
+const NO_EMPLOYEE_VALUE = "__no_employee__";
+
 const isSignatureStatusOption = (
   value: string,
 ): value is (typeof signatureStatusOptions)[number] =>
@@ -274,8 +279,8 @@ export default function DocumentsPage() {
 
   const [activeTab, setActiveTab] = useState<string>("library");
   const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("");
-  const [tagFilter, setTagFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<string>(ALL_CATEGORIES_VALUE);
+  const [tagFilter, setTagFilter] = useState<string>(ALL_TAGS_VALUE);
   const [signatureFilter, setSignatureFilter] = useState<(typeof signatureStatusOptions)[number]>("all");
 
   const handleSignatureFilterChange = (value: string) => {
@@ -285,7 +290,7 @@ export default function DocumentsPage() {
       setSignatureFilter("all");
     }
   };
-  const [employeeFilter, setEmployeeFilter] = useState("");
+  const [employeeFilter, setEmployeeFilter] = useState<string>(ALL_EMPLOYEES_VALUE);
   const [latestOnly, setLatestOnly] = useState(true);
 
   const [uploadTitle, setUploadTitle] = useState("");
@@ -296,7 +301,7 @@ export default function DocumentsPage() {
   const [uploadController, setUploadController] = useState("");
   const [uploadExpiry, setUploadExpiry] = useState("");
   const [uploadAlertDays, setUploadAlertDays] = useState("");
-  const [uploadEmployeeId, setUploadEmployeeId] = useState("");
+  const [uploadEmployeeId, setUploadEmployeeId] = useState<string>(NO_EMPLOYEE_VALUE);
   const [uploadMetadata, setUploadMetadata] = useState("");
   const [uploadDataUrl, setUploadDataUrl] = useState<string | undefined>();
 
@@ -359,10 +364,13 @@ export default function DocumentsPage() {
         ];
       const params = new URLSearchParams();
       if (searchValue) params.set("search", searchValue);
-      if (category) params.set("category", category);
-      if (tags) params.set("tags", tags);
+      const categoryParam = category === ALL_CATEGORIES_VALUE ? "" : category;
+      const tagsParam = tags === ALL_TAGS_VALUE ? "" : tags;
+      const employeeParam = employeeId === ALL_EMPLOYEES_VALUE ? "" : employeeId;
+      if (categoryParam) params.set("category", categoryParam);
+      if (tagsParam) params.set("tags", tagsParam);
       if (signature && signature !== "all") params.set("signatureStatus", signature);
-      if (employeeId) params.set("employeeId", employeeId);
+      if (employeeParam) params.set("employeeId", employeeParam);
       if (latestFlag !== "1") params.set("latestOnly", "0");
       const url = `/api/documents${params.toString() ? `?${params.toString()}` : ""}`;
       const res = await apiGet(url);
@@ -555,6 +563,9 @@ export default function DocumentsPage() {
     const metadataObject = safeParseJson(uploadMetadata, (message) =>
       toast({ title: message, variant: "destructive" }),
     );
+    const selectedEmployeeId =
+      uploadEmployeeId === NO_EMPLOYEE_VALUE ? undefined : uploadEmployeeId;
+
     const payload: Record<string, unknown> = {
       title: uploadTitle,
       description: uploadDescription,
@@ -565,7 +576,7 @@ export default function DocumentsPage() {
       controllerNumber: uploadController,
       expiryDate: uploadExpiry,
       alertDays: uploadAlertDays,
-      employeeId: uploadEmployeeId,
+      employeeId: selectedEmployeeId ?? null,
       metadata: metadataObject,
     };
     await createDocumentMutation.mutateAsync(payload);
@@ -577,7 +588,7 @@ export default function DocumentsPage() {
     setUploadController("");
     setUploadExpiry("");
     setUploadAlertDays("");
-    setUploadEmployeeId("");
+    setUploadEmployeeId(NO_EMPLOYEE_VALUE);
     setUploadMetadata("");
     setUploadDataUrl(undefined);
   };
@@ -1125,7 +1136,9 @@ export default function DocumentsPage() {
                 <SelectValue placeholder={t("documents.allCategories", "All categories")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">{t("documents.allCategories", "All categories")}</SelectItem>
+                <SelectItem value={ALL_CATEGORIES_VALUE}>
+                  {t("documents.allCategories", "All categories")}
+                </SelectItem>
                 {uniqueCategories.map((category) => (
                   <SelectItem key={category} value={category}>
                     {category}
@@ -1141,7 +1154,9 @@ export default function DocumentsPage() {
                 <SelectValue placeholder={t("documents.allTags", "All tags")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">{t("documents.allTags", "All tags")}</SelectItem>
+                <SelectItem value={ALL_TAGS_VALUE}>
+                  {t("documents.allTags", "All tags")}
+                </SelectItem>
                 {uniqueTags.map((tag) => (
                   <SelectItem key={tag} value={tag}>
                     {tag}
@@ -1174,7 +1189,9 @@ export default function DocumentsPage() {
                 <SelectValue placeholder={t("documents.allEmployees", "All employees")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">{t("documents.allEmployees", "All employees")}</SelectItem>
+                <SelectItem value={ALL_EMPLOYEES_VALUE}>
+                  {t("documents.allEmployees", "All employees")}
+                </SelectItem>
                 {employees?.map((employee: any) => (
                   <SelectItem key={employee.id} value={employee.id}>
                     {employee.firstName} {employee.lastName}
@@ -1299,7 +1316,9 @@ export default function DocumentsPage() {
                         <SelectValue placeholder={t("documents.optionalEmployee", "Optional employee")} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">{t("documents.none", "None")}</SelectItem>
+                        <SelectItem value={NO_EMPLOYEE_VALUE}>
+                          {t("documents.none", "None")}
+                        </SelectItem>
                         {employees?.map((employee: any) => (
                           <SelectItem key={employee.id} value={employee.id}>
                             {employee.firstName} {employee.lastName}
