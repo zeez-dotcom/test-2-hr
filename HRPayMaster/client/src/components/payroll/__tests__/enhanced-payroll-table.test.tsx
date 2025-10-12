@@ -2,13 +2,18 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { EnhancedPayrollTable } from "../enhanced-payroll-table";
+import { setCurrencyConfigForTests } from "@/lib/utils";
 
 const mutateMock = vi.fn();
 
-vi.mock("@tanstack/react-query", () => ({
-  useMutation: () => ({ mutate: mutateMock }),
-  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
-}));
+vi.mock("@tanstack/react-query", async () => {
+  const actual = await vi.importActual<typeof import("@tanstack/react-query")>("@tanstack/react-query");
+  return {
+    ...actual,
+    useMutation: () => ({ mutate: mutateMock }),
+    useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+  };
+});
 
 vi.mock("@/components/ui/button", () => ({
   Button: ({ children, ...props }: any) => (
@@ -66,6 +71,14 @@ vi.mock("lucide-react", () => {
 });
 
 describe("EnhancedPayrollTable allowances", () => {
+  beforeEach(() => {
+    setCurrencyConfigForTests({ currency: "KWD", locale: "en-KW" });
+  });
+
+  afterEach(() => {
+    setCurrencyConfigForTests(null);
+  });
+
   it("displays aggregated allowances with a breakdown and handles empty allowances", () => {
     const entries = [
       {

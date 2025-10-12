@@ -16,6 +16,7 @@ import { Minus, FileImage } from "lucide-react";
 import { toastApiError } from "@/lib/toastError";
 import { generateEventReceipt } from "@/lib/event-receipts";
 import type { Employee, EmployeeEvent } from "@shared/schema";
+import { getCurrencyCode } from "@/lib/utils";
 
 const deductionFormSchema = z.object({
   amount: z.number().min(0.01, "Amount must be greater than 0"),
@@ -50,6 +51,7 @@ export function DeductionForm({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [uploadedImage, setUploadedImage] = useState<string>("");
+  const currencyCode = getCurrencyCode();
 
   const form = useForm<DeductionFormData>({
     resolver: zodResolver(deductionFormSchema),
@@ -192,7 +194,7 @@ export function DeductionForm({
               name="amount"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Deduction Amount (KWD)</FormLabel>
+                  <FormLabel>Deduction Amount ({currencyCode})</FormLabel>
                   <FormControl>
                     <Input
                       type="number"

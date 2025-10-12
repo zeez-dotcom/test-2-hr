@@ -22,6 +22,7 @@ import {
   formatDate,
   calculateWorkingDaysAdjustment,
   formatAllowanceSummaryForCsv,
+  getCurrencyCode,
 } from "@/lib/utils";
 import { openPdf } from "@/lib/pdf";
 import type { TDocumentDefinitions } from "pdfmake/interfaces";
@@ -37,6 +38,7 @@ export function ExportPayroll({ payrollRun, isOpen, onClose }: ExportPayrollProp
   const [selectedLocation, setSelectedLocation] = useState<string>("all");
   const [exportFormat, setExportFormat] = useState<string>("pdf");
   const { toast } = useToast();
+  const currencyCode = getCurrencyCode();
 
   const { data: employees } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
@@ -212,7 +214,7 @@ export function ExportPayroll({ payrollRun, isOpen, onClose }: ExportPayrollProp
       `Total Transfers: ${bankData.length}`,
       `Total Amount: ${formatCurrency(bankData.reduce((sum, item) => sum + parseFloat(item.amount), 0))}`,
       '',
-      'Employee ID,Employee Name,IBAN,Bank Name,Amount (KWD),Reference',
+      `Employee ID,Employee Name,IBAN,Bank Name,Amount (${currencyCode}),Reference`,
       ...bankData.map(item => 
         `${item.employeeId},"${item.employeeName}",${item.iban},"${item.bankName}",${item.amount},${item.reference}`
       )

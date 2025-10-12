@@ -16,6 +16,7 @@ import { Gift, FileImage } from "lucide-react";
 import { toastApiError } from "@/lib/toastError";
 import { generateEventReceipt } from "@/lib/event-receipts";
 import type { Employee, EmployeeEvent } from "@shared/schema";
+import { getCurrencyCode } from "@/lib/utils";
 
 const bonusFormSchema = z.object({
   amount: z.number().min(0.01, "Amount must be greater than 0"),
@@ -54,6 +55,7 @@ export function BonusForm({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [uploadedImage, setUploadedImage] = useState<string>("");
+  const currencyCode = getCurrencyCode();
 
   const form = useForm<BonusFormData>({
     resolver: zodResolver(bonusFormSchema),
@@ -175,7 +177,7 @@ export function BonusForm({
               name="amount"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Bonus Amount (KWD)</FormLabel>
+                  <FormLabel>Bonus Amount ({currencyCode})</FormLabel>
                   <FormControl>
                     <Input
                       type="number"
