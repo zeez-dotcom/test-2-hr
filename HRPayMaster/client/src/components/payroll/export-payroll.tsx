@@ -17,13 +17,8 @@ import {
   CreditCard,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import {
-  formatCurrency,
-  formatDate,
-  calculateWorkingDaysAdjustment,
-  formatAllowanceSummaryForCsv,
-  getCurrencyCode,
-} from "@/lib/utils";
+import { formatCurrency, formatDate } from "@/lib/utils";
+import { downloadPayrollBankFile, downloadPayrollCsv } from "@/lib/payroll-export";
 import { openPdf } from "@/lib/pdf";
 import type { TDocumentDefinitions } from "pdfmake/interfaces";
 import type { PayrollRunWithEntries, PayrollEntry, Employee } from "@shared/schema";
@@ -38,7 +33,6 @@ export function ExportPayroll({ payrollRun, isOpen, onClose }: ExportPayrollProp
   const [selectedLocation, setSelectedLocation] = useState<string>("all");
   const [exportFormat, setExportFormat] = useState<string>("pdf");
   const { toast } = useToast();
-  const currencyCode = getCurrencyCode();
 
   const { data: employees } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
@@ -68,9 +62,11 @@ export function ExportPayroll({ payrollRun, isOpen, onClose }: ExportPayrollProp
             (entry.employee?.workLocation || "Office") === selectedLocation
         );
 
-  const generatePDFPayslips = () => {
-    const locationLabel = selectedLocation === "all" ? "All Locations" : selectedLocation;
+  const getLocationLabel = () =>
+    selectedLocation === "all" ? "All Locations" : selectedLocation;
 
+  const generatePDFPayslips = () => {
+    const locationLabel = getLocationLabel();
     const docDefinition: TDocumentDefinitions = {
       info: { title: `Payroll - ${locationLabel}`, creationDate: new Date(0) },
       styles: {
@@ -106,146 +102,36 @@ export function ExportPayroll({ payrollRun, isOpen, onClose }: ExportPayrollProp
       description: `Payroll for ${locationLabel} opened for printing`,
     });
   };
-  const generateExcelExport = () => {
-    const locationLabel = selectedLocation === "all" ? "All Locations" : selectedLocation;
-    
-    // Create CSV content
-    const headers = [
-      "Employee ID", "Employee Name", "Position", "Work Location",
-      "Base Salary", "Allowances", "Bonus", "Gross Pay", "Working Days", "Actual Working Days", "Working Days Adjustment", "Vacation Days",
-      "Tax Deduction", "Social Security", "Health Insurance", "Loan Deduction", "Other Deductions",
-      "Total Deductions", "Net Pay", "Adjustment Reason"
-    ];
-
-    const csvData = filteredEntries.map(entry => {
-      const grossPay = parseFloat(entry.grossPay?.toString() || "0");
-      const totalDeductions = (
-        parseFloat(entry.taxDeduction?.toString() || "0") +
-        parseFloat(entry.socialSecurityDeduction?.toString() || "0") +
-        parseFloat(entry.healthInsuranceDeduction?.toString() || "0") +
-        parseFloat(entry.loanDeduction?.toString() || "0") +
-        parseFloat(entry.otherDeductions?.toString() || "0")
-      );
-      const netPay = grossPay - totalDeductions;
-      const workingDaysAdjustment = calculateWorkingDaysAdjustment(entry);
-      const allowanceCell = formatAllowanceSummaryForCsv(entry.allowances);
-
-      return [
-        entry.employeeId,
-        `${entry.employee?.firstName} ${entry.employee?.lastName}`,
-        entry.employee?.position || 'N/A',
-        entry.employee?.workLocation || 'Office',
-        entry.baseSalary,
-        allowanceCell,
-        entry.bonusAmount || 0,
-        grossPay,
-        entry.workingDays,
-        entry.actualWorkingDays,
-        workingDaysAdjustment.toFixed(3),
-        entry.vacationDays || 0,
-        entry.taxDeduction || 0,
-        entry.socialSecurityDeduction || 0,
-        entry.healthInsuranceDeduction || 0,
-        entry.loanDeduction || 0,
-        entry.otherDeductions || 0,
-        totalDeductions,
-        netPay,
-        entry.adjustmentReason || ''
-      ];
-    });
-
-    const csvContent = [
-      [`HR Pro Payroll Export - ${locationLabel}`],
-      [`Period: ${formatDate(payrollRun.startDate)} to ${formatDate(payrollRun.endDate)}`],
-      [`Generated: ${formatDate(new Date())}`],
-      [],
-      headers,
-      ...csvData
-    ].map(row => row.join(",")).join("\n");
-
-    // Create and download file
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `payroll_${locationLabel.replace(/\s+/g, '_')}_${formatDate(payrollRun.startDate).replace(/\s+/g, '_')}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    toast({
-      title: "Success",
-      description: `Excel file generated for ${locationLabel}`,
-    });
-  };
-
-  const generateBankTransferFile = () => {
-    const locationLabel = selectedLocation === "all" ? "All Locations" : selectedLocation;
-    
-    // Create bank transfer file (MT940 format simulation)
-    const bankData = filteredEntries
-      .filter(entry => entry.employee?.bankIban) // Only employees with bank details
-      .map(entry => {
-        const grossPay = parseFloat(entry.grossPay?.toString() || "0");
-        const totalDeductions = (
-          parseFloat(entry.taxDeduction?.toString() || "0") +
-          parseFloat(entry.socialSecurityDeduction?.toString() || "0") +
-          parseFloat(entry.healthInsuranceDeduction?.toString() || "0") +
-          parseFloat(entry.loanDeduction?.toString() || "0") +
-          parseFloat(entry.otherDeductions?.toString() || "0")
-        );
-        const netPay = grossPay - totalDeductions;
-        
-        return {
-          employeeId: entry.employeeId,
-          employeeName: `${entry.employee?.firstName} ${entry.employee?.lastName}`,
-          iban: entry.employee?.bankIban,
-          bankName: entry.employee?.bankName || 'Unknown Bank',
-          amount: netPay.toFixed(3),
-          reference: `Salary_${entry.employeeId}_${formatDate(payrollRun.startDate).replace(/\s+/g, '')}`
-        };
-      });
-
-    const bankFileContent = [
-      `Bank Transfer File - ${locationLabel}`,
-      `Date: ${formatDate(new Date())}`,
-      `Period: ${formatDate(payrollRun.startDate)} to ${formatDate(payrollRun.endDate)}`,
-      `Total Transfers: ${bankData.length}`,
-      `Total Amount: ${formatCurrency(bankData.reduce((sum, item) => sum + parseFloat(item.amount), 0))}`,
-      '',
-      `Employee ID,Employee Name,IBAN,Bank Name,Amount (${currencyCode}),Reference`,
-      ...bankData.map(item => 
-        `${item.employeeId},"${item.employeeName}",${item.iban},"${item.bankName}",${item.amount},${item.reference}`
-      )
-    ].join('\n');
-
-    const blob = new Blob([bankFileContent], { type: 'text/plain;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `bank_transfer_${locationLabel.replace(/\s+/g, '_')}_${formatDate(payrollRun.startDate).replace(/\s+/g, '_')}.txt`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    toast({
-      title: "Success",
-      description: `Bank transfer file generated for ${locationLabel} (${bankData.length} employees with bank details)`,
-    });
-  };
 
   const handleExport = () => {
+    const locationLabel = getLocationLabel();
     switch (exportFormat) {
       case "pdf":
         generatePDFPayslips();
         break;
       case "excel":
-        generateExcelExport();
+        downloadPayrollCsv({
+          entries: filteredEntries,
+          payrollRun,
+          scopeLabel: locationLabel,
+        });
+        toast({
+          title: "Success",
+          description: `Excel file generated for ${locationLabel}`,
+        });
         break;
       case "bank":
-        generateBankTransferFile();
+        {
+          const { entryCount } = downloadPayrollBankFile({
+            entries: filteredEntries,
+            payrollRun,
+            scopeLabel: locationLabel,
+          });
+          toast({
+            title: "Success",
+            description: `Bank transfer file generated for ${locationLabel} (${entryCount} employees with bank details)`,
+          });
+        }
         break;
       default:
         generatePDFPayslips();
