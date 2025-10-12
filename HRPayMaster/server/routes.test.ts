@@ -1355,8 +1355,18 @@ describe('employee routes', () => {
       {
         period: '2024-01',
         payrollEntries: [
-          { grossPay: '100', netPay: '90' },
-          { grossPay: '50', netPay: '40' }
+          {
+            grossPay: '100',
+            netPay: '90',
+            allowances: { housing: 50, travel: '10', skip: null },
+            bonusAmount: '15'
+          },
+          {
+            grossPay: '50',
+            netPay: '40',
+            allowances: { invalid: 'abc', car: 5 },
+            bonusAmount: 5
+          }
         ]
       }
     ];
@@ -1368,7 +1378,10 @@ describe('employee routes', () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual([
-      { period: '2024-01', totals: { grossPay: 150, netPay: 130 } }
+      {
+        period: '2024-01',
+        totals: { grossPay: 150, netPay: 130, allowances: 65, bonuses: 20 }
+      }
     ]);
   });
 

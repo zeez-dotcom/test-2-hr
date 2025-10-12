@@ -57,6 +57,20 @@ responses include both a `status` code and additional `details` to aid
 debugging. In production, these fields are omitted and only a general
 error message is returned.
 
+## Reports API
+
+### `GET /api/reports/payroll`
+
+- Each period in the response now exposes `totals` with four numeric values:
+  - `grossPay` and `netPay` behave as before, summing the run's gross/net amounts.
+  - `allowances` sums every allowance component hydrated for the run, skipping any
+    non-numeric values and backfilling entries that stored `null` allowances by
+    reusing the allowance breakdown helpers used in employee reports.
+  - `bonuses` aggregates the `bonusAmount` recorded on each payroll entry.
+- Downstream consumers can rely on the totals object to reconcile allowance and
+  bonus payouts alongside gross and net totals without reprocessing individual
+  entries.
+
 ### Payroll run deletion safeguards
 
 - `DELETE /api/payroll/:id` now restores any loan balances before removing

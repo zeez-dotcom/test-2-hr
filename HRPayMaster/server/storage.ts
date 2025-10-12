@@ -3528,17 +3528,8 @@ export class DatabaseStorage implements IStorage {
           }
         }
       } else if (rawAllowances) {
-        const sanitized = Object.entries(rawAllowances).reduce<AllowanceBreakdown>(
-          (acc, [key, value]) => {
-            const numeric = Number(value);
-            if (Number.isFinite(numeric)) {
-              acc[key] = numeric;
-            }
-            return acc;
-          },
-          {},
-        );
-        if (Object.keys(sanitized).length > 0) {
+        const sanitized = this.sanitizeAllowanceBreakdown(rawAllowances);
+        if (sanitized) {
           normalizedAllowances = sanitized;
           Object.keys(sanitized).forEach(key => allowanceKeySet.add(key));
         }
@@ -3565,6 +3556,40 @@ export class DatabaseStorage implements IStorage {
   }
 
 
+
+  private sanitizeAllowanceBreakdown(raw: unknown): AllowanceBreakdown | undefined {
+    if (!raw || typeof raw !== "object") {
+      return undefined;
+    }
+
+    const sanitized = Object.entries(raw as Record<string, unknown>).reduce<AllowanceBreakdown>(
+      (acc, [key, value]) => {
+        if (typeof value === "number") {
+          if (Number.isFinite(value)) {
+            acc[key] = value;
+          }
+          return acc;
+        }
+
+        if (typeof value === "string") {
+          const trimmed = value.trim();
+          if (!trimmed) {
+            return acc;
+          }
+
+          const numeric = Number(trimmed);
+          if (Number.isFinite(numeric)) {
+            acc[key] = numeric;
+          }
+        }
+
+        return acc;
+      },
+      {},
+    );
+
+    return Object.keys(sanitized).length > 0 ? sanitized : undefined;
+  }
 
   private async buildAllowanceBreakdownForRun(
 
@@ -8509,17 +8534,8 @@ export class DatabaseStorage implements IStorage {
       let normalizedAllowances: AllowanceBreakdown | undefined;
 
       if (rawAllowances != null) {
-        const sanitized = Object.entries(rawAllowances as Record<string, number>).reduce<AllowanceBreakdown>(
-          (acc, [key, value]) => {
-            const numeric = Number(value);
-            if (Number.isFinite(numeric)) {
-              acc[key] = numeric;
-            }
-            return acc;
-          },
-          {},
-        );
-        if (Object.keys(sanitized).length > 0) {
+        const sanitized = this.sanitizeAllowanceBreakdown(rawAllowances);
+        if (sanitized) {
           normalizedAllowances = sanitized;
           Object.keys(sanitized).forEach(key => keySet?.add(key));
         }
@@ -8624,6 +8640,14 @@ export class DatabaseStorage implements IStorage {
 
         entry: payrollEntries,
 
+        runId: payrollRuns.id,
+
+        runStart: payrollRuns.startDate,
+
+        runEnd: payrollRuns.endDate,
+
+        scenarioToggles: payrollRuns.scenarioToggles,
+
       })
 
       .from(payrollEntries)
@@ -8634,9 +8658,153 @@ export class DatabaseStorage implements IStorage {
 
 
 
+    const entriesByRun = new Map<
+
+      string,
+
+      {
+
+        start: string | Date | null | undefined;
+
+        end: string | Date | null | undefined;
+
+        scenarioToggles: unknown;
+
+        entries: PayrollEntry[];
+
+      }
+
+    >();
+
+
+
+    rows.forEach(({ runId, runStart, runEnd, scenarioToggles, entry }) => {
+
+      if (!runId) {
+
+        return;
+
+      }
+
+      const existing = entriesByRun.get(runId);
+
+      if (existing) {
+
+        existing.entries.push(entry);
+
+      } else {
+
+        entriesByRun.set(runId, {
+
+          start: runStart,
+
+          end: runEnd,
+
+          scenarioToggles,
+
+          entries: [entry],
+
+        });
+
+      }
+
+    });
+
+
+
+    const fallbackBreakdownByRun = new Map<string, Map<string, AllowanceBreakdown>>();
+
+    const allowancesEnabledByRun = new Map<string, boolean>();
+
+
+
+    for (const [runId, { start, end, scenarioToggles, entries }] of entriesByRun.entries()) {
+
+      const toggles =
+
+        scenarioToggles && typeof scenarioToggles === "object"
+
+          ? (scenarioToggles as Record<string, boolean>)
+
+          : {};
+
+      const allowancesEnabled = toggles.allowances !== false;
+
+      allowancesEnabledByRun.set(runId, allowancesEnabled);
+
+
+
+      if (!allowancesEnabled) {
+
+        fallbackBreakdownByRun.set(runId, new Map());
+
+        continue;
+
+      }
+
+
+
+      const entriesNeedingFallback = entries.filter(entry => entry.allowances == null);
+
+      if (!start || entriesNeedingFallback.length === 0) {
+
+        fallbackBreakdownByRun.set(runId, new Map());
+
+        continue;
+
+      }
+
+
+
+      const allowanceEnd = end ?? start;
+
+
+
+      try {
+
+        const metadata = await this.buildAllowanceBreakdownForRun(
+
+          entriesNeedingFallback.map(entry => ({ employeeId: entry.employeeId })),
+
+          start,
+
+          allowanceEnd,
+
+        );
+
+        fallbackBreakdownByRun.set(runId, metadata.breakdownByEmployee);
+
+      } catch (error) {
+
+        if (this.isDataSourceUnavailableError(error)) {
+
+          console.warn(
+
+            "Failed to load allowance metadata due to missing data source:",
+
+            error,
+
+          );
+
+          fallbackBreakdownByRun.set(runId, new Map());
+
+        } else {
+
+          throw error;
+
+        }
+
+      }
+
+    }
+
+
+
     const grouped: Record<string, PayrollSummaryPeriod> = {};
 
-    rows.forEach(({ period, entry }) => {
+
+
+    rows.forEach(({ period, entry, runId }) => {
 
       if (!grouped[period]) {
 
@@ -8644,7 +8812,43 @@ export class DatabaseStorage implements IStorage {
 
       }
 
-      grouped[period].payrollEntries.push(entry);
+
+
+      const { allowances: rawAllowances, ...entryWithoutAllowances } = entry as any;
+
+      let normalizedAllowances = this.sanitizeAllowanceBreakdown(rawAllowances);
+
+
+
+      if (!normalizedAllowances && runId) {
+
+        const allowancesEnabled = allowancesEnabledByRun.get(runId) ?? false;
+
+        if (allowancesEnabled) {
+
+          const fallback = fallbackBreakdownByRun.get(runId)?.get(entry.employeeId);
+
+          if (fallback && Object.keys(fallback).length > 0) {
+
+            normalizedAllowances = { ...fallback };
+
+          }
+
+        }
+
+      }
+
+
+
+      const normalizedEntry: PayrollEntry = normalizedAllowances
+
+        ? { ...entryWithoutAllowances, allowances: normalizedAllowances }
+
+        : { ...entryWithoutAllowances };
+
+
+
+      grouped[period].payrollEntries.push(normalizedEntry);
 
     });
 
