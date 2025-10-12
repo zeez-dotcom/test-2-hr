@@ -19,6 +19,7 @@ import { randomUUID } from "node:crypto";
 import { db } from "./db";
 import { normalizeAllowanceTitle } from "./utils/payroll";
 import { CHATBOT_EVENT_TYPES, emitChatbotNotification } from "./chatbotEvents";
+import { sendEmail } from "./emailService";
 import { generateNumericOtp, verifyTotpCode } from "./utils/mfa";
 
 type TransactionClient = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -1434,6 +1435,15 @@ export class DatabaseStorage implements IStorage {
 
     if (method === "email_otp") {
       record.code = generateNumericOtp();
+      const fromAddress = process.env.FROM_EMAIL || "hr@company.com";
+      const textBody = `Your verification code is ${record.code}. It expires in 5 minutes.`;
+      await sendEmail({
+        to: user.email,
+        from: fromAddress,
+        subject: "Your verification code",
+        text: textBody,
+        html: `<p>${textBody}</p>`,
+      });
     }
 
     this.mfaChallenges.set(id, record);
