@@ -65,9 +65,9 @@ const normalizePermissions = (
   return Array.isArray(permissions) ? permissions : [permissions];
 };
 
-const hasAllPermissions = (user: SessionUser, permissions: PermissionKey[]): boolean => {
+const hasAnyPermission = (user: SessionUser, permissions: PermissionKey[]): boolean => {
   if (permissions.length === 0) return false;
-  return permissions.every(permission => user.permissions.includes(permission));
+  return permissions.some(permission => user.permissions.includes(permission));
 };
 
 export const requireAccess = (policy: AccessPolicy) => (
@@ -86,7 +86,7 @@ export const requireAccess = (policy: AccessPolicy) => (
   const roles = policy.roles ?? [];
   const permissions = normalizePermissions(policy.permissions);
   const allowedByRole = roles.length > 0 && roles.includes(user.role);
-  const allowedByPermission = permissions.length > 0 && hasAllPermissions(user, permissions);
+  const allowedByPermission = permissions.length > 0 && hasAnyPermission(user, permissions);
 
   if (
     (roles.length === 0 && permissions.length === 0) ||
