@@ -44,9 +44,13 @@ const formatSignedCurrency = (amount: number) => {
 export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTableProps) {
   const [editingCell, setEditingCell] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<{ [key: string]: string }>({});
-  const [selectedCells, setSelectedCells] = useState<string[]>([]);
   const [copiedValue, setCopiedValue] = useState<string>("");
-  const [changeHistory, setChangeHistory] = useState<Array<{id: string, field: string, oldValue: any, newValue: any}>>([]);
+  const [changeHistory, setChangeHistory] = useState<
+    Array<{ id: string; field: string; oldValue: string; newValue: string }>
+  >([]);
+  const [redoStack, setRedoStack] = useState<
+    Array<{ id: string; field: string; oldValue: string; newValue: string }>
+  >([]);
   
   // Smart form states
   const [isVacationFormOpen, setIsVacationFormOpen] = useState(false);
@@ -84,27 +88,85 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
   const handleCellSave = (entryId: string, field: string) => {
     const cellKey = `${entryId}-${field}`;
     const value = editValues[cellKey];
-    
+
     if (value !== undefined) {
-      const entry = entries.find(e => e.id === entryId);
-      const oldValue = entry?.[field];
+      const entry = entries.find((e) => e.id === entryId);
+      const existingValue =
+        entry && entry[field] !== undefined && entry[field] !== null
+          ? entry[field].toString()
+          : "0";
       const numericValue = parseFloat(value) || 0;
-      
-      // Track change for undo functionality
-      setChangeHistory(prev => [...prev, {
-        id: entryId,
-        field,
-        oldValue,
-        newValue: numericValue,
-      }]);
+      const newValue = numericValue.toString();
+
+      // Track change for undo/redo functionality
+      setChangeHistory((prev) => [
+        ...prev,
+        {
+          id: entryId,
+          field,
+          oldValue: existingValue,
+          newValue,
+        },
+      ]);
+      setRedoStack([]);
 
       updatePayrollEntryMutation.mutate({
         entryId,
-        updates: { [field]: numericValue.toString() },
+        updates: { [field]: newValue },
       });
     }
-    
+
     setEditingCell(null);
+  };
+
+  const applyChange = async (
+    entryId: string,
+    field: string,
+    value: string,
+    action: "undo" | "redo",
+  ) => {
+    try {
+      const res = await apiPut(`/api/payroll/entries/${entryId}`, {
+        [field]: value,
+      });
+      if (!res.ok) throw res;
+
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
+
+      toast({
+        title: "Success",
+        description:
+          action === "undo"
+            ? "Change reverted successfully"
+            : "Change reapplied successfully",
+      });
+    } catch (err) {
+      toastApiError(
+        err as any,
+        action === "undo" ? "Failed to undo change" : "Failed to redo change",
+      );
+    }
+  };
+
+  const handleUndo = async () => {
+    const lastChange = changeHistory[changeHistory.length - 1];
+    if (!lastChange) return;
+
+    setChangeHistory((prev) => prev.slice(0, -1));
+    setRedoStack((prev) => [...prev, lastChange]);
+
+    await applyChange(lastChange.id, lastChange.field, lastChange.oldValue, "undo");
+  };
+
+  const handleRedo = async () => {
+    const nextChange = redoStack[redoStack.length - 1];
+    if (!nextChange) return;
+
+    setRedoStack((prev) => prev.slice(0, -1));
+    setChangeHistory((prev) => [...prev, nextChange]);
+
+    await applyChange(nextChange.id, nextChange.field, nextChange.newValue, "redo");
   };
 
   const handleCellClick = (entryId: string, field: string, value: any) => {
@@ -244,20 +306,48 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
       {/* Enhanced Toolbar */}
       <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
         <div className="flex items-center space-x-2">
-          <Button size="sm" variant="outline" onClick={handleCopy} disabled={!editingCell}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleCopy}
+            disabled={!editingCell}
+            title="Copy the value of the active cell"
+          >
             <Copy className="h-4 w-4 mr-1" />
             Copy
           </Button>
-          <Button size="sm" variant="outline" onClick={handlePaste} disabled={!copiedValue}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handlePaste}
+            disabled={!copiedValue}
+            title="Paste into the active cell"
+          >
             <ClipboardPaste className="h-4 w-4 mr-1" />
             Paste
           </Button>
           <div className="h-4 w-px bg-gray-300" />
-          <Button size="sm" variant="outline" disabled={changeHistory.length === 0}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              void handleUndo();
+            }}
+            disabled={changeHistory.length === 0}
+            title="Undo the most recent change"
+          >
             <Undo className="h-4 w-4 mr-1" />
             Undo
           </Button>
-          <Button size="sm" variant="outline">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              void handleRedo();
+            }}
+            disabled={redoStack.length === 0}
+            title="Redo the last undone change"
+          >
             <Redo className="h-4 w-4 mr-1" />
             Redo
           </Button>
