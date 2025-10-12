@@ -1,4 +1,5 @@
 import { Router, type Request } from "express";
+import { randomUUID } from "node:crypto";
 import { HttpError } from "../errorHandler";
 import { LoanPaymentUndoError, storage, type EmployeeScheduleSummary } from "../storage";
 import {
@@ -14,6 +15,7 @@ import type {
   EmployeeWithDepartment,
   LoanWithEmployee,
   VacationRequestWithEmployee,
+  VacationRequest,
   EmployeeEvent as EmployeeEventRecord,
   PayrollCalendarConfig,
   PayrollFrequencyConfig,
@@ -58,6 +60,14 @@ const deductionsSchema = z.object({
   taxDeduction: z.number().optional(),
   socialSecurityDeduction: z.number().optional(),
   healthInsuranceDeduction: z.number().optional(),
+});
+
+const payrollVacationOverrideSchema = z.object({
+  startDate: z.string().min(1),
+  endDate: z.string().min(1),
+  leaveType: z.enum(["annual", "sick", "emergency", "unpaid"]),
+  deductFromSalary: z.boolean().optional(),
+  reason: z.string().min(1).optional(),
 });
 
 const logPayrollAudit = async (
@@ -1549,6 +1559,137 @@ payrollRouter.post(
     next(new HttpError(500, "Failed to generate payroll"));
   }
 });
+
+payrollRouter.post(
+  "/entries/:id/vacation",
+  requirePermission("payroll:manage"),
+  async (req, res, next) => {
+    try {
+      const entryId = req.params.id;
+      const body = payrollVacationOverrideSchema.parse(req.body ?? {});
+
+      const payrollEntry = await db.query.payrollEntries.findFirst({
+        where: (entry, { eq: eqFn }) => eqFn(entry.id, entryId),
+        with: { payrollRun: true },
+      });
+
+      if (!payrollEntry) {
+        return next(new HttpError(404, "Payroll entry not found"));
+      }
+
+      const start = new Date(body.startDate);
+      const end = new Date(body.endDate);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
+        return next(new HttpError(400, "Invalid vacation date range"));
+      }
+
+      const totalDays =
+        Math.max(0, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))) + 1;
+
+      const reason =
+        body.reason ??
+        `${body.leaveType} leave: ${totalDays} day${totalDays === 1 ? "" : "s"} (${body.startDate} → ${body.endDate})${
+          body.leaveType === "emergency" && !body.deductFromSalary ? " (no salary deduction)" : ""
+        }`;
+
+      const overrideMetadata = {
+        payrollRunId: payrollEntry.payrollRunId,
+        payrollEntryId: payrollEntry.id,
+      } as const;
+
+      const actorId = (req.user as SessionUser | undefined)?.id ?? payrollEntry.employeeId;
+
+      const employeeRequests = await db.query.vacationRequests.findMany({
+        where: (vacation, { eq: eqFn }) => eqFn(vacation.employeeId, payrollEntry.employeeId),
+      });
+
+      const existingOverride = employeeRequests.find(request => {
+        const logEntries = Array.isArray(request.auditLog) ? (request.auditLog as any[]) : [];
+        return logEntries.some(entry => {
+          const meta = (entry as any).metadata as Record<string, unknown> | null | undefined;
+          return meta?.payrollEntryId === payrollEntry.id;
+        });
+      });
+
+      const payrollRun = (payrollEntry as any).payrollRun as
+        | { period?: string | null }
+        | undefined;
+
+      const auditEntry = {
+        id: randomUUID(),
+        actorId,
+        action: "comment" as const,
+        actionAt: new Date().toISOString(),
+        notes: `Vacation override applied via payroll run ${payrollRun?.period ?? payrollEntry.payrollRunId}`,
+        metadata: overrideMetadata,
+      };
+
+      let savedRequest: VacationRequest | undefined;
+
+      if (existingOverride) {
+        const baseLog = Array.isArray(existingOverride.auditLog)
+          ? (existingOverride.auditLog as any[])
+          : [];
+        savedRequest = await storage.updateVacationRequest(existingOverride.id, {
+          startDate: body.startDate,
+          endDate: body.endDate,
+          days: totalDays,
+          leaveType: body.leaveType,
+          deductFromSalary: body.deductFromSalary ?? false,
+          status: "approved",
+          reason,
+          auditLog: [...baseLog, auditEntry],
+        });
+      }
+
+      if (!savedRequest) {
+        savedRequest = await storage.createVacationRequest({
+          employeeId: payrollEntry.employeeId,
+          startDate: body.startDate,
+          endDate: body.endDate,
+          days: totalDays,
+          leaveType: body.leaveType,
+          deductFromSalary: body.deductFromSalary ?? false,
+          status: "approved",
+          reason,
+          auditLog: [auditEntry],
+        });
+      }
+
+      const updatedEntry = await storage.updatePayrollEntry(entryId, {
+        vacationDays: totalDays,
+        adjustmentReason: reason,
+      });
+
+      if (!updatedEntry) {
+        return next(new HttpError(500, "Failed to update payroll entry with vacation override"));
+      }
+
+      await logPayrollAudit(
+        req,
+        "Applied manual vacation override",
+        { type: "payroll_entry", id: entryId },
+        {
+          payrollRunId: payrollEntry.payrollRunId,
+          vacationRequestId: savedRequest.id,
+          startDate: body.startDate,
+          endDate: body.endDate,
+          leaveType: body.leaveType,
+          days: totalDays,
+        },
+      );
+
+      res.json({ payrollEntry: updatedEntry, vacationRequest: savedRequest });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return next(new HttpError(400, "Invalid vacation override data", error.errors));
+      }
+      console.error("Failed to upsert payroll vacation override:", error);
+      next(new HttpError(500, "Failed to upsert payroll vacation override"));
+    }
+  },
+);
+
 payrollRouter.put(
   "/:id",
   requirePermission(["payroll:manage", "payroll:approve"]),
