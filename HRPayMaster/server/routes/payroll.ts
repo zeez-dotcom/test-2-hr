@@ -196,6 +196,25 @@ const calculateVacationDaysInPeriod = (
   return Math.max(0, Math.ceil((vacEnd.getTime() - vacStart.getTime()) / (1000 * 60 * 60 * 24)) + 1);
 };
 
+const serializeAllowancesForStorage = (
+  allowances: Record<string, number> | undefined,
+  enabled: boolean,
+): Record<string, number> => {
+  if (!enabled || !allowances) {
+    return {};
+  }
+  const normalized = Object.entries(allowances).reduce<Record<string, number>>(
+    (acc, [key, value]) => {
+      if (Number.isFinite(value)) {
+        acc[key] = Number(value);
+      }
+      return acc;
+    },
+    {},
+  );
+  return normalized;
+};
+
 const getEmployeeDisplayName = (employee: EmployeeWithDepartment) => {
   const englishName = [employee.firstName, employee.lastName]
     .filter(part => typeof part === "string" && part.trim() !== "")
@@ -696,6 +715,12 @@ payrollRouter.post(
         return next(new HttpError(404, "Payroll run not found"));
       }
 
+      const scenarioToggleInput = existingRun.scenarioToggles as
+        | Record<string, boolean>
+        | null
+        | undefined;
+      const scenarioToggles = resolveScenarioToggles(scenarioToggleInput ?? undefined);
+
       const parsedDeductions = deductionsSchema.safeParse(req.body?.deductions ?? {});
       if (!parsedDeductions.success) {
         return next(
@@ -722,6 +747,7 @@ payrollRouter.post(
         ...event,
         affectsPayroll: (event as any).affectsPayroll ?? true,
       }));
+      const scenarioEvents = filterEventsByScenario(employeeEvents, scenarioToggles);
 
       const companies = await storage.getCompanies();
       const company = companies[0];
@@ -729,11 +755,20 @@ payrollRouter.post(
         req.body?.useAttendance !== undefined
           ? Boolean(req.body.useAttendance)
           : Boolean((company as any)?.useAttendanceForDeductions);
-      const attendanceSummary = useAttendance
+      const shouldUseAttendance = scenarioToggles.attendance !== false && useAttendance;
+      const attendanceSummary = shouldUseAttendance
         ? await storage.getAttendanceSummary(start, end)
         : ({} as Record<string, number>);
 
-      const deductionConfig = parsedDeductions.data;
+      const scenarioAttendanceSummary = scenarioToggles.attendance !== false ? attendanceSummary : {};
+      const scenarioLoans = scenarioToggles.loans ? loans : [];
+
+      const deductionConfig =
+        scenarioToggles.statutory !== false
+          ? parsedDeductions.data
+          : { taxDeduction: 0, socialSecurityDeduction: 0, healthInsuranceDeduction: 0 };
+
+      const allowancesEnabled = scenarioToggles.allowances !== false;
 
       const payrollEntries = await Promise.all(
         activeEmployees.map(employee => {
@@ -743,13 +778,13 @@ payrollRouter.post(
 
           return calculateEmployeePayroll({
             employee,
-            loans,
+            loans: scenarioLoans,
             vacationRequests,
-            employeeEvents,
+            employeeEvents: scenarioEvents,
             start,
             end,
             workingDays: employeeWorkingDays,
-            attendanceDays: attendanceSummary[employee.id],
+            attendanceDays: scenarioAttendanceSummary[employee.id],
             config: deductionConfig,
             currencyCode: company?.currencyCode,
             locale: company?.locale,
@@ -781,6 +816,7 @@ payrollRouter.post(
               otherDeductions: entry.otherDeductions.toString(),
               netPay: entry.netPay.toString(),
               adjustmentReason: entry.adjustmentReason,
+              allowances: serializeAllowancesForStorage(entry.allowances, allowancesEnabled),
               payrollRunId: runId,
             })),
           );
@@ -1083,6 +1119,7 @@ payrollRouter.post(
     const deductionConfig = scenarioToggles.statutory
       ? deductionBaseline
       : { taxDeduction: 0, socialSecurityDeduction: 0, healthInsuranceDeduction: 0 };
+    const allowancesEnabled = scenarioToggles.allowances !== false;
 
     const vacationsByEmployee = new Map<string, VacationRequestWithEmployee[]>();
     for (const vacation of vacationRequests) {
@@ -1251,6 +1288,7 @@ payrollRouter.post(
             grossPay: entry.grossPay.toString(),
             baseSalary: entry.baseSalary.toString(),
             bonusAmount: entry.bonusAmount.toString(),
+            allowances: serializeAllowancesForStorage(entry.allowances, allowancesEnabled),
             workingDays: entry.workingDays,
             actualWorkingDays: entry.actualWorkingDays,
             vacationDays: entry.vacationDays,
