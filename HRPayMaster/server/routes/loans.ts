@@ -14,8 +14,49 @@ import {
   mapScheduleToInsert,
   validateLoanPolicies,
 } from "../utils/loans";
+import {
+  createRouteMetricsMiddleware,
+  loanRequestsTotal,
+  loanRequestDurationSeconds,
+} from "../metrics";
 
 export const loansRouter = Router();
+
+const trackLoanListMetrics = createRouteMetricsMiddleware({
+  counter: loanRequestsTotal,
+  histogram: loanRequestDurationSeconds,
+  labels: { operation: "list" },
+});
+
+const trackLoanDetailsMetrics = createRouteMetricsMiddleware({
+  counter: loanRequestsTotal,
+  histogram: loanRequestDurationSeconds,
+  labels: { operation: "detail" },
+});
+
+const trackLoanStatementMetrics = createRouteMetricsMiddleware({
+  counter: loanRequestsTotal,
+  histogram: loanRequestDurationSeconds,
+  labels: { operation: "statement" },
+});
+
+const trackLoanCreateMetrics = createRouteMetricsMiddleware({
+  counter: loanRequestsTotal,
+  histogram: loanRequestDurationSeconds,
+  labels: { operation: "create" },
+});
+
+const trackLoanUpdateMetrics = createRouteMetricsMiddleware({
+  counter: loanRequestsTotal,
+  histogram: loanRequestDurationSeconds,
+  labels: { operation: "update" },
+});
+
+const trackLoanDeleteMetrics = createRouteMetricsMiddleware({
+  counter: loanRequestsTotal,
+  histogram: loanRequestDurationSeconds,
+  labels: { operation: "delete" },
+});
 
 const loanCreateSchema = insertLoanSchema.extend({
   approvalStages: z.array(loanApprovalStageInputSchema).optional(),
@@ -69,7 +110,7 @@ const logLoanAudit = async (
   }
 };
 
-loansRouter.get("/", requirePermission("loans:view"), async (req, res, next) => {
+loansRouter.get("/", requirePermission("loans:view"), trackLoanListMetrics, async (req, res, next) => {
   try {
     const loans = await storage.getLoans();
     res.json(loans);
@@ -79,7 +120,11 @@ loansRouter.get("/", requirePermission("loans:view"), async (req, res, next) => 
   }
 });
 
-loansRouter.get("/:id", requirePermission("loans:view"), async (req, res, next) => {
+loansRouter.get(
+  "/:id",
+  requirePermission("loans:view"),
+  trackLoanDetailsMetrics,
+  async (req, res, next) => {
   try {
     const loan = await storage.getLoan(req.params.id);
     if (!loan) {
@@ -95,6 +140,7 @@ loansRouter.get("/:id", requirePermission("loans:view"), async (req, res, next) 
 loansRouter.get(
   "/:id/statement",
   requirePermission("loans:view"),
+  trackLoanStatementMetrics,
   async (req, res, next) => {
   try {
     const statement = await storage.getLoanStatement(req.params.id);
@@ -108,7 +154,7 @@ loansRouter.get(
   }
 });
 
-loansRouter.post("/", requirePermission("loans:manage"), async (req, res, next) => {
+loansRouter.post("/", requirePermission("loans:manage"), trackLoanCreateMetrics, async (req, res, next) => {
   try {
     const payload = loanCreateSchema.parse({
       ...req.body,
@@ -224,7 +270,11 @@ loansRouter.post("/", requirePermission("loans:manage"), async (req, res, next) 
   }
 });
 
-loansRouter.put("/:id", requirePermission(["loans:manage", "loans:approve"]), async (req, res, next) => {
+loansRouter.put(
+  "/:id",
+  requirePermission(["loans:manage", "loans:approve"]),
+  trackLoanUpdateMetrics,
+  async (req, res, next) => {
   try {
     const loanId = req.params.id;
     const existingLoan = await storage.getLoan(loanId);
@@ -441,7 +491,11 @@ loansRouter.put("/:id", requirePermission(["loans:manage", "loans:approve"]), as
   }
 });
 
-loansRouter.delete("/:id", requirePermission("loans:manage"), async (req, res, next) => {
+loansRouter.delete(
+  "/:id",
+  requirePermission("loans:manage"),
+  trackLoanDeleteMetrics,
+  async (req, res, next) => {
   try {
     const loan = await storage.getLoan(req.params.id);
     const deleted = await storage.deleteLoan(req.params.id);

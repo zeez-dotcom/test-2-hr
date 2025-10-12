@@ -12,6 +12,11 @@ import {
   DEFAULT_OVERTIME_LIMIT_MINUTES,
   type EmployeeScheduleDetail,
 } from "../storage";
+import {
+  createRouteMetricsMiddleware,
+  attendanceScheduleRequestsTotal,
+  attendanceScheduleDurationSeconds,
+} from "../metrics";
 
 const MANAGER_ROLES = ["admin", "hr", "manager"];
 
@@ -124,6 +129,36 @@ const serializeSchedule = (schedule: EmployeeScheduleDetail) => {
 
 export const attendanceRouter = Router();
 
+const trackScheduleListMetrics = createRouteMetricsMiddleware({
+  counter: attendanceScheduleRequestsTotal,
+  histogram: attendanceScheduleDurationSeconds,
+  labels: { operation: "list" },
+});
+
+const trackScheduleCreateMetrics = createRouteMetricsMiddleware({
+  counter: attendanceScheduleRequestsTotal,
+  histogram: attendanceScheduleDurationSeconds,
+  labels: { operation: "create" },
+});
+
+const trackScheduleUpdateMetrics = createRouteMetricsMiddleware({
+  counter: attendanceScheduleRequestsTotal,
+  histogram: attendanceScheduleDurationSeconds,
+  labels: { operation: "update" },
+});
+
+const trackScheduleDeleteMetrics = createRouteMetricsMiddleware({
+  counter: attendanceScheduleRequestsTotal,
+  histogram: attendanceScheduleDurationSeconds,
+  labels: { operation: "delete" },
+});
+
+const trackScheduleApprovalMetrics = createRouteMetricsMiddleware({
+  counter: attendanceScheduleRequestsTotal,
+  histogram: attendanceScheduleDurationSeconds,
+  labels: { operation: "approval" },
+});
+
 attendanceRouter.get("/templates", async (_req, res, next) => {
   try {
     const templates = await storage.getShiftTemplates();
@@ -186,7 +221,7 @@ attendanceRouter.delete(
   },
 );
 
-attendanceRouter.get("/schedules", async (req, res, next) => {
+attendanceRouter.get("/schedules", trackScheduleListMetrics, async (req, res, next) => {
   try {
     const { start, end, employeeId } = req.query as Record<string, string | undefined>;
     const filters: { start?: Date; end?: Date; employeeId?: string } = {};
@@ -217,6 +252,7 @@ attendanceRouter.get("/schedules", async (req, res, next) => {
 attendanceRouter.post(
   "/schedules",
   requireRole(MANAGER_ROLES),
+  trackScheduleCreateMetrics,
   async (req, res, next) => {
     try {
       const payload = createSchedulesSchema.parse(req.body);
@@ -236,6 +272,7 @@ attendanceRouter.post(
 attendanceRouter.put(
   "/schedules/:id",
   requireRole(MANAGER_ROLES),
+  trackScheduleUpdateMetrics,
   async (req, res, next) => {
     try {
       const updates = scheduleUpdateSchema.parse(req.body);
@@ -263,6 +300,7 @@ attendanceRouter.put(
 attendanceRouter.delete(
   "/schedules/:id",
   requireRole(MANAGER_ROLES),
+  trackScheduleDeleteMetrics,
   async (req, res, next) => {
     try {
       const deleted = await storage.deleteEmployeeSchedule(req.params.id);
@@ -279,6 +317,7 @@ attendanceRouter.delete(
 attendanceRouter.post(
   "/schedules/:id/approvals",
   requireRole(MANAGER_ROLES),
+  trackScheduleApprovalMetrics,
   async (req, res, next) => {
     try {
       const { type, status, notes, minutes } = approvalSchema.parse(req.body);
