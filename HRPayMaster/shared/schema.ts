@@ -873,6 +873,9 @@ export const payrollEntries = pgTable(
     grossPay: numeric("gross_pay", { precision: 10, scale: 2 }).notNull(),
     baseSalary: numeric("base_salary", { precision: 10, scale: 2 }).notNull().default("0"),
     bonusAmount: numeric("bonus_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+    allowances: jsonb("allowances")
+      .$type<Record<string, number> | null>()
+      .default(sql`NULL`),
     workingDays: integer("working_days").notNull().default(30),
     actualWorkingDays: integer("actual_working_days").notNull().default(30),
     vacationDays: integer("vacation_days").notNull().default(0),
@@ -1271,6 +1274,7 @@ export const insertPayrollEntrySchema = createInsertSchema(payrollEntries)
       const n = parseNumber(v);
       return n === undefined ? undefined : n.toString();
     }, z.string()),
+    allowances: parseJsonInput(z.record(z.number())).nullable().optional(),
     workingDays: z.preprocess(parseNumber, z.number()),
     actualWorkingDays: z.preprocess(parseNumber, z.number()),
     vacationDays: z.preprocess(parseNumber, z.number()),

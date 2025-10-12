@@ -3442,6 +3442,8 @@ export class DatabaseStorage implements IStorage {
 
       adjustmentReason: payrollEntries.adjustmentReason,
 
+      allowances: payrollEntries.allowances,
+
       employee: {
 
         id: employees.id,
@@ -3470,73 +3472,74 @@ export class DatabaseStorage implements IStorage {
 
 
 
-    const normalizedEntries = entries.map((entry) => ({
-
+    const normalizedEntries = entries.map(entry => ({
       ...entry,
-
       employee: entry.employee ?? undefined,
-
     }));
 
+    const fallbackCandidates = normalizedEntries.filter(
+      entry => entry.allowances == null,
+    );
 
+    let fallbackBreakdown = new Map<string, AllowanceBreakdown>();
+    let fallbackAllowanceKeys: string[] = [];
 
-    let allowanceMetadata: {
-      breakdownByEmployee: Map<string, AllowanceBreakdown>;
-      allowanceKeys: string[];
-    };
-
-    try {
-
-      allowanceMetadata = await this.buildAllowanceBreakdownForRun(
-
-        normalizedEntries,
-
-        run.startDate,
-
-        run.endDate,
-
-      );
-
-    } catch (error) {
-
-      if (this.isDataSourceUnavailableError(error)) {
-
-        console.warn(
-
-          "Failed to load allowance metadata due to missing data source:",
-
-          error,
-
+    if (fallbackCandidates.length > 0) {
+      try {
+        const metadata = await this.buildAllowanceBreakdownForRun(
+          fallbackCandidates.map(entry => ({ employeeId: entry.employeeId })),
+          run.startDate,
+          run.endDate,
         );
-
-        allowanceMetadata = { allowanceKeys: [], breakdownByEmployee: new Map() };
-
-      } else {
-
-        throw error;
-
+        fallbackBreakdown = metadata.breakdownByEmployee;
+        fallbackAllowanceKeys = metadata.allowanceKeys;
+      } catch (error) {
+        if (this.isDataSourceUnavailableError(error)) {
+          console.warn(
+            "Failed to load allowance metadata due to missing data source:",
+            error,
+          );
+          fallbackBreakdown = new Map();
+          fallbackAllowanceKeys = [];
+        } else {
+          throw error;
+        }
       }
-
     }
 
+    const allowanceKeySet = new Set<string>(fallbackAllowanceKeys);
 
+    const entriesWithAllowances = normalizedEntries.map(entry => {
+      const { allowances: rawAllowances, ...rest } = entry;
+      let normalizedAllowances: AllowanceBreakdown | undefined;
 
-    const { breakdownByEmployee, allowanceKeys } = allowanceMetadata;
-
-
-
-    const entriesWithAllowances = normalizedEntries.map((entry) => {
-
-      const allowances = breakdownByEmployee.get(entry.employeeId);
-
-      if (!allowances || Object.keys(allowances).length === 0) {
-
-        return { ...entry, allowances: undefined };
-
+      if (rawAllowances == null) {
+        const fallback = fallbackBreakdown.get(entry.employeeId);
+        if (fallback && Object.keys(fallback).length > 0) {
+          normalizedAllowances = { ...fallback };
+          Object.keys(normalizedAllowances).forEach(key => allowanceKeySet.add(key));
+        }
+      } else {
+        const sanitized = Object.entries(rawAllowances).reduce<AllowanceBreakdown>(
+          (acc, [key, value]) => {
+            const numeric = Number(value);
+            if (Number.isFinite(numeric)) {
+              acc[key] = numeric;
+            }
+            return acc;
+          },
+          {},
+        );
+        if (Object.keys(sanitized).length > 0) {
+          normalizedAllowances = sanitized;
+          Object.keys(sanitized).forEach(key => allowanceKeySet.add(key));
+        }
       }
 
-      return { ...entry, allowances: { ...allowances } };
-
+      return {
+        ...rest,
+        allowances: normalizedAllowances,
+      };
     });
 
 
@@ -3547,7 +3550,7 @@ export class DatabaseStorage implements IStorage {
 
       entries: entriesWithAllowances,
 
-      allowanceKeys,
+      allowanceKeys: Array.from(allowanceKeySet).sort(),
 
     };
 
@@ -8452,38 +8455,37 @@ export class DatabaseStorage implements IStorage {
       }
     });
 
-    const allowanceBreakdownByRun = new Map<string, Map<string, AllowanceBreakdown>>();
+    const fallbackBreakdownByRun = new Map<string, Map<string, AllowanceBreakdown>>();
+    const allowanceKeySetsByRun = new Map<string, Set<string>>();
 
     for (const [runId, { start, end, entries }] of entriesByRun.entries()) {
-      const employeeIds = Array.from(
-        new Set(
-          entries
-            .map((entry) => entry.employeeId)
-            .filter((id): id is string => Boolean(id)),
-        ),
-      );
+      const keySet = new Set<string>();
+      allowanceKeySetsByRun.set(runId, keySet);
 
-      if (!start || employeeIds.length === 0) {
-        allowanceBreakdownByRun.set(runId, new Map());
+      const entriesNeedingFallback = entries.filter(entry => entry.allowances == null);
+
+      if (!start || entriesNeedingFallback.length === 0) {
+        fallbackBreakdownByRun.set(runId, new Map());
         continue;
       }
 
       const allowanceEnd = end ?? start;
 
       try {
-        const { breakdownByEmployee } = await this.buildAllowanceBreakdownForRun(
-          employeeIds.map((id) => ({ employeeId: id })),
+        const metadata = await this.buildAllowanceBreakdownForRun(
+          entriesNeedingFallback.map(entry => ({ employeeId: entry.employeeId })),
           start,
           allowanceEnd,
         );
-        allowanceBreakdownByRun.set(runId, breakdownByEmployee);
+        fallbackBreakdownByRun.set(runId, metadata.breakdownByEmployee);
+        metadata.allowanceKeys.forEach(key => keySet.add(key));
       } catch (error) {
         if (this.isDataSourceUnavailableError(error)) {
           console.warn(
             "Failed to load allowance metadata due to missing data source:",
             error,
           );
-          allowanceBreakdownByRun.set(runId, new Map());
+          fallbackBreakdownByRun.set(runId, new Map());
         } else {
           throw error;
         }
@@ -8492,16 +8494,38 @@ export class DatabaseStorage implements IStorage {
 
     payrollRows.forEach(({ period, entry, runId }) => {
       const employeeEntryId = entry.employeeId;
-      const breakdownForRun = runId ? allowanceBreakdownByRun.get(runId) : undefined;
-      const allowances =
-        employeeEntryId && breakdownForRun
-          ? breakdownForRun.get(employeeEntryId)
-          : undefined;
+      const breakdownForRun = runId ? fallbackBreakdownByRun.get(runId) : undefined;
+      const keySet = runId ? allowanceKeySetsByRun.get(runId) : undefined;
+      const { allowances: rawAllowances, ...entryWithoutAllowances } = entry as any;
 
-      const normalizedEntry: PayrollEntry =
-        allowances && Object.keys(allowances).length > 0
-          ? { ...entry, allowances: { ...allowances } }
-          : { ...entry, allowances: undefined };
+      let normalizedAllowances: AllowanceBreakdown | undefined;
+
+      if (rawAllowances != null) {
+        const sanitized = Object.entries(rawAllowances as Record<string, number>).reduce<AllowanceBreakdown>(
+          (acc, [key, value]) => {
+            const numeric = Number(value);
+            if (Number.isFinite(numeric)) {
+              acc[key] = numeric;
+            }
+            return acc;
+          },
+          {},
+        );
+        if (Object.keys(sanitized).length > 0) {
+          normalizedAllowances = sanitized;
+          Object.keys(sanitized).forEach(key => keySet?.add(key));
+        }
+      } else if (employeeEntryId && breakdownForRun) {
+        const fallback = breakdownForRun.get(employeeEntryId);
+        if (fallback && Object.keys(fallback).length > 0) {
+          normalizedAllowances = { ...fallback };
+          Object.keys(normalizedAllowances).forEach(key => keySet?.add(key));
+        }
+      }
+
+      const normalizedEntry: PayrollEntry = normalizedAllowances
+        ? { ...entryWithoutAllowances, allowances: normalizedAllowances }
+        : { ...entryWithoutAllowances, allowances: undefined };
 
       ensure(period).payrollEntries.push(normalizedEntry);
     });
