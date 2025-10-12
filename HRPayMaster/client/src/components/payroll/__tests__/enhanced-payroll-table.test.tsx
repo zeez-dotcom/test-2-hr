@@ -1,10 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import "@testing-library/jest-dom";
+import userEvent from "@testing-library/user-event";
 import { EnhancedPayrollTable } from "../enhanced-payroll-table";
 import { setCurrencyConfigForTests } from "@/lib/utils";
+import { apiPut } from "@/lib/http";
 
 const mutateMock = vi.fn();
+const apiPutMock = apiPut as ReturnType<typeof vi.fn>;
 
 vi.mock("@tanstack/react-query", async () => {
   const actual = await vi.importActual<typeof import("@tanstack/react-query")>("@tanstack/react-query");
@@ -73,6 +76,8 @@ vi.mock("lucide-react", () => {
 describe("EnhancedPayrollTable allowances", () => {
   beforeEach(() => {
     setCurrencyConfigForTests({ currency: "KWD", locale: "en-KW" });
+    mutateMock.mockReset();
+    apiPutMock.mockClear();
   });
 
   afterEach(() => {
@@ -134,5 +139,77 @@ describe("EnhancedPayrollTable allowances", () => {
 
     const secondDataRow = rows[2];
     expect(within(secondDataRow).getByText("—")).toBeInTheDocument();
+  });
+
+  it("supports undoing and redoing edits", async () => {
+    const entries = [
+      {
+        id: "entry-1",
+        employeeId: "1",
+        employee: { firstName: "John", lastName: "Doe", salary: 1000 },
+        baseSalary: 1000,
+        grossPay: 1200,
+        allowances: {},
+        workingDays: 30,
+        actualWorkingDays: 30,
+        vacationDays: 0,
+        taxDeduction: 0,
+        socialSecurityDeduction: 0,
+        healthInsuranceDeduction: 0,
+        loanDeduction: 0,
+        otherDeductions: 0,
+      },
+    ];
+
+    const user = userEvent.setup();
+    render(<EnhancedPayrollTable entries={entries} payrollId="payroll-1" />);
+
+    const editableCells = screen.getAllByTitle("Click to edit");
+    await user.click(editableCells[0]);
+
+    const input = screen.getByRole("spinbutton") as HTMLInputElement;
+    expect(input).toHaveValue(1000);
+    fireEvent.change(input, { target: { value: "2000" } });
+    await user.keyboard("{Enter}");
+    fireEvent.blur(input);
+    await waitFor(() => {
+      expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Undo").closest("button")).not.toBeDisabled();
+    });
+
+    const undoButton = screen.getByText("Undo").closest("button");
+
+    await user.click(undoButton!);
+
+    await waitFor(() => {
+      expect(apiPutMock).toHaveBeenCalledWith("/api/payroll/entries/entry-1", {
+        baseSalary: "1000",
+      });
+    });
+
+    await waitFor(() => {
+      expect(undoButton).toBeDisabled();
+    });
+
+    const redoButton = screen.getByText("Redo").closest("button");
+    await waitFor(() => {
+      expect(redoButton).not.toBeDisabled();
+    });
+
+    apiPutMock.mockClear();
+    await user.click(redoButton!);
+
+    await waitFor(() => {
+      expect(apiPutMock).toHaveBeenCalledWith("/api/payroll/entries/entry-1", {
+        baseSalary: "2000",
+      });
+    });
+
+    await waitFor(() => {
+      expect(redoButton).toBeDisabled();
+    });
   });
 });
