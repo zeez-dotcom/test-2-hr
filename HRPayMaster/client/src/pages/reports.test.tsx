@@ -7,6 +7,7 @@ import { toLocalYMD } from '@/lib/date';
 import Reports from './reports';
 import '@testing-library/jest-dom';
 import '@/lib/i18n';
+import { formatCurrency, setCurrencyConfigForTests } from '@/lib/utils';
 
 type GlobalWithResize = typeof globalThis & { ResizeObserver?: any };
 
@@ -35,6 +36,7 @@ afterAll(() => {
 
 beforeEach(() => {
   queryClient.clear();
+  setCurrencyConfigForTests({ currency: 'USD', locale: 'en-US' });
   global.fetch = vi.fn().mockResolvedValue({
     ok: true,
     status: 200,
@@ -44,6 +46,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  setCurrencyConfigForTests(null);
   if (originalFetch) {
     global.fetch = originalFetch;
   }
@@ -241,7 +244,19 @@ function seedReportsData() {
   queryClient.setQueryData(['/api/departments'], []);
   queryClient.setQueryData(['/api/employee-events'], []);
   queryClient.setQueryData(['/api/payroll'], []);
-  queryClient.setQueryData(['/api/reports/payroll', start, end], []);
+  const payrollSummary = [
+    {
+      period: `${currentYear}-Q1`,
+      totals: {
+        grossPay: 10000,
+        netPay: 8200,
+        allowances: 1200,
+        bonuses: 500,
+      },
+    },
+  ];
+
+  queryClient.setQueryData(['/api/reports/payroll', start, end], payrollSummary);
   queryClient.setQueryData(['/api/reports/loan-balances', start, end], []);
   queryClient.setQueryData(['/api/asset-assignments', start, end], assetAssignments);
   queryClient.setQueryData(['/api/car-assignments', start, end], carAssignments);
@@ -252,6 +267,7 @@ function seedReportsData() {
     excludedAsset: 'Legacy Laptop',
     includedVehicles: ['Toyota Camry 2024', 'Honda Civic 2023'],
     excludedVehicle: 'Ford Fiesta 2022',
+    payrollSummary,
   };
 }
 
@@ -292,5 +308,27 @@ describe('Reports page - assignment usage filtering', () => {
       expect(screen.getByText(vehicle)).toBeInTheDocument();
     });
     expect(screen.queryByText(excludedVehicle)).not.toBeInTheDocument();
+  });
+});
+
+describe('Reports page - payroll summary totals', () => {
+  it('renders allowances and bonuses totals in the payroll summary table', async () => {
+    const { payrollSummary } = seedReportsData();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Reports />
+      </QueryClientProvider>
+    );
+
+    const payrollTab = await screen.findByRole('tab', { name: /Payroll Summary/i });
+    const user = userEvent.setup();
+    await user.click(payrollTab);
+
+    expect(await screen.findByText(/Allowances/i)).toBeInTheDocument();
+
+    const [summary] = payrollSummary;
+    expect(await screen.findByText(formatCurrency(summary.totals.allowances))).toBeInTheDocument();
+    expect(screen.getByText(formatCurrency(summary.totals.bonuses))).toBeInTheDocument();
   });
 });

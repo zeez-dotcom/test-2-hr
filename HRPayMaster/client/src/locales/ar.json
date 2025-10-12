@@ -169,6 +169,8 @@
     "period": "الفترة",
     "department": "القسم",
     "grossPay": "الأجر الإجمالي",
+    "allowances": "البدلات",
+    "bonuses": "المكافآت",
     "netPay": "الأجر الصافي",
     "unassigned": "غير محدد",
     "noDeptPayrollData": "لا توجد بيانات رواتب للأقسام",
