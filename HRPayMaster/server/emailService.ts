@@ -1,4 +1,5 @@
 import { MailService } from '@sendgrid/mail';
+import { readFile } from 'node:fs/promises';
 import type {
   DocumentExpiryCheck,
   Employee,
@@ -14,6 +15,11 @@ const mailService = new MailService();
 const apiKey = process.env.SENDGRID_API_KEY;
 let sendGridConfigured = false;
 let warnedSendgridAtRuntime = false;
+
+const passwordResetTemplateUrl = new URL('./files/password-reset.html', import.meta.url);
+let cachedPasswordResetTemplate: string | null = null;
+const defaultEmailFrom = process.env.EMAIL_FROM ?? 'no-reply@hrpaymaster.local';
+const appName = process.env.APP_NAME ?? 'HR PayMaster';
 
 const smsProviderKey = process.env.SMS_PROVIDER_API_KEY;
 const chatWebhookUrl = process.env.CHAT_PROVIDER_WEBHOOK_URL;
@@ -49,6 +55,26 @@ type ChatParams = {
 
 export const mockSmsMessages: SmsParams[] = [];
 export const mockChatMessages: ChatParams[] = [];
+
+async function getPasswordResetTemplate(): Promise<string> {
+  if (cachedPasswordResetTemplate) {
+    return cachedPasswordResetTemplate;
+  }
+  try {
+    cachedPasswordResetTemplate = await readFile(passwordResetTemplateUrl, 'utf-8');
+  } catch (error) {
+    console.warn('Failed to load password reset template, falling back to plaintext.', error);
+    cachedPasswordResetTemplate = `<!doctype html><html><body><p>{{APP_NAME}}</p><p><a href="{{RESET_URL}}">Reset Password</a></p><p>{{EXPIRES_AT}}</p></body></html>`;
+  }
+  return cachedPasswordResetTemplate;
+}
+
+function applyTemplate(template: string, replacements: Record<string, string>): string {
+  return Object.entries(replacements).reduce((output, [key, value]) => {
+    const pattern = new RegExp(`{{\\s*${key}\\s*}}`, 'g');
+    return output.replace(pattern, value);
+  }, template);
+}
 
 export async function sendEmail(params: EmailParams): Promise<boolean> {
   if (!params.to) {
@@ -117,6 +143,32 @@ async function sendChatMessage(params: ChatParams): Promise<boolean> {
   mockChatMessages.push(params);
   console.info('Chat webhook configured; message dispatched (simulated).');
   return true;
+}
+
+export async function sendPasswordResetEmail(params: {
+  to: string;
+  resetUrl: string;
+  expiresAt: Date;
+  username?: string | null;
+}): Promise<boolean> {
+  const template = await getPasswordResetTemplate();
+  const replacements = {
+    APP_NAME: appName,
+    RESET_URL: params.resetUrl,
+    EXPIRES_AT: params.expiresAt.toUTCString(),
+    USERNAME: params.username && params.username.trim() ? params.username : 'there',
+  } satisfies Record<string, string>;
+
+  const html = applyTemplate(template, replacements);
+  const text = `Hello ${replacements.USERNAME},\n\nA password reset was requested for your ${appName} account. Use the link below to choose a new password:\n\n${params.resetUrl}\n\nThis link will expire on ${replacements.EXPIRES_AT}. If you did not request this change you can safely ignore this email.`;
+
+  return sendEmail({
+    to: params.to,
+    from: defaultEmailFrom,
+    subject: `${appName} password reset`,
+    text,
+    html,
+  });
 }
 
 export function generateExpiryWarningEmail(

@@ -161,6 +161,9 @@ export const payrollExportArtifactSchema = z.object({
 
 export type PayrollExportArtifact = z.infer<typeof payrollExportArtifactSchema>;
 
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type InsertPasswordResetToken = typeof passwordResetTokens.$inferInsert;
+
 export type VacationApprovalStep = {
   approverId: string;
   status: "pending" | "approved" | "rejected" | "delegated";
@@ -193,6 +196,24 @@ export const users = pgTable("users", {
     .notNull()
     .default(sql`'[]'::jsonb`),
 });
+
+export const passwordResetTokens = pgTable(
+  "password_reset_tokens",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    consumedAt: timestamp("consumed_at"),
+  },
+  table => ({
+    userIdx: index("password_reset_tokens_user_idx").on(table.userId),
+    expiresIdx: index("password_reset_tokens_expires_idx").on(table.expiresAt),
+  }),
+);
 
 export const permissionSets = pgTable("permission_sets", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

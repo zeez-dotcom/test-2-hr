@@ -4,8 +4,40 @@ import passport from "passport";
 import { HttpError } from "../errorHandler";
 import type { PermissionKey, SessionUser } from "@shared/schema";
 import { storage } from "../storage";
+import { z } from "zod";
+import bcrypt from "bcryptjs";
+import { sendPasswordResetEmail } from "../emailService";
 
 export const authRouter = Router();
+
+const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(10),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+});
+
+const resolveResetBaseUrl = (req: Request): string => {
+  const envUrl =
+    process.env.PASSWORD_RESET_URL ||
+    process.env.APP_BASE_URL ||
+    process.env.API_BASE_URL;
+  if (envUrl) return envUrl;
+  const host = req.get("host");
+  if (host) {
+    return `${req.protocol}://${host}`;
+  }
+  const port = process.env.PORT ?? "5000";
+  return `${req.protocol}://localhost:${port}`;
+};
+
+const buildResetUrl = (req: Request, token: string): string => {
+  const base = resolveResetBaseUrl(req);
+  const url = new URL(`/reset-password?token=${encodeURIComponent(token)}`, base);
+  return url.toString();
+};
 
 authRouter.post("/login", (req, res, next) => {
   if (process.env.NODE_ENV !== "production") {
@@ -75,6 +107,57 @@ authRouter.post("/logout", (req, res, next) => {
     if (err) return next(err);
     res.json({ ok: true });
   });
+});
+
+authRouter.post("/forgot-password", async (req, res, next) => {
+  try {
+    const { email } = forgotPasswordSchema.parse(req.body ?? {});
+    const normalized = email.trim().toLowerCase();
+    const user = await storage.getUserByEmail(normalized);
+
+    if (user && user.active !== false) {
+      const { token, expiresAt } = await storage.createPasswordResetToken(user.id);
+      const resetUrl = buildResetUrl(req, token);
+      try {
+        await sendPasswordResetEmail({
+          to: user.email,
+          resetUrl,
+          expiresAt,
+          username: user.username,
+        });
+      } catch (emailError) {
+        log(`password reset email failed for ${user.id}: ${String(emailError)}`);
+      }
+    }
+
+    res.json({ ok: true });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: "A valid email address is required" });
+    }
+    next(error);
+  }
+});
+
+authRouter.post("/reset-password", async (req, res, next) => {
+  try {
+    const { token, password } = resetPasswordSchema.parse(req.body ?? {});
+    const passwordHash = await bcrypt.hash(password, 12);
+    const result = await storage.resetPasswordWithToken(token, passwordHash);
+
+    if (!result.success) {
+      const status = result.reason === "expired" ? 410 : 400;
+      return res.status(status).json({ error: "Invalid or expired reset link" });
+    }
+
+    res.json({ ok: true });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const first = error.errors?.[0]?.message;
+      return res.status(400).json({ error: first ?? "Invalid request" });
+    }
+    next(error);
+  }
 });
 
 export const ensureAuth = (
