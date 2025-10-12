@@ -27,7 +27,7 @@ import { z } from "zod";
 import AllowanceRecurringFields from "@/components/employees/allowance-recurring-fields";
 import AllowanceTypeCombobox from "@/components/employees/allowance-type-combobox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, getCurrencyCode } from "@/lib/utils";
 import { Plus, Edit, Trash2 } from "lucide-react";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
 import { Label } from "@/components/ui/label";
@@ -85,6 +85,7 @@ export default function EmployeeForm({
   employeeId,
 }: EmployeeFormProps) {
   const { toast } = useToast();
+  const currencyCode = getCurrencyCode();
   const [companyOpen, setCompanyOpen] = useState(false);
   const [newCompanyOpen, setNewCompanyOpen] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState("");
@@ -1666,7 +1667,7 @@ export default function EmployeeForm({
                     name="amount"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Amount (KWD)</FormLabel>
+                        <FormLabel>Amount ({currencyCode})</FormLabel>
                         <FormControl>
                           <Input
                             type="number"

@@ -78,6 +78,15 @@ const scenarioToggleDefaults: Record<string, boolean> = {
   overtime: true,
 };
 
+const DEFAULT_COMPANY_CURRENCY = "KWD";
+const DEFAULT_COMPANY_LOCALE = "en-KW";
+
+const formatCompanyCurrency = (amount: number, company?: Company | null) => {
+  const currency = company?.currencyCode?.trim() || DEFAULT_COMPANY_CURRENCY;
+  const locale = company?.locale?.trim() || DEFAULT_COMPANY_LOCALE;
+  return new Intl.NumberFormat(locale, { style: "currency", currency }).format(amount);
+};
+
 const scenarioToggleSchema = z
   .object({
     attendance: z.boolean().optional(),
@@ -723,6 +732,8 @@ payrollRouter.post(
             workingDays: employeeWorkingDays,
             attendanceDays: attendanceSummary[employee.id],
             config: deductionConfig,
+            currencyCode: company?.currencyCode,
+            locale: company?.locale,
           });
         }),
       );
@@ -887,6 +898,8 @@ payrollRouter.post(
               attendanceDays: scenarioAttendance[employee.id],
               config: deductionConfig,
               overrides: overrideSets,
+              currencyCode: company?.currencyCode,
+              locale: company?.locale,
             });
           }),
         );
@@ -1149,6 +1162,8 @@ payrollRouter.post("/generate", requirePermission("payroll:manage"), async (req,
           attendanceDays: scenarioAttendance[employee.id],
           config: deductionConfig,
           overrides: overrideSets,
+          currencyCode: company?.currencyCode,
+          locale: company?.locale,
         });
       }),
     );
@@ -1333,7 +1348,7 @@ payrollRouter.post("/generate", requirePermission("payroll:manage"), async (req,
               employeeId: entry.employeeId,
               type: "loan_deduction",
               title: "Loan Deduction Applied",
-              message: `${entry.loanDeduction.toFixed(2)} KWD deducted for loan repayment in ${parsed.period}`,
+              message: `${formatCompanyCurrency(entry.loanDeduction, company)} deducted for loan repayment in ${parsed.period}`,
               priority: "low",
               status: "unread",
               expiryDate: parsed.endDate,

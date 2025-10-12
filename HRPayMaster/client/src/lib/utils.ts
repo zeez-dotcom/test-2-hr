@@ -1,18 +1,50 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
+import type { Company } from "@shared/schema"
+import { queryClient } from "./queryClient"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+const DEFAULT_CURRENCY_CODE = "KWD"
+const DEFAULT_LOCALE = "en-KW"
+
+type CurrencyConfig = {
+  currency: string
+  locale: string
+}
+
+let currencyConfigOverride: CurrencyConfig | null = null
+
+export function setCurrencyConfigForTests(config: CurrencyConfig | null) {
+  currencyConfigOverride = config
+}
+
+export function getCurrencyConfig(): CurrencyConfig {
+  if (currencyConfigOverride) {
+    return currencyConfigOverride
+  }
+
+  try {
+    const company = queryClient.getQueryData<Company | undefined>(["/api/company"]) ?? undefined
+    const currency = company?.currencyCode?.trim() || DEFAULT_CURRENCY_CODE
+    const locale = company?.locale?.trim() || DEFAULT_LOCALE
+    return { currency, locale }
+  } catch {
+    return { currency: DEFAULT_CURRENCY_CODE, locale: DEFAULT_LOCALE }
+  }
+}
+
+export function getCurrencyCode(): string {
+  return getCurrencyConfig().currency
+}
+
 export function formatCurrency(amount: number | string): string {
-  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-  return new Intl.NumberFormat('en-KW', {
-    style: 'currency',
-    currency: 'KWD',
-    minimumFractionDigits: 3,
-    maximumFractionDigits: 3,
-  }).format(num);
+  const value = typeof amount === "string" ? Number.parseFloat(amount) : amount
+  const numeric = Number.isFinite(value) ? (value as number) : 0
+  const { currency, locale } = getCurrencyConfig()
+  return new Intl.NumberFormat(locale, { style: "currency", currency }).format(numeric)
 }
 
 export function formatAllowanceLabel(key: string): string {

@@ -676,6 +676,8 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
         // create default company if none exists
         const created = await storage.createCompany({
           name: 'Company',
+          currencyCode: 'KWD',
+          locale: 'en-KW',
           payrollFrequencies: [{ ...defaultFrequency }],
           payrollCalendars: defaultCalendars.map(calendar => ({ ...calendar })),
           payrollExportFormats: defaultExportFormats.map(format => ({ ...format })),
@@ -701,6 +703,14 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
       if (typeof req.body?.phone === 'string') data.phone = req.body.phone;
       if (typeof req.body?.website === 'string') data.website = req.body.website;
       if (typeof req.body?.address === 'string') data.address = req.body.address;
+      if (typeof req.body?.currencyCode === 'string') {
+        const currencyCode = req.body.currencyCode.trim();
+        if (currencyCode) data.currencyCode = currencyCode;
+      }
+      if (typeof req.body?.locale === 'string') {
+        const locale = req.body.locale.trim();
+        if (locale) data.locale = locale;
+      }
       const parsedFrequencies = parsePayrollFrequenciesInput(req.body?.payrollFrequencies);
       if (parsedFrequencies) {
         data.payrollFrequencies = parsedFrequencies;

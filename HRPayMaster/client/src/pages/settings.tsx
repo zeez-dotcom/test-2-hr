@@ -24,6 +24,8 @@ export default function Settings() {
   const [phone, setPhone] = useState('');
   const [website, setWebsite] = useState('');
   const [address, setAddress] = useState('');
+  const [currencyCode, setCurrencyCode] = useState('');
+  const [locale, setLocale] = useState('');
   const [useAttendance, setUseAttendance] = useState<boolean>(false);
   useEffect(() => {
     if (company && typeof company.useAttendanceForDeductions === 'boolean') {
@@ -31,6 +33,7 @@ export default function Settings() {
     }
   }, [company]);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const update = useMutation({
     mutationFn: async () => {
       const payload: any = {};
@@ -42,6 +45,14 @@ export default function Settings() {
       if (website) payload.website = website;
       if (address) payload.address = address;
       payload.useAttendanceForDeductions = useAttendance;
+      const currency = (currencyCode || company?.currencyCode || 'KWD').trim().toUpperCase();
+      if (currency) {
+        payload.currencyCode = currency;
+      }
+      const localeValue = (locale || company?.locale || 'en-KW').trim();
+      if (localeValue) {
+        payload.locale = localeValue;
+      }
       if (file) {
         const b64 = await new Promise<string>((resolve, reject) => {
           const r = new FileReader(); r.onload = () => resolve(r.result as string); r.onerror = reject; r.readAsDataURL(file);
@@ -52,7 +63,13 @@ export default function Settings() {
       if (!res.ok) throw new Error(res.error || 'Failed');
       return res.data;
     },
-    onSuccess: () => { toast({ title: 'Updated' }); },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/company"], data);
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      setCurrencyCode(data?.currencyCode ?? '');
+      setLocale(data?.locale ?? '');
+      toast({ title: 'Updated' });
+    },
     onError: () => { toast({ title: 'Error', description: 'Failed to update', variant: 'destructive' }); },
   })
   if (!me || me.role !== 'admin') {
@@ -97,6 +114,22 @@ export default function Settings() {
             <div className="space-y-1">
               <label className="text-sm">{t('settings.website','Website')}</label>
               <Input placeholder={company?.website || 'https://example.com'} value={website} onChange={e=>setWebsite(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm">{t('settings.currencyCode','Currency Code')}</label>
+              <Input
+                placeholder={company?.currencyCode || 'KWD'}
+                value={currencyCode || company?.currencyCode || 'KWD'}
+                onChange={e=>setCurrencyCode(e.target.value.toUpperCase())}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm">{t('settings.locale','Locale')}</label>
+              <Input
+                placeholder={company?.locale || 'en-KW'}
+                value={locale || company?.locale || 'en-KW'}
+                onChange={e=>setLocale(e.target.value)}
+              />
             </div>
             <div className="space-y-1 md:col-span-2">
               <label className="text-sm">{t('settings.address','Address')}</label>

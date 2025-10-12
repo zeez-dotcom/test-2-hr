@@ -80,6 +80,8 @@ export function calculateEmployeePayroll({
   attendanceDays,
   config,
   overrides,
+  currencyCode,
+  locale,
 }: {
   employee: Employee;
   loans: Loan[];
@@ -91,8 +93,14 @@ export function calculateEmployeePayroll({
   attendanceDays?: number;
   config?: DeductionsConfig;
   overrides?: PayrollCalculationOverrides;
+  currencyCode?: string;
+  locale?: string;
 }): EmployeePayroll {
   const monthlySalary = parseFloat(employee.salary);
+  const resolvedCurrency = currencyCode && currencyCode.trim() ? currencyCode : "KWD";
+  const resolvedLocale = locale && locale.trim() ? locale : "en-KW";
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat(resolvedLocale, { style: "currency", currency: resolvedCurrency }).format(value);
 
   const skippedVacationIds = overrides?.skippedVacationIds;
 
@@ -256,7 +264,7 @@ export function calculateEmployeePayroll({
     adjustmentReason += `${vacationDays} vacation days. `;
   }
   if (loanDeduction > 0) {
-    adjustmentReason += `Loan deduction: ${loanDeduction.toFixed(2)} KWD. `;
+    adjustmentReason += `Loan deduction: ${formatCurrency(loanDeduction)}. `;
     if (loanMismatches.length > 0) {
       adjustmentReason += `Schedule variance (${loanMismatches.join(", ")}). `;
     }

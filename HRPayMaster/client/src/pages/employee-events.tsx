@@ -15,7 +15,7 @@ import { Plus, Calendar as CalendarIcon, TrendingUp, TrendingDown, Award, AlertT
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
-import { cn, formatCurrency, formatDate, getNewTabRel, openUrlInNewTab } from "@/lib/utils";
+import { cn, formatCurrency, formatDate, getCurrencyCode, getNewTabRel, openUrlInNewTab } from "@/lib/utils";
 import { queryClient } from "@/lib/queryClient";
 import { apiPost, apiPut, apiDelete } from "@/lib/http";
 import { useToast } from "@/hooks/use-toast";
@@ -36,6 +36,7 @@ export default function EmployeeEvents() {
   const [eventToEdit, setEventToEdit] = useState<(EmployeeEvent & { employee?: Employee }) | null>(null);
   const [printingEventId, setPrintingEventId] = useState<string | null>(null);
   const { toast } = useToast();
+  const currencyCode = getCurrencyCode();
 
   const {
     data: events,
@@ -490,7 +491,7 @@ export default function EmployeeEvents() {
                       name="amount"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Amount (KWD) *</FormLabel>
+                          <FormLabel>Amount ({currencyCode}) *</FormLabel>
                           <FormControl>
                             <Input
                               type="number"

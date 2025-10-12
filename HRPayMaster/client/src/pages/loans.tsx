@@ -23,6 +23,7 @@ import { insertLoanSchema, type LoanStatement, type LoanWithEmployee } from "@sh
 import { queryClient } from "@/lib/queryClient";
 import { apiPost, apiPut, apiDelete, apiGet } from "@/lib/http";
 import { toastApiError } from "@/lib/toastError";
+import { formatCurrency } from "@/lib/utils";
 
 const schema = insertLoanSchema
   .omit({ remainingAmount: true })
@@ -35,12 +36,7 @@ const schema = insertLoanSchema
     message: "Monthly deduction must be ≤ amount",
   });
 
-const moneyFormatter = new Intl.NumberFormat(undefined, {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
-const formatMoney = (value: number) => moneyFormatter.format(value);
+const formatMoney = (value: number) => formatCurrency(value);
 
 type StageStatus = "pending" | "approved" | "rejected" | "delegated" | "skipped";
 
@@ -577,7 +573,7 @@ export default function Loans() {
                             {loan.employee?.firstName} {loan.employee?.lastName}
                           </CardTitle>
                           <CardDescription>
-                            {formatMoney(amountValue)} KWD • {formatMoney(monthlyDeductionValue)} KWD/{t('loansPage.perMonth', 'month')}
+                          {formatMoney(amountValue)} • {formatMoney(monthlyDeductionValue)} /{t('loansPage.perMonth', 'month')}
                           </CardDescription>
                         </div>
                       </div>
@@ -666,7 +662,7 @@ export default function Loans() {
                         </span>
                         <p className="font-medium">
                           {dueAmount > 0
-                            ? `${formatMoney(dueAmount)} KWD`
+                            ? formatMoney(dueAmount)
                             : t('loansPage.noDeduction', 'No deduction scheduled this period')}
                         </p>
                         {dueDetails && (
@@ -968,19 +964,19 @@ function LoanStatementDialog({
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <p className="text-xs uppercase text-muted-foreground">{t('loansPage.totalPrincipal', 'Total principal')}</p>
-                <p className="text-base font-semibold">{formatMoney(totals?.scheduledPrincipal ?? 0)} KWD</p>
+                <p className="text-base font-semibold">{formatMoney(totals?.scheduledPrincipal ?? 0)}</p>
               </div>
               <div>
                 <p className="text-xs uppercase text-muted-foreground">{t('loansPage.totalInterest', 'Total interest')}</p>
-                <p className="text-base font-semibold">{formatMoney(totals?.scheduledInterest ?? 0)} KWD</p>
+                <p className="text-base font-semibold">{formatMoney(totals?.scheduledInterest ?? 0)}</p>
               </div>
               <div>
                 <p className="text-xs uppercase text-muted-foreground">{t('loansPage.totalPaid', 'Total paid')}</p>
-                <p className="text-base font-semibold">{formatMoney(totals?.totalPaid ?? 0)} KWD</p>
+                <p className="text-base font-semibold">{formatMoney(totals?.totalPaid ?? 0)}</p>
               </div>
               <div>
                 <p className="text-xs uppercase text-muted-foreground">{t('loansPage.outstandingBalance', 'Outstanding balance')}</p>
-                <p className="text-base font-semibold">{formatMoney(totals?.outstandingBalance ?? 0)} KWD</p>
+                <p className="text-base font-semibold">{formatMoney(totals?.outstandingBalance ?? 0)}</p>
                 {nextDueLabel && (
                   <p className="text-xs text-muted-foreground mt-1">
                     {t('loansPage.nextDue', 'Next due')}: {nextDueLabel}
@@ -1015,10 +1011,10 @@ function LoanStatementDialog({
                       <tr key={`${entry.installmentNumber}-${entry.dueDate}`} className="border-t">
                         <td className="px-3 py-2">{entry.installmentNumber}</td>
                         <td className="px-3 py-2">{format(new Date(entry.dueDate), 'MMM d, yyyy')}</td>
-                        <td className="px-3 py-2">{formatMoney(Number(entry.principalAmount))} KWD</td>
-                        <td className="px-3 py-2">{formatMoney(Number(entry.interestAmount))} KWD</td>
-                        <td className="px-3 py-2">{formatMoney(Number(entry.paymentAmount))} KWD</td>
-                        <td className="px-3 py-2">{formatMoney(Number(entry.remainingBalance))} KWD</td>
+                        <td className="px-3 py-2">{formatMoney(Number(entry.principalAmount))}</td>
+                        <td className="px-3 py-2">{formatMoney(Number(entry.interestAmount))}</td>
+                        <td className="px-3 py-2">{formatMoney(Number(entry.paymentAmount))}</td>
+                        <td className="px-3 py-2">{formatMoney(Number(entry.remainingBalance))}</td>
                         <td className="px-3 py-2 capitalize">{entry.status}</td>
                       </tr>
                     ))}

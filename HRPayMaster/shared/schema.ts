@@ -289,6 +289,8 @@ export const companies = pgTable("companies", {
   phone: text("phone"),
   website: text("website"),
   address: text("address"),
+  currencyCode: text("currency_code").notNull().default("KWD"),
+  locale: text("locale").notNull().default("en-KW"),
   useAttendanceForDeductions: boolean("use_attendance_for_deductions").notNull().default(false),
   payrollFrequencies: jsonb("payroll_frequencies")
     .$type<PayrollFrequencyConfig[]>()
@@ -1053,6 +1055,8 @@ export const insertCompanySchema = createInsertSchema(companies)
     id: true,
   })
   .extend({
+    currencyCode: z.string().min(1).default("KWD"),
+    locale: z.string().min(1).default("en-KW"),
     payrollFrequencies: parseJsonInput(
       z.array(payrollFrequencyConfigSchema),
     ).default([]),
