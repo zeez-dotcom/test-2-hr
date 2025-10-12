@@ -169,6 +169,8 @@
     "period": "Period",
     "department": "Department",
     "grossPay": "Gross Pay",
+    "allowances": "Allowances",
+    "bonuses": "Bonuses",
     "netPay": "Net Pay",
     "unassigned": "Unassigned",
     "noDeptPayrollData": "No department payroll data available",

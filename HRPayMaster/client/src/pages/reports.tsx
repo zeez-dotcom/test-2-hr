@@ -48,7 +48,10 @@ import type {
   CarAssignmentWithDetails,
 } from "@shared/schema";
 // Types for company-level reports
-type PayrollSummary = { period: string; totals: { grossPay: number; netPay: number } };
+type PayrollSummary = {
+  period: string;
+  totals: { grossPay: number; netPay: number; allowances: number; bonuses: number };
+};
 type LoanReportDetail = {
   loanId: string;
   employeeId: string;
@@ -1045,6 +1048,8 @@ export default function Reports() {
                       <tr className="text-left">
                         <th className="py-2 pr-4">{t('reports.period','Period')}</th>
                         <th className="py-2 pr-4">{t('reports.grossPay','Gross Pay')}</th>
+                        <th className="py-2 pr-4">{t('reports.allowances','Allowances')}</th>
+                        <th className="py-2 pr-4">{t('reports.bonuses','Bonuses')}</th>
                         <th className="py-2">{t('reports.netPay','Net Pay')}</th>
                       </tr>
                     </thead>
@@ -1053,6 +1058,8 @@ export default function Reports() {
                         <tr key={summary.period} className="border-t">
                           <td className="py-2 pr-4">{summary.period}</td>
                           <td className="py-2 pr-4">{formatCurrency(summary.totals.grossPay)}</td>
+                          <td className="py-2 pr-4">{formatCurrency(summary.totals.allowances ?? 0)}</td>
+                          <td className="py-2 pr-4">{formatCurrency(summary.totals.bonuses ?? 0)}</td>
                           <td className="py-2">{formatCurrency(summary.totals.netPay)}</td>
                         </tr>
                       ))}
