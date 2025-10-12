@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { downloadPayrollBankFile, downloadPayrollCsv } from "@/lib/payroll-export";
 import { openPdf } from "@/lib/pdf";
 import type { TDocumentDefinitions } from "pdfmake/interfaces";
 import type { PayrollRunWithEntries, PayrollEntry, Employee, Department } from "@shared/schema";
@@ -36,9 +37,11 @@ export function SimpleExportModal({ payrollRun, isOpen, onClose }: SimpleExportM
 
   const { data: employees } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
+    enabled: isOpen,
   });
   const { data: departments } = useQuery<Department[]>({
     queryKey: ["/api/departments"],
+    enabled: isOpen,
   });
 
   const entries: (PayrollEntry & { employee?: Employee })[] =
@@ -83,15 +86,20 @@ export function SimpleExportModal({ payrollRun, isOpen, onClose }: SimpleExportM
       : entries.filter(entry => (entry.employee?.departmentId || "") === selectedDepartment);
   })();
 
-  const generatePDFPayslips = () => {
+  const getScopeLabels = () => {
     const locationLabel = selectedLocation === "all" ? "All Locations" : selectedLocation;
-    const departmentLabel = selectedDepartment === "all"
-      ? "All Departments"
-      : (departmentOptions.find(o => o.id === selectedDepartment)?.name || selectedDepartment);
+    const departmentLabel =
+      selectedDepartment === "all"
+        ? "All Departments"
+        : departmentOptions.find(o => o.id === selectedDepartment)?.name || selectedDepartment;
     const scopeLabel = groupBy === "location" ? locationLabel : departmentLabel;
+    return { locationLabel, departmentLabel, scopeLabel };
+  };
 
+  const generatePDFPayslips = () => {
+    const { scopeLabel } = getScopeLabels();
     const docDefinition: TDocumentDefinitions = {
-      info: { title: `Payroll - ${locationLabel}`, creationDate: new Date(0) },
+      info: { title: `Payroll - ${scopeLabel}`, creationDate: new Date(0) },
       styles: {
         header: { fontSize: 18, bold: true, alignment: "center" },
         subheader: { fontSize: 14, alignment: "center", margin: [0, 5, 0, 10] },
@@ -126,8 +134,37 @@ export function SimpleExportModal({ payrollRun, isOpen, onClose }: SimpleExportM
     });
   };
   const handleExport = () => {
-    if (exportFormat === "pdf") {
-      generatePDFPayslips();
+    const { scopeLabel } = getScopeLabels();
+    switch (exportFormat) {
+      case "pdf":
+        generatePDFPayslips();
+        break;
+      case "excel":
+        downloadPayrollCsv({
+          entries: filteredEntries,
+          payrollRun,
+          scopeLabel,
+        });
+        toast({
+          title: "Success",
+          description: `Excel file generated for ${scopeLabel}`,
+        });
+        break;
+      case "bank":
+        {
+          const { entryCount } = downloadPayrollBankFile({
+            entries: filteredEntries,
+            payrollRun,
+            scopeLabel,
+          });
+          toast({
+            title: "Success",
+            description: `Bank transfer file generated for ${scopeLabel} (${entryCount} employees with bank details)`,
+          });
+        }
+        break;
+      default:
+        generatePDFPayslips();
     }
   };
 
@@ -204,6 +241,18 @@ export function SimpleExportModal({ payrollRun, isOpen, onClose }: SimpleExportM
                     <div className="flex items-center gap-2">
                       <FileText className="h-4 w-4" />
                       PDF Payslips
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="excel">
+                    <div className="flex items-center gap-2">
+                      <FileSpreadsheet className="h-4 w-4" />
+                      Excel Export
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="bank">
+                    <div className="flex items-center gap-2">
+                      <CreditCard className="h-4 w-4" />
+                      Bank Transfer File
                     </div>
                   </SelectItem>
                 </SelectContent>
@@ -317,10 +366,16 @@ export function SimpleExportModal({ payrollRun, isOpen, onClose }: SimpleExportM
               Cancel
             </Button>
             <Button onClick={handleExport} className="flex items-center gap-2">
-              <Printer className="h-4 w-4" />
+              {exportFormat === "pdf" && <Printer className="h-4 w-4" />}
+              {exportFormat === "excel" && <FileSpreadsheet className="h-4 w-4" />}
+              {exportFormat === "bank" && <CreditCard className="h-4 w-4" />}
               {groupBy === "location"
                 ? `Export ${selectedLocation === "all" ? "All Locations" : selectedLocation}`
-                : `Export ${selectedDepartment === "all" ? "All Departments" : (departmentOptions.find(d => d.id === selectedDepartment)?.name || selectedDepartment)}`}
+                : `Export ${
+                    selectedDepartment === "all"
+                      ? "All Departments"
+                      : departmentOptions.find(d => d.id === selectedDepartment)?.name || selectedDepartment
+                  }`}
             </Button>
           </div>
         </div>
