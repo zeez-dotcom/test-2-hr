@@ -227,7 +227,7 @@ const DEFAULT_REPORT_RUN_TIME = { hours: 9, minutes: 0 } as const;
 
 const parseRunTime = (value?: string | null): { hours: number; minutes: number } | undefined => {
   if (!value) return undefined;
-  const match = /^\s*(\d{1,2}):(\d{2})\s*$/.exec(value);
+  const match = /^\s*(\d{1,2}):(\d{2})(?::\d{2})?\s*$/.exec(value);
   if (!match) return undefined;
   const hours = Number.parseInt(match[1], 10);
   const minutes = Number.parseInt(match[2], 10);
