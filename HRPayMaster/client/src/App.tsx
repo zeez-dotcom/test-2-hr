@@ -18,7 +18,7 @@ import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import Chatbot from "@/components/chatbot";
-import type { SessionUser } from "@shared/schema";
+import type { Company, SessionUser } from "@shared/schema";
 import { apiGet } from "@/lib/http";
 import Security from "@/pages/security";
 
@@ -112,7 +112,11 @@ function CompanyBootstrap() {
       try {
         const res = await apiGet('/api/company');
         if ((res as any).ok) {
-          const c = (res as any).data || {};
+          const company = ((res as any).data || null) as Company | null;
+          if (company) {
+            queryClient.setQueryData<Company>(["/api/company"], company);
+          }
+          const c = company ?? ({} as Partial<Company>);
           (window as any).__companyName = c.name;
           (window as any).__companyLogo = c.logo;
           (window as any).__companyPrimaryColor = c.primaryColor;
