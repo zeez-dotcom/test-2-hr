@@ -28,12 +28,61 @@ describe('getCompanyPayrollSummary', () => {
     carAssignmentsFindManyMock.mockReset();
   });
 
-  it('groups payroll entries by period', async () => {
+  it('groups payroll entries by period and normalizes allowances', async () => {
+    const buildAllowanceBreakdownForRunMock = vi
+      .spyOn(storage as any, 'buildAllowanceBreakdownForRun')
+      .mockResolvedValue({
+        breakdownByEmployee: new Map([
+          ['emp-2', { travel: 40 }]
+        ]),
+        allowanceKeys: ['travel']
+      });
+
     const rows = [
-      { period: '2024-01', entry: { grossPay: '1000', netPay: '900' } },
-      { period: '2024-01', entry: { grossPay: '500', netPay: '400' } },
-      { period: '2024-02', entry: { grossPay: '800', netPay: '700' } }
+      {
+        period: '2024-01',
+        runId: 'run-1',
+        runStart: '2024-01-01',
+        runEnd: '2024-01-31',
+        scenarioToggles: { allowances: true },
+        entry: {
+          employeeId: 'emp-1',
+          grossPay: '1000',
+          netPay: '900',
+          allowances: { housing: '200', transport: 50 },
+          bonusAmount: '75'
+        }
+      },
+      {
+        period: '2024-01',
+        runId: 'run-1',
+        runStart: '2024-01-01',
+        runEnd: '2024-01-31',
+        scenarioToggles: { allowances: true },
+        entry: {
+          employeeId: 'emp-2',
+          grossPay: '500',
+          netPay: '400',
+          allowances: null,
+          bonusAmount: 25
+        }
+      },
+      {
+        period: '2024-02',
+        runId: 'run-2',
+        runStart: '2024-02-01',
+        runEnd: '2024-02-28',
+        scenarioToggles: {},
+        entry: {
+          employeeId: 'emp-1',
+          grossPay: '800',
+          netPay: '700',
+          allowances: { housing: 100 },
+          bonusAmount: '0'
+        }
+      }
     ];
+
     selectMock.mockReturnValue({
       from: () => ({
         innerJoin: () => ({
@@ -52,15 +101,46 @@ describe('getCompanyPayrollSummary', () => {
       {
         period: '2024-01',
         payrollEntries: [
-          { grossPay: '1000', netPay: '900' },
-          { grossPay: '500', netPay: '400' }
+          {
+            employeeId: 'emp-1',
+            grossPay: '1000',
+            netPay: '900',
+            allowances: { housing: 200, transport: 50 },
+            bonusAmount: '75'
+          },
+          {
+            employeeId: 'emp-2',
+            grossPay: '500',
+            netPay: '400',
+            allowances: { travel: 40 },
+            bonusAmount: 25
+          }
         ]
       },
       {
         period: '2024-02',
-        payrollEntries: [{ grossPay: '800', netPay: '700' }]
+        payrollEntries: [
+          {
+            employeeId: 'emp-1',
+            grossPay: '800',
+            netPay: '700',
+            allowances: { housing: 100 },
+            bonusAmount: '0'
+          }
+        ]
       }
     ]);
+
+    expect(buildAllowanceBreakdownForRunMock).toHaveBeenCalledOnce();
+    expect(buildAllowanceBreakdownForRunMock).toHaveBeenCalledWith(
+      [
+        { employeeId: 'emp-2' }
+      ],
+      '2024-01-01',
+      '2024-01-31'
+    );
+
+    buildAllowanceBreakdownForRunMock.mockRestore();
   });
 });
 

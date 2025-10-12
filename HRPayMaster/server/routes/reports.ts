@@ -254,19 +254,73 @@ reportsRouter.get(
       groupBy,
     });
 
-    const response = report.map((period) => ({
-      period: period.period,
-      totals: {
-        grossPay: period.payrollEntries.reduce(
-          (sum, e) => sum + Number(e.grossPay || 0),
-          0
-        ),
-        netPay: period.payrollEntries.reduce(
-          (sum, e) => sum + Number(e.netPay || 0),
-          0
-        ),
-      },
-    }));
+    const response = report.map((period) => {
+      const grossPay = period.payrollEntries.reduce(
+        (sum, entry) => sum + Number(entry.grossPay || 0),
+        0,
+      );
+
+      const netPay = period.payrollEntries.reduce(
+        (sum, entry) => sum + Number(entry.netPay || 0),
+        0,
+      );
+
+      const allowances = period.payrollEntries.reduce((sum, entry) => {
+        const rawAllowances =
+          entry.allowances && typeof entry.allowances === "object"
+            ? (entry.allowances as Record<string, unknown>)
+            : {};
+
+        const allowanceTotal = Object.values(rawAllowances).reduce((allowanceSum, value) => {
+          if (typeof value === "number") {
+            return Number.isFinite(value) ? allowanceSum + value : allowanceSum;
+          }
+
+          if (typeof value === "string") {
+            const trimmed = value.trim();
+            if (!trimmed) {
+              return allowanceSum;
+            }
+
+            const numericValue = Number(trimmed);
+            return Number.isFinite(numericValue) ? allowanceSum + numericValue : allowanceSum;
+          }
+
+          return allowanceSum;
+        }, 0);
+
+        return sum + allowanceTotal;
+      }, 0);
+
+      const bonuses = period.payrollEntries.reduce((sum, entry) => {
+        const rawBonus = (entry as any).bonusAmount;
+        if (typeof rawBonus === "number") {
+          return Number.isFinite(rawBonus) ? sum + rawBonus : sum;
+        }
+
+        if (typeof rawBonus === "string") {
+          const trimmed = rawBonus.trim();
+          if (!trimmed) {
+            return sum;
+          }
+
+          const numericBonus = Number(trimmed);
+          return Number.isFinite(numericBonus) ? sum + numericBonus : sum;
+        }
+
+        return sum;
+      }, 0);
+
+      return {
+        period: period.period,
+        totals: {
+          grossPay,
+          netPay,
+          allowances,
+          bonuses,
+        },
+      };
+    });
 
     res.json(response);
   } catch (error) {
