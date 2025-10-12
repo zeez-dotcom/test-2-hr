@@ -199,8 +199,11 @@ const calculateVacationDaysInPeriod = (
 const serializeAllowancesForStorage = (
   allowances: Record<string, number> | undefined,
   enabled: boolean,
-): Record<string, number> => {
-  if (!enabled || !allowances) {
+): Record<string, number> | null => {
+  if (!enabled) {
+    return null;
+  }
+  if (!allowances) {
     return {};
   }
   const normalized = Object.entries(allowances).reduce<Record<string, number>>(

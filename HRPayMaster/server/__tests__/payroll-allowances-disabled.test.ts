@@ -211,7 +211,7 @@ describe("payroll generation with allowances disabled", () => {
     expect(runId).toBeTruthy();
 
     expect(insertedEntries).toHaveLength(1);
-    expect(insertedEntries[0].allowances).toEqual({});
+    expect(insertedEntries[0].allowances).toBeNull();
 
     const runRow = insertedRuns.find(run => run.id === runId);
     const entryRows = insertedEntries
@@ -232,6 +232,8 @@ describe("payroll generation with allowances disabled", () => {
         }),
       });
 
+    const eventCallsAfterGeneration = storageSpies.getEmployeeEvents.mock.calls.length;
+
     const fetched = await request(app).get(`/api/payroll/${runId}`);
     expect(fetched.status).toBe(200);
     expect(fetched.body.id).toBe(runId);
@@ -240,5 +242,6 @@ describe("payroll generation with allowances disabled", () => {
     const entry = fetched.body.entries[0];
     expect(entry.allowances).toBeUndefined();
     expect("allowances" in entry).toBe(false);
+    expect(storageSpies.getEmployeeEvents.mock.calls.length).toBe(eventCallsAfterGeneration);
   });
 });

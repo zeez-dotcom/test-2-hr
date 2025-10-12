@@ -3477,9 +3477,15 @@ export class DatabaseStorage implements IStorage {
       employee: entry.employee ?? undefined,
     }));
 
-    const fallbackCandidates = normalizedEntries.filter(
-      entry => entry.allowances == null,
-    );
+    const scenarioToggles =
+      run.scenarioToggles && typeof run.scenarioToggles === "object"
+        ? (run.scenarioToggles as Record<string, boolean>)
+        : {};
+    const allowancesEnabled = scenarioToggles.allowances !== false;
+
+    const fallbackCandidates = allowancesEnabled
+      ? normalizedEntries.filter(entry => entry.allowances === null)
+      : [];
 
     let fallbackBreakdown = new Map<string, AllowanceBreakdown>();
     let fallbackAllowanceKeys: string[] = [];
@@ -3513,13 +3519,15 @@ export class DatabaseStorage implements IStorage {
       const { allowances: rawAllowances, ...rest } = entry;
       let normalizedAllowances: AllowanceBreakdown | undefined;
 
-      if (rawAllowances == null) {
-        const fallback = fallbackBreakdown.get(entry.employeeId);
-        if (fallback && Object.keys(fallback).length > 0) {
-          normalizedAllowances = { ...fallback };
-          Object.keys(normalizedAllowances).forEach(key => allowanceKeySet.add(key));
+      if (rawAllowances === null) {
+        if (allowancesEnabled) {
+          const fallback = fallbackBreakdown.get(entry.employeeId);
+          if (fallback && Object.keys(fallback).length > 0) {
+            normalizedAllowances = { ...fallback };
+            Object.keys(normalizedAllowances).forEach(key => allowanceKeySet.add(key));
+          }
         }
-      } else {
+      } else if (rawAllowances) {
         const sanitized = Object.entries(rawAllowances).reduce<AllowanceBreakdown>(
           (acc, [key, value]) => {
             const numeric = Number(value);
