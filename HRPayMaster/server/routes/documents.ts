@@ -13,6 +13,13 @@ export const documentsRouter = Router();
 
 const booleanTrueValues = new Set(["1", "true", "yes", "on"]);
 
+const CATEGORY_FILTER_SENTINELS = new Set([
+  "__all_categories__",
+  "__uncategorized__",
+]);
+
+const TAG_FILTER_SENTINELS = new Set(["__all_tags__", "__untagged__"]);
+
 const toOptionalString = (value: unknown): string | undefined => {
   if (typeof value === "string") {
     const trimmed = value.trim();
@@ -93,12 +100,20 @@ documentsRouter.get("/api/documents", async (req, res, next) => {
       filters.search = parsedQuery.search;
     }
     if (parsedQuery.category) {
-      filters.category = parsedQuery.category;
+      const trimmedCategory = parsedQuery.category.trim();
+      if (trimmedCategory && !CATEGORY_FILTER_SENTINELS.has(trimmedCategory)) {
+        filters.category = trimmedCategory;
+      }
     }
     if (parsedQuery.employeeId) {
       filters.employeeId = parsedQuery.employeeId;
     }
-    const tagsParam = normalizeTagsInput(parsedQuery.tags ?? parsedQuery.tag);
+    const rawTags = parsedQuery.tags ?? parsedQuery.tag;
+    const normalizedTagsInput =
+      typeof rawTags === "string" && TAG_FILTER_SENTINELS.has(rawTags.trim())
+        ? undefined
+        : rawTags;
+    const tagsParam = normalizeTagsInput(normalizedTagsInput);
     if (tagsParam) {
       filters.tags = tagsParam.split(",");
     } else if (tagsParam === null) {

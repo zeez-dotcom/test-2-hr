@@ -77,7 +77,9 @@ const signatureStatusOptions = [
 ] as const;
 
 const ALL_CATEGORIES_VALUE = "__all_categories__";
+const UNCATEGORIZED_CATEGORY_VALUE = "__uncategorized__";
 const ALL_TAGS_VALUE = "__all_tags__";
+const UNTAGGED_TAG_VALUE = "__untagged__";
 const ALL_EMPLOYEES_VALUE = "__all_employees__";
 const NO_EMPLOYEE_VALUE = "__no_employee__";
 
@@ -283,6 +285,14 @@ export default function DocumentsPage() {
   const [tagFilter, setTagFilter] = useState<string>(ALL_TAGS_VALUE);
   const [signatureFilter, setSignatureFilter] = useState<(typeof signatureStatusOptions)[number]>("all");
 
+  const handleCategoryFilterChange = (value: string) => {
+    setCategoryFilter(value && value.trim() ? value : ALL_CATEGORIES_VALUE);
+  };
+
+  const handleTagFilterChange = (value: string) => {
+    setTagFilter(value && value.trim() ? value : ALL_TAGS_VALUE);
+  };
+
   const handleSignatureFilterChange = (value: string) => {
     if (isSignatureStatusOption(value)) {
       setSignatureFilter(value);
@@ -364,8 +374,26 @@ export default function DocumentsPage() {
         ];
       const params = new URLSearchParams();
       if (searchValue) params.set("search", searchValue);
-      const categoryParam = category === ALL_CATEGORIES_VALUE ? "" : category;
-      const tagsParam = tags === ALL_TAGS_VALUE ? "" : tags;
+      const normalizeCategoryFilterValue = (value: string): string | undefined => {
+        if (
+          value === ALL_CATEGORIES_VALUE ||
+          value === UNCATEGORIZED_CATEGORY_VALUE ||
+          !value.trim()
+        ) {
+          return undefined;
+        }
+        return value;
+      };
+
+      const normalizeTagFilterValue = (value: string): string | undefined => {
+        if (value === ALL_TAGS_VALUE || value === UNTAGGED_TAG_VALUE || !value.trim()) {
+          return undefined;
+        }
+        return value;
+      };
+
+      const categoryParam = normalizeCategoryFilterValue(category);
+      const tagsParam = normalizeTagFilterValue(tags);
       const employeeParam = employeeId === ALL_EMPLOYEES_VALUE ? "" : employeeId;
       if (categoryParam) params.set("category", categoryParam);
       if (tagsParam) params.set("tags", tagsParam);
@@ -536,7 +564,12 @@ export default function DocumentsPage() {
   const uniqueCategories = useMemo(() => {
     const set = new Set<string>();
     for (const doc of documents) {
-      if (doc.category) set.add(doc.category);
+      const rawCategory = typeof doc.category === "string" ? doc.category.trim() : "";
+      if (rawCategory) {
+        set.add(rawCategory);
+      } else if (doc.category !== undefined) {
+        set.add(UNCATEGORIZED_CATEGORY_VALUE);
+      }
     }
     return Array.from(set).sort();
   }, [documents]);
@@ -544,8 +577,17 @@ export default function DocumentsPage() {
   const uniqueTags = useMemo(() => {
     const set = new Set<string>();
     for (const doc of documents) {
-      for (const tag of splitTags(doc.tags)) {
-        set.add(tag);
+      const tags = splitTags(doc.tags);
+      if (tags.length) {
+        for (const tag of tags) {
+          const trimmedTag = tag.trim();
+          set.add(trimmedTag.length ? trimmedTag : UNTAGGED_TAG_VALUE);
+        }
+      } else if (doc.tags !== undefined) {
+        const rawTag = typeof doc.tags === "string" ? doc.tags.trim() : "";
+        if (!rawTag.length) {
+          set.add(UNTAGGED_TAG_VALUE);
+        }
       }
     }
     return Array.from(set).sort();
@@ -1131,7 +1173,7 @@ export default function DocumentsPage() {
           </div>
           <div>
             <Label htmlFor="category">{t("documents.category", "Category")}</Label>
-            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <Select value={categoryFilter} onValueChange={handleCategoryFilterChange}>
               <SelectTrigger id="category">
                 <SelectValue placeholder={t("documents.allCategories", "All categories")} />
               </SelectTrigger>
@@ -1141,7 +1183,9 @@ export default function DocumentsPage() {
                 </SelectItem>
                 {uniqueCategories.map((category) => (
                   <SelectItem key={category} value={category}>
-                    {category}
+                    {category === UNCATEGORIZED_CATEGORY_VALUE
+                      ? t("documents.uncategorized", "Uncategorized")
+                      : category}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1149,7 +1193,7 @@ export default function DocumentsPage() {
           </div>
           <div>
             <Label htmlFor="tags">{t("documents.tags", "Tags")}</Label>
-            <Select value={tagFilter} onValueChange={setTagFilter}>
+            <Select value={tagFilter} onValueChange={handleTagFilterChange}>
               <SelectTrigger id="tags">
                 <SelectValue placeholder={t("documents.allTags", "All tags")} />
               </SelectTrigger>
@@ -1159,7 +1203,9 @@ export default function DocumentsPage() {
                 </SelectItem>
                 {uniqueTags.map((tag) => (
                   <SelectItem key={tag} value={tag}>
-                    {tag}
+                    {tag === UNTAGGED_TAG_VALUE
+                      ? t("documents.untagged", "Untagged")
+                      : tag}
                   </SelectItem>
                 ))}
               </SelectContent>
