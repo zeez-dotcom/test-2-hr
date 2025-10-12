@@ -1,7 +1,9 @@
 import { calculateWorkingDaysAdjustment, formatAllowanceSummaryForCsv, formatCurrency, formatDate, getCurrencyCode } from "@/lib/utils";
 import type { Employee, PayrollEntry, PayrollRunWithEntries } from "@shared/schema";
 
-export type PayrollEntryWithEmployee = PayrollEntry & { employee?: Employee | null };
+export type PayrollEntryWithEmployee = PayrollEntry & {
+  employee?: PayrollEntry["employee"] | Employee | null;
+};
 
 interface BasePayrollExportOptions {
   entries: PayrollEntryWithEmployee[];
