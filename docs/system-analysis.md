@@ -85,11 +85,12 @@ HRPayMaster already models a broad HR lifecycle: rich employee profiles with vis
 
 ### 9. Analytics & Reporting
 **What exists:**
-- Dashboard aggregates employee counts, payroll forecasts, and recent activity, and detailed reports endpoints already expose employee, payroll, and loan summaries.【F:HRPayMaster/client/src/pages/dashboard.tsx†L25-L120】【F:HRPayMaster/server/routes/reports.ts†L97-L220】 
+- Dashboard aggregates employee counts, payroll forecasts, and recent activity, and detailed reports endpoints already expose employee, payroll, and loan summaries.【F:HRPayMaster/client/src/pages/dashboard.tsx†L25-L120】【F:HRPayMaster/server/routes/reports.ts†L97-L220】
+- A background scheduler now calls the report processor every 15 minutes to email scheduled report digests and post in-app notifications when runs complete, ensuring recipients receive near-real-time insights without manual intervention.【F:HRPayMaster/server/index.ts†L338-L381】【F:HRPayMaster/server/reportScheduler.ts†L81-L197】
 
 **Gaps & enhancements:**
-- **Advanced analytics:** deliver drill-down dashboards for headcount movement, cost per department, overtime trends, and loan exposure, combining data from employees, attendance, and payroll previews.【F:HRPayMaster/client/src/pages/dashboard.tsx†L25-L120】【F:HRPayMaster/server/routes/payroll.ts†L236-L354】 
-- **Self-service reporting:** create a report builder that lets admins filter/export across entities (employees, assets, loans) with scheduling, using the existing report endpoints as data sources.【F:HRPayMaster/server/routes/reports.ts†L97-L220】 
+- **Advanced analytics:** deliver drill-down dashboards for headcount movement, cost per department, overtime trends, and loan exposure, combining data from employees, attendance, and payroll previews.【F:HRPayMaster/client/src/pages/dashboard.tsx†L25-L120】【F:HRPayMaster/server/routes/payroll.ts†L236-L354】
+- **Self-service reporting:** create a report builder that lets admins filter/export across entities (employees, assets, loans) with scheduling, using the existing report endpoints as data sources.【F:HRPayMaster/server/routes/reports.ts†L97-L220】
 - **Predictive insights:** leverage attendance and leave history to forecast staffing risks (e.g., departments with heavy upcoming leave) and feed them into notifications and dashboards.【F:HRPayMaster/client/src/pages/attendance.tsx†L27-L200】【F:HRPayMaster/client/src/pages/vacations.tsx†L76-L100】 
 
 ### 10. Security & Access Control

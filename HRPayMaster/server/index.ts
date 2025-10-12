@@ -14,6 +14,7 @@ import { processVacationReturnAlerts } from "./vacationReturnScheduler";
 import { processAttendanceAlerts } from "./attendanceScheduler";
 import type { SessionUser, UserWithPermissions } from "@shared/schema";
 import { setupChatbotPush } from "./chatbotPush";
+import { processScheduledReports } from "./reportScheduler";
 type AuthUser = SessionUser;
 
 const toAuthUser = (user: UserWithPermissions): AuthUser => {
@@ -380,4 +381,36 @@ app.use((req, res, next) => {
 
   runAttendanceAlerts();
   setInterval(runAttendanceAlerts, 60 * 60 * 1000);
+
+  let scheduledReportRun: Promise<void> | null = null;
+
+  const runScheduledReports = (): Promise<void> => {
+    if (scheduledReportRun) {
+      log("info: scheduled report run skipped (already running)");
+      return scheduledReportRun;
+    }
+
+    scheduledReportRun = (async () => {
+      try {
+        const processed = await processScheduledReports();
+        if (processed > 0) {
+          const suffix = processed === 1 ? "schedule" : "schedules";
+          log(`scheduled report run completed (${processed} ${suffix} processed)`);
+        } else {
+          log("scheduled report run completed (no schedules due)");
+        }
+      } catch (err) {
+        log(`warning: scheduled report run failed: ${String(err)}`);
+      } finally {
+        scheduledReportRun = null;
+      }
+    })();
+
+    return scheduledReportRun;
+  };
+
+  runScheduledReports();
+  setInterval(() => {
+    void runScheduledReports();
+  }, 15 * 60 * 1000);
 })();
