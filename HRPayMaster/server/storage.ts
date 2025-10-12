@@ -19,6 +19,7 @@ import { randomUUID } from "node:crypto";
 import { db } from "./db";
 import { normalizeAllowanceTitle } from "./utils/payroll";
 import { CHATBOT_EVENT_TYPES, emitChatbotNotification } from "./chatbotEvents";
+import { generateNumericOtp, verifyTotpCode } from "./utils/mfa";
 
 type TransactionClient = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -33,6 +34,32 @@ export type AccessRequestDetail = AccessRequest & {
 export type SecurityAuditEventDetail = SecurityAuditEvent & {
   actor?: BasicUserInfo | null;
 };
+
+type MfaChallengeRecord = {
+  id: string;
+  userId: string;
+  method: MfaMethod;
+  code?: string;
+  createdAt: Date;
+  expiresAt: Date;
+  attempts: number;
+};
+
+const MFA_CHALLENGE_TTL_MS = 5 * 60 * 1000;
+const MFA_MAX_ATTEMPTS = 5;
+
+export interface MfaChallengeInfo {
+  id: string;
+  method: MfaMethod;
+  expiresAt: Date;
+  deliveryHint?: string | null;
+}
+
+export interface MfaVerificationResult {
+  success: boolean;
+  user?: SessionUser;
+  reason?: "expired" | "invalid" | "not_found" | "user_inactive";
+}
 import {
   type Department,
   type InsertDepartment,
@@ -184,6 +211,7 @@ import {
   securityAuditEvents,
   allowanceTypes,
   sickLeaveTracking,
+  type MfaMethod,
 } from "@shared/schema";
 
 const normalizeDateInput = (value: unknown): Date | null | undefined => {
@@ -642,6 +670,11 @@ export interface IStorage {
   ): Promise<SecurityAuditEventDetail[]>;
   countActiveAdmins(excludeId?: string): Promise<number>;
   getFirstActiveAdmin(): Promise<UserWithPermissions | undefined>;
+  createMfaChallenge(userId: string): Promise<MfaChallengeInfo | undefined>;
+  verifyMfaChallenge(
+    challengeId: string,
+    token: string,
+  ): Promise<MfaVerificationResult>;
 
   // Department methods
   getDepartments(): Promise<Department[]>;
@@ -1017,9 +1050,62 @@ export interface IStorage {
 
 export class DatabaseStorage implements IStorage {
 
+  private mfaChallenges = new Map<string, MfaChallengeRecord>();
+
   private hasRecurringEmployeeEventsColumns: boolean | undefined;
 
   private loggedMissingRecurringEventColumns = false;
+
+  private pruneExpiredMfaChallenges(): void {
+    const now = Date.now();
+    for (const [id, challenge] of this.mfaChallenges) {
+      if (challenge.expiresAt.getTime() <= now) {
+        this.mfaChallenges.delete(id);
+      }
+    }
+  }
+
+  private clearMfaChallengesForUser(userId: string): void {
+    for (const [id, challenge] of this.mfaChallenges) {
+      if (challenge.userId === userId) {
+        this.mfaChallenges.delete(id);
+      }
+    }
+  }
+
+  private parseMfaMethod(method: string | null | undefined): MfaMethod | null {
+    if (!method) return null;
+    if (method === "totp" || method === "email_otp") {
+      return method;
+    }
+    return null;
+  }
+
+  private maskEmail(email: string | null | undefined): string | null {
+    if (!email) return null;
+    const [local, domain] = email.split("@");
+    if (!domain) return null;
+    const visible = local.slice(0, 1) || "*";
+    const maskedLocal = visible + "*".repeat(Math.max(local.length - 1, 1));
+    return `${maskedLocal}@${domain}`;
+  }
+
+  private async consumeBackupCode(
+    user: UserWithPermissions,
+    code: string,
+  ): Promise<boolean> {
+    const codes = user.mfaBackupCodes ?? [];
+    if (!codes.includes(code)) {
+      return false;
+    }
+    const updatedCodes = codes.filter(entry => entry !== code);
+    await db
+      .update(users)
+      .set({ mfaBackupCodes: updatedCodes })
+      .where(eq(users.id, user.id));
+    user.mfaBackupCodes = updatedCodes;
+    return true;
+  }
 
   private async fetchPermissionGrants(
     userId: string,
@@ -1082,8 +1168,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   private toSessionUser(user: UserWithPermissions): SessionUser {
-    const { passwordHash, ...rest } = user;
-    return rest;
+    const { passwordHash, mfaTotpSecret, mfaBackupCodes, ...rest } = user;
+    const codes = Array.isArray(mfaBackupCodes) ? mfaBackupCodes : [];
+    return {
+      ...rest,
+      mfa: {
+        enabled: rest.mfaEnabled ?? false,
+        method: this.parseMfaMethod(rest.mfaMethod) ?? null,
+        backupCodesRemaining: codes.length,
+      },
+    };
   }
 
   async getUserById(id: string): Promise<UserWithPermissions | undefined> {
@@ -1308,6 +1402,96 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(users.role, "admin"), eq(users.active, true)))
       .limit(1);
     return this.hydrateUser(row);
+  }
+
+  async createMfaChallenge(userId: string): Promise<MfaChallengeInfo | undefined> {
+    this.pruneExpiredMfaChallenges();
+    const user = await this.getUserById(userId);
+    if (!user || user.active === false) {
+      return undefined;
+    }
+    if (!user.mfaEnabled) {
+      return undefined;
+    }
+    const method = this.parseMfaMethod(user.mfaMethod);
+    if (!method) {
+      return undefined;
+    }
+
+    this.clearMfaChallengesForUser(user.id);
+
+    const id = randomUUID();
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + MFA_CHALLENGE_TTL_MS);
+    const record: MfaChallengeRecord = {
+      id,
+      userId: user.id,
+      method,
+      createdAt: now,
+      expiresAt,
+      attempts: 0,
+    };
+
+    if (method === "email_otp") {
+      record.code = generateNumericOtp();
+    }
+
+    this.mfaChallenges.set(id, record);
+
+    return {
+      id,
+      method,
+      expiresAt,
+      deliveryHint: method === "email_otp" ? this.maskEmail(user.email) : null,
+    };
+  }
+
+  async verifyMfaChallenge(
+    challengeId: string,
+    token: string,
+  ): Promise<MfaVerificationResult> {
+    this.pruneExpiredMfaChallenges();
+    const record = this.mfaChallenges.get(challengeId);
+    if (!record) {
+      return { success: false, reason: "not_found" };
+    }
+
+    if (record.expiresAt.getTime() <= Date.now()) {
+      this.mfaChallenges.delete(challengeId);
+      return { success: false, reason: "expired" };
+    }
+
+    const user = await this.getUserById(record.userId);
+    if (!user || user.active === false) {
+      this.mfaChallenges.delete(challengeId);
+      return { success: false, reason: "user_inactive" };
+    }
+
+    record.attempts += 1;
+    const normalizedToken = typeof token === "string" ? token.trim() : "";
+    let verified = false;
+
+    if (normalizedToken) {
+      const backupUsed = await this.consumeBackupCode(user, normalizedToken);
+      if (backupUsed) {
+        verified = true;
+      } else if (record.method === "email_otp") {
+        verified = normalizedToken === record.code;
+      } else if (record.method === "totp") {
+        verified = verifyTotpCode(user.mfaTotpSecret, normalizedToken);
+      }
+    }
+
+    if (verified) {
+      this.mfaChallenges.delete(challengeId);
+      return { success: true, user: this.toSessionUser(user) };
+    }
+
+    if (record.attempts >= MFA_MAX_ATTEMPTS) {
+      this.mfaChallenges.delete(challengeId);
+    }
+
+    return { success: false, reason: "invalid" };
   }
 
 

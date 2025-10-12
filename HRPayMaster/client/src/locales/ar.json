@@ -54,7 +54,19 @@
     "rememberMe": "تذكرني",
     "forgotPassword": "هل نسيت كلمة المرور؟",
     "capsLockOn": "مفتاح الحروف الكبيرة مفعل",
-    "hint": "استخدم بيانات المشرف الخاصة بك. في التطوير: admin / admin"
+    "hint": "استخدم بيانات المشرف الخاصة بك. في التطوير: admin / admin",
+    "mfaTitle": "المصادقة الثنائية",
+    "mfaDescriptionTotp": "أدخل الرمز المكون من 6 أرقام من تطبيق المصادقة.",
+    "mfaDescriptionEmail": "أدخل رمز التحقق المرسل إلى {{target}}.",
+    "mfaDescriptionEmailGeneric": "أدخل رمز التحقق الذي أرسلناه إلى بريدك الإلكتروني.",
+    "mfaBackupHint": "يمكنك أيضًا استخدام رمز احتياطي إذا لم تتمكن من الوصول إلى جهازك الأساسي.",
+    "mfaCodeLabel": "رمز التحقق",
+    "mfaVerify": "تحقق",
+    "mfaVerifying": "جارٍ التحقق…",
+    "mfaBack": "رجوع",
+    "mfaResend": "إعادة إرسال الرمز",
+    "mfaError": "رمز غير صالح أو منتهي الصلاحية",
+    "mfaCodeRequired": "رمز التحقق مطلوب"
   },
   "errors": {
     "loginRequired": "اسم المستخدم وكلمة المرور مطلوبة",

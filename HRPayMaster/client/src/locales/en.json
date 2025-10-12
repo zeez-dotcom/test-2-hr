@@ -54,7 +54,19 @@
     "rememberMe": "Remember me",
     "forgotPassword": "Forgot password?",
     "capsLockOn": "Caps Lock is on",
-    "hint": "Use your admin credentials. Dev default: admin / admin"
+    "hint": "Use your admin credentials. Dev default: admin / admin",
+    "mfaTitle": "Two-factor authentication",
+    "mfaDescriptionTotp": "Enter the 6-digit code from your authenticator app.",
+    "mfaDescriptionEmail": "Enter the one-time code sent to {{target}}.",
+    "mfaDescriptionEmailGeneric": "Enter the one-time code we sent to your email.",
+    "mfaBackupHint": "You can also enter a backup code if you do not have access to your primary device.",
+    "mfaCodeLabel": "Verification code",
+    "mfaVerify": "Verify",
+    "mfaVerifying": "Verifying…",
+    "mfaBack": "Back",
+    "mfaResend": "Resend code",
+    "mfaError": "Invalid or expired code",
+    "mfaCodeRequired": "Verification code is required"
   },
   "errors": {
     "loginRequired": "Username and password are required",
