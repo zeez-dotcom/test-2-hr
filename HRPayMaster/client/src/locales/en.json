@@ -410,12 +410,137 @@
     "creating": "Creating..."
   },
   "vacationsPage": {
-    "subtitle": "Manage employee vacation and time-off requests",
-    "newRequest": "Submit Vacation Request",
-    "startDate": "Start Date",
-    "endDate": "End Date",
-    "type": "Type",
-    "reasonOptional": "Reason (Optional)"
+    "header": {
+      "subtitle": "Manage employee vacation requests, accruals, and approvals"
+    },
+    "actions": {
+      "newRequest": "New Request",
+      "submitRequest": "Submit Request"
+    },
+    "dialog": {
+      "title": "Submit Vacation Request",
+      "description": "Submit a new vacation or time-off request for review."
+    },
+    "form": {
+      "startDate": "Start Date",
+      "endDate": "End Date",
+      "type": "Type",
+      "typePlaceholder": "Select type",
+      "leaveTypes": {
+        "vacation": "Vacation",
+        "sick": "Sick Leave",
+        "personal": "Personal",
+        "other": "Other"
+      },
+      "accrualPolicy": "Accrual policy",
+      "policyPlaceholder": "Select policy (optional)",
+      "noPolicy": "No policy",
+      "reasonOptional": "Reason (Optional)",
+      "reasonPlaceholder": "Brief explanation...",
+      "pauseLoans": "Pause loan deductions during this vacation",
+      "pauseAllowances": "Pause recurring allowances while on leave"
+    },
+    "balances": {
+      "title": "Leave balances",
+      "description": "Current balances across tracked leave types.",
+      "empty": "No balances recorded yet.",
+      "daysLabel": "{{value}} days",
+      "policyLabel": "Policy: {{name}}"
+    },
+    "policies": {
+      "title": "Accrual policies",
+      "description": "Create or assign monthly accrual policies.",
+      "form": {
+        "nameLabel": "Policy name",
+        "namePlaceholder": "Monthly sick accrual",
+        "leaveTypeLabel": "Leave type",
+        "leaveTypePlaceholder": "sick",
+        "accrualLabel": "Accrual (days/month)",
+        "maxBalanceLabel": "Max balance (optional)",
+        "carryoverLabel": "Carryover limit",
+        "effectiveFromLabel": "Effective from",
+        "expiresOnLabel": "Expires on",
+        "allowNegative": "Allow negative balance",
+        "submit": "Save policy"
+      },
+      "assignment": {
+        "employeeLabel": "Assign to employee",
+        "employeePlaceholder": "Select employee",
+        "policyLabel": "Policy",
+        "policyPlaceholder": "Select policy",
+        "effectiveFromLabel": "Effective from",
+        "effectiveToLabel": "Effective to",
+        "customAccrualLabel": "Custom monthly accrual",
+        "submit": "Assign policy"
+      }
+    },
+    "coverage": {
+      "title": "Upcoming coverage alerts",
+      "description": "Showing next 30 days where department vacations exceed threshold ({{threshold}}).",
+      "departmentLabel": "Dept: {{department}}",
+      "viewLink": "View",
+      "onLeave": "On leave: {{count}}",
+      "empty": "No coverage alerts"
+    },
+    "calendar": {
+      "monthCoverageTitle": "{{period}} coverage",
+      "weekDays": ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+      "onLeave": "{{count}} on leave"
+    },
+    "empty": {
+      "title": "No vacation requests",
+      "description": "Submit a vacation request to get started."
+    },
+    "requests": {
+      "markCompleted": "Mark completed",
+      "policyDetail": "Policy: {{name}} · {{type}} (monthly accrual {{rate}})",
+      "currentBalance": "Current balance:",
+      "daysLabel": "{{value}} days",
+      "approvalChain": "Approval chain",
+      "approver": "Approver: {{approver}}",
+      "unassigned": "Unassigned",
+      "status": "Status: {{status}}",
+      "delegatedTo": "· delegated to {{delegateId}}",
+      "approve": "Approve",
+      "reject": "Reject",
+      "delegate": "Delegate",
+      "noApprovalChain": "No approval chain configured.",
+      "auditTrail": "Audit trail",
+      "noAudit": "No audit events recorded.",
+      "activeAssignments": "Active policy assignments",
+      "assignmentDetail": "{{name}} · from {{start}}"
+    },
+    "errors": {
+      "submitRequest": "Failed to submit vacation request",
+      "updateRequest": "Failed to update vacation request",
+      "processApproval": "Failed to process approval step",
+      "markCompleted": "Failed to mark as completed",
+      "deleteRequest": "Failed to delete vacation request",
+      "savePolicy": "Failed to save accrual policy",
+      "assignPolicy": "Failed to assign policy",
+      "approverMissing": "Approver missing for this step",
+      "loadData": "Error loading vacation data."
+    },
+    "toasts": {
+      "requestSubmitted": "Vacation request submitted successfully",
+      "requestUpdated": "Vacation request updated",
+      "approvalUpdated": "Approval workflow updated",
+      "markedCompleted": "Vacation marked as completed",
+      "requestDeleted": "Vacation request deleted",
+      "policySaved": "Accrual policy saved",
+      "policyAssigned": "Policy assignment saved"
+    },
+    "prompts": {
+      "carAssignmentOverlap": "This employee has an active car assignment overlapping the vacation. End it the day before the vacation starts?",
+      "enterDelegate": "Enter the delegate approver ID",
+      "approvalNote": "Add an approval note?"
+    },
+    "status": {
+      "approved": "Approved",
+      "completed": "Completed",
+      "rejected": "Rejected",
+      "pending": "Pending"
+    }
   }
   ,
   "attendancePage": {
