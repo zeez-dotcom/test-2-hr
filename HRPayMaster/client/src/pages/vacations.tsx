@@ -83,7 +83,21 @@ const omitUndefined = <T extends Record<string, unknown>>(value: T): T =>
 const NO_POLICY_SENTINEL = "__no_policy__";
 
 export default function Vacations() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const leaveTypeLabels = useMemo(
+    () => ({
+      vacation: t("vacationsPage.form.leaveTypes.vacation"),
+      sick: t("vacationsPage.form.leaveTypes.sick"),
+      personal: t("vacationsPage.form.leaveTypes.personal"),
+      other: t("vacationsPage.form.leaveTypes.other"),
+    }),
+    [t],
+  );
+  const weekDays = useMemo(
+    () => t("vacationsPage.calendar.weekDays", { returnObjects: true }) as string[],
+    [t],
+  );
+  const locale = i18n.language || undefined;
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const { toast } = useToast();
 
@@ -217,14 +231,14 @@ export default function Vacations() {
     mutationFn: async (payload: any) => {
       const res = await apiPost("/api/vacations", payload);
       if (!res.ok) {
-        toastApiError(res, "Failed to submit vacation request");
+        toastApiError(res, t("vacationsPage.errors.submitRequest"));
         throw res;
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vacations"] });
       setIsCreateDialogOpen(false);
-      toast({ title: "Vacation request submitted successfully" });
+      toast({ title: t("vacationsPage.toasts.requestSubmitted") });
     },
   });
 
@@ -235,9 +249,9 @@ export default function Vacations() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vacations"] });
-      toast({ title: "Vacation request updated" });
+      toast({ title: t("vacationsPage.toasts.requestUpdated") });
     },
-    onError: err => toastApiError(err as any, "Failed to update vacation request"),
+    onError: err => toastApiError(err as any, t("vacationsPage.errors.updateRequest")),
   });
 
   const approvalMutation = useMutation({
@@ -247,9 +261,9 @@ export default function Vacations() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vacations"] });
-      toast({ title: "Approval workflow updated" });
+      toast({ title: t("vacationsPage.toasts.approvalUpdated") });
     },
-    onError: err => toastApiError(err as any, "Failed to process approval step"),
+    onError: err => toastApiError(err as any, t("vacationsPage.errors.processApproval")),
   });
 
   const markReturnedMutation = useMutation({
@@ -259,9 +273,9 @@ export default function Vacations() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vacations"] });
-      toast({ title: "Vacation marked as completed" });
+      toast({ title: t("vacationsPage.toasts.markedCompleted") });
     },
-    onError: err => toastApiError(err as any, "Failed to mark as completed"),
+    onError: err => toastApiError(err as any, t("vacationsPage.errors.markCompleted")),
   });
 
   const deleteMutation = useMutation({
@@ -271,9 +285,9 @@ export default function Vacations() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vacations"] });
-      toast({ title: "Vacation request deleted" });
+      toast({ title: t("vacationsPage.toasts.requestDeleted") });
     },
-    onError: err => toastApiError(err as any, "Failed to delete vacation request"),
+    onError: err => toastApiError(err as any, t("vacationsPage.errors.deleteRequest")),
   });
 
   const createPolicyMutation = useMutation({
@@ -290,7 +304,7 @@ export default function Vacations() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vacations/policies"] });
-      toast({ title: "Accrual policy saved" });
+      toast({ title: t("vacationsPage.toasts.policySaved") });
       policyForm.reset({
         name: "",
         leaveType: "vacation",
@@ -302,7 +316,7 @@ export default function Vacations() {
         expiresOn: "",
       });
     },
-    onError: err => toastApiError(err as any, "Failed to save accrual policy"),
+    onError: err => toastApiError(err as any, t("vacationsPage.errors.savePolicy")),
   });
 
   const assignPolicyMutation = useMutation({
@@ -316,7 +330,7 @@ export default function Vacations() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vacations/policies"] });
-      toast({ title: "Policy assignment saved" });
+      toast({ title: t("vacationsPage.toasts.policyAssigned") });
       assignmentForm.reset({
         employeeId: "",
         policyId: "",
@@ -325,7 +339,7 @@ export default function Vacations() {
         customAccrualRatePerMonth: undefined,
       });
     },
-    onError: err => toastApiError(err as any, "Failed to assign policy"),
+    onError: err => toastApiError(err as any, t("vacationsPage.errors.assignPolicy")),
   });
 
   const onSubmit = async (data: z.infer<typeof vacationRequestSchema>) => {
@@ -354,9 +368,7 @@ export default function Vacations() {
     );
 
     if (activeAssignment) {
-      const confirmEnd = window.confirm(
-        "This employee has an active car assignment overlapping the vacation. End it the day before the vacation starts?",
-      );
+      const confirmEnd = window.confirm(t("vacationsPage.prompts.carAssignmentOverlap"));
       if (confirmEnd) {
         const dayBefore = new Date(start);
         dayBefore.setDate(dayBefore.getDate() - 1);
@@ -388,19 +400,19 @@ export default function Vacations() {
   ) => {
     const actingId = step.delegatedToId ?? step.approverId;
     if (!actingId) {
-      toast({ title: "Approver missing for this step", variant: "destructive" });
+      toast({ title: t("vacationsPage.errors.approverMissing"), variant: "destructive" });
       return;
     }
 
     let delegateToId: string | undefined;
     if (action === "delegate") {
-      delegateToId = window.prompt("Enter the delegate approver ID") ?? undefined;
+      delegateToId = window.prompt(t("vacationsPage.prompts.enterDelegate")) ?? undefined;
       if (!delegateToId) {
         return;
       }
     }
 
-    const note = window.prompt("Add an approval note?") ?? undefined;
+    const note = window.prompt(t("vacationsPage.prompts.approvalNote")) ?? undefined;
     approvalMutation.mutate({
       id: request.id!,
       data: omitUndefined({
@@ -417,25 +429,25 @@ export default function Vacations() {
       case "approved":
         return (
           <Badge className="bg-green-100 text-green-800">
-            <CheckCircle className="w-3 h-3 mr-1" /> Approved
+            <CheckCircle className="w-3 h-3 mr-1" /> {t("vacationsPage.status.approved")}
           </Badge>
         );
       case "completed":
         return (
           <Badge className="bg-blue-100 text-blue-800">
-            <CheckCircle className="w-3 h-3 mr-1" /> Completed
+            <CheckCircle className="w-3 h-3 mr-1" /> {t("vacationsPage.status.completed")}
           </Badge>
         );
       case "rejected":
         return (
           <Badge variant="destructive">
-            <XCircle className="w-3 h-3 mr-1" /> Rejected
+            <XCircle className="w-3 h-3 mr-1" /> {t("vacationsPage.status.rejected")}
           </Badge>
         );
       default:
         return (
           <Badge variant="secondary">
-            <Clock className="w-3 h-3 mr-1" /> Pending
+            <Clock className="w-3 h-3 mr-1" /> {t("vacationsPage.status.pending")}
           </Badge>
         );
     }
@@ -453,7 +465,7 @@ export default function Vacations() {
   };
 
   if (vacationError || employeesError || policyError) {
-    return <div className="p-4 text-destructive">Error loading vacation data.</div>;
+    return <div className="p-4 text-destructive">{t("vacationsPage.errors.loadData")}</div>;
   }
 
   return (
@@ -461,23 +473,19 @@ export default function Vacations() {
       <div className="flex justify-between items-center flex-wrap gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{t("nav.vacations")}</h1>
-          <p className="text-muted-foreground">
-            {t("vacationsPage.subtitle", "Manage employee vacation requests, accruals, and approvals")}
-          </p>
+          <p className="text-muted-foreground">{t("vacationsPage.header.subtitle")}</p>
         </div>
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="w-4 h-4 mr-2" />
-              {t("vacationsPage.newRequest", "New Request")}
+              {t("vacationsPage.actions.newRequest")}
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[480px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>{t("vacationsPage.newRequest", "Submit Vacation Request")}</DialogTitle>
-              <DialogDescription>
-                {t("vacationsPage.subtitle", "Submit a new vacation or time-off request for review.")}
-              </DialogDescription>
+              <DialogTitle>{t("vacationsPage.dialog.title")}</DialogTitle>
+              <DialogDescription>{t("vacationsPage.dialog.description")}</DialogDescription>
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -514,7 +522,7 @@ export default function Vacations() {
                     name="start"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{t("vacationsPage.startDate", "Start Date")}</FormLabel>
+                        <FormLabel>{t("vacationsPage.form.startDate")}</FormLabel>
                         <FormControl>
                           <Input type="date" {...field} />
                         </FormControl>
@@ -527,7 +535,7 @@ export default function Vacations() {
                     name="end"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{t("vacationsPage.endDate", "End Date")}</FormLabel>
+                        <FormLabel>{t("vacationsPage.form.endDate")}</FormLabel>
                         <FormControl>
                           <Input type="date" {...field} />
                         </FormControl>
@@ -542,18 +550,18 @@ export default function Vacations() {
                   name="leaveType"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t("vacationsPage.type", "Type")}</FormLabel>
+                      <FormLabel>{t("vacationsPage.form.type")}</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value || undefined}>
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder={t("vacationsPage.type", "Type")} />
+                            <SelectValue placeholder={t("vacationsPage.form.typePlaceholder")} />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="vacation">Vacation</SelectItem>
-                          <SelectItem value="sick">Sick Leave</SelectItem>
-                          <SelectItem value="personal">Personal</SelectItem>
-                          <SelectItem value="other">Other</SelectItem>
+                          <SelectItem value="vacation">{leaveTypeLabels.vacation}</SelectItem>
+                          <SelectItem value="sick">{leaveTypeLabels.sick}</SelectItem>
+                          <SelectItem value="personal">{leaveTypeLabels.personal}</SelectItem>
+                          <SelectItem value="other">{leaveTypeLabels.other}</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -566,18 +574,18 @@ export default function Vacations() {
                   name="appliesPolicyId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Accrual policy</FormLabel>
+                      <FormLabel>{t("vacationsPage.form.accrualPolicy")}</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value || undefined}>
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="Select policy (optional)" />
+                            <SelectValue placeholder={t("vacationsPage.form.policyPlaceholder")} />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value={NO_POLICY_SENTINEL}>No policy</SelectItem>
+                          <SelectItem value={NO_POLICY_SENTINEL}>{t("vacationsPage.form.noPolicy")}</SelectItem>
                           {policies.map(policy => (
                             <SelectItem key={policy.id} value={policy.id}>
-                              {policy.name} · {policy.leaveType}
+                              {policy.name} · {leaveTypeLabels[policy.leaveType as keyof typeof leaveTypeLabels] ?? policy.leaveType}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -592,9 +600,13 @@ export default function Vacations() {
                   name="reason"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t("vacationsPage.reasonOptional", "Reason (Optional)")}</FormLabel>
+                      <FormLabel>{t("vacationsPage.form.reasonOptional")}</FormLabel>
                       <FormControl>
-                        <Textarea placeholder="Brief explanation..." {...field} value={field.value || ""} />
+                        <Textarea
+                          placeholder={t("vacationsPage.form.reasonPlaceholder")}
+                          {...field}
+                          value={field.value || ""}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -609,7 +621,7 @@ export default function Vacations() {
                       <FormControl>
                         <Checkbox checked={!!field.value} onCheckedChange={value => field.onChange(Boolean(value))} />
                       </FormControl>
-                      <FormLabel className="!m-0">Pause loan deductions during this vacation</FormLabel>
+                      <FormLabel className="!m-0">{t("vacationsPage.form.pauseLoans")}</FormLabel>
                     </FormItem>
                   )}
                 />
@@ -622,14 +634,14 @@ export default function Vacations() {
                       <FormControl>
                         <Checkbox checked={!!field.value} onCheckedChange={value => field.onChange(Boolean(value))} />
                       </FormControl>
-                      <FormLabel className="!m-0">Pause recurring allowances while on leave</FormLabel>
+                      <FormLabel className="!m-0">{t("vacationsPage.form.pauseAllowances")}</FormLabel>
                     </FormItem>
                   )}
                 />
 
                 <DialogFooter>
                   <Button type="submit" disabled={createMutation.isPending}>
-                    {createMutation.isPending ? t("actions.save") : t("vacationsPage.newRequest", "Submit Request")}
+                    {createMutation.isPending ? t("actions.save") : t("vacationsPage.actions.submitRequest")}
                   </Button>
                 </DialogFooter>
               </form>
@@ -641,12 +653,12 @@ export default function Vacations() {
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Leave balances</CardTitle>
-            <CardDescription>Current balances across tracked leave types.</CardDescription>
+            <CardTitle>{t("vacationsPage.balances.title")}</CardTitle>
+            <CardDescription>{t("vacationsPage.balances.description")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {leaveBalances.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No balances recorded yet.</p>
+              <p className="text-sm text-muted-foreground">{t("vacationsPage.balances.empty")}</p>
             ) : (
               <div className="space-y-2 text-sm">
                 {leaveBalances.map(balance => {
@@ -661,13 +673,21 @@ export default function Vacations() {
                           {employee?.firstName} {employee?.lastName}
                         </div>
                         <div className="text-muted-foreground">
-                          {balance.leaveType} · {balance.year}
+                          {`${leaveTypeLabels[balance.leaveType as keyof typeof leaveTypeLabels] ?? balance.leaveType} · ${balance.year}`}
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="font-semibold">{Number(balance.balanceDays).toFixed(2)} days</div>
+                        <div className="font-semibold">
+                          {t("vacationsPage.balances.daysLabel", {
+                            value: Number(balance.balanceDays).toFixed(2),
+                          })}
+                        </div>
                         {balance.policyId && (
-                          <div className="text-xs text-muted-foreground">Policy: {policyMap.get(balance.policyId)?.name ?? balance.policyId}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {t("vacationsPage.balances.policyLabel", {
+                              name: policyMap.get(balance.policyId)?.name ?? balance.policyId,
+                            })}
+                          </div>
                         )}
                       </div>
                     </div>
@@ -680,8 +700,8 @@ export default function Vacations() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Accrual policies</CardTitle>
-            <CardDescription>Create or assign monthly accrual policies.</CardDescription>
+            <CardTitle>{t("vacationsPage.policies.title")}</CardTitle>
+            <CardDescription>{t("vacationsPage.policies.description")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <Form {...policyForm}>
@@ -694,9 +714,9 @@ export default function Vacations() {
                   name="name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Policy name</FormLabel>
+                      <FormLabel>{t("vacationsPage.policies.form.nameLabel")}</FormLabel>
                       <FormControl>
-                        <Input {...field} placeholder="Monthly sick accrual" />
+                        <Input {...field} placeholder={t("vacationsPage.policies.form.namePlaceholder")} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -708,9 +728,9 @@ export default function Vacations() {
                     name="leaveType"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Leave type</FormLabel>
+                        <FormLabel>{t("vacationsPage.policies.form.leaveTypeLabel")}</FormLabel>
                         <FormControl>
-                          <Input {...field} placeholder="sick" />
+                          <Input {...field} placeholder={t("vacationsPage.policies.form.leaveTypePlaceholder")} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -721,7 +741,7 @@ export default function Vacations() {
                     name="accrualRatePerMonth"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Accrual (days/month)</FormLabel>
+                        <FormLabel>{t("vacationsPage.policies.form.accrualLabel")}</FormLabel>
                         <FormControl>
                           <Input type="number" step="0.01" {...field} />
                         </FormControl>
@@ -736,7 +756,7 @@ export default function Vacations() {
                     name="maxBalanceDays"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Max balance (optional)</FormLabel>
+                        <FormLabel>{t("vacationsPage.policies.form.maxBalanceLabel")}</FormLabel>
                         <FormControl>
                           <Input type="number" step="0.01" {...field} />
                         </FormControl>
@@ -749,7 +769,7 @@ export default function Vacations() {
                     name="carryoverLimitDays"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Carryover limit</FormLabel>
+                        <FormLabel>{t("vacationsPage.policies.form.carryoverLabel")}</FormLabel>
                         <FormControl>
                           <Input type="number" step="0.01" {...field} />
                         </FormControl>
@@ -764,7 +784,7 @@ export default function Vacations() {
                     name="effectiveFrom"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Effective from</FormLabel>
+                        <FormLabel>{t("vacationsPage.policies.form.effectiveFromLabel")}</FormLabel>
                         <FormControl>
                           <Input type="date" {...field} />
                         </FormControl>
@@ -777,7 +797,7 @@ export default function Vacations() {
                     name="expiresOn"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Expires on</FormLabel>
+                        <FormLabel>{t("vacationsPage.policies.form.expiresOnLabel")}</FormLabel>
                         <FormControl>
                           <Input type="date" {...field} />
                         </FormControl>
@@ -794,13 +814,13 @@ export default function Vacations() {
                       <FormControl>
                         <Checkbox checked={!!field.value} onCheckedChange={value => field.onChange(Boolean(value))} />
                       </FormControl>
-                      <FormLabel className="!m-0">Allow negative balance</FormLabel>
+                      <FormLabel className="!m-0">{t("vacationsPage.policies.form.allowNegative")}</FormLabel>
                     </FormItem>
                   )}
                 />
                 <div className="flex justify-end">
                   <Button type="submit" disabled={createPolicyMutation.isPending}>
-                    Save policy
+                    {t("vacationsPage.policies.form.submit")}
                   </Button>
                 </div>
               </form>
@@ -816,11 +836,11 @@ export default function Vacations() {
                   name="employeeId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Assign to employee</FormLabel>
+                      <FormLabel>{t("vacationsPage.policies.assignment.employeeLabel")}</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value || undefined}>
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="Select employee" />
+                            <SelectValue placeholder={t("vacationsPage.policies.assignment.employeePlaceholder")} />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
@@ -842,11 +862,11 @@ export default function Vacations() {
                   name="policyId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Policy</FormLabel>
+                      <FormLabel>{t("vacationsPage.policies.assignment.policyLabel")}</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value || undefined}>
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="Select policy" />
+                            <SelectValue placeholder={t("vacationsPage.policies.assignment.policyPlaceholder")} />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
@@ -867,7 +887,7 @@ export default function Vacations() {
                     name="effectiveFrom"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Effective from</FormLabel>
+                        <FormLabel>{t("vacationsPage.policies.assignment.effectiveFromLabel")}</FormLabel>
                         <FormControl>
                           <Input type="date" {...field} />
                         </FormControl>
@@ -880,7 +900,7 @@ export default function Vacations() {
                     name="effectiveTo"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Effective to</FormLabel>
+                        <FormLabel>{t("vacationsPage.policies.assignment.effectiveToLabel")}</FormLabel>
                         <FormControl>
                           <Input type="date" {...field} />
                         </FormControl>
@@ -894,7 +914,7 @@ export default function Vacations() {
                   name="customAccrualRatePerMonth"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Custom monthly accrual</FormLabel>
+                      <FormLabel>{t("vacationsPage.policies.assignment.customAccrualLabel")}</FormLabel>
                       <FormControl>
                         <Input type="number" step="0.01" {...field} />
                       </FormControl>
@@ -904,7 +924,7 @@ export default function Vacations() {
                 />
                 <div className="flex justify-end">
                   <Button type="submit" disabled={assignPolicyMutation.isPending}>
-                    Assign policy
+                    {t("vacationsPage.policies.assignment.submit")}
                   </Button>
                 </div>
               </form>
@@ -916,9 +936,9 @@ export default function Vacations() {
       {coverage && (
         <Card>
           <CardContent className="p-4">
-            <h2 className="text-lg font-semibold mb-2">Upcoming coverage alerts</h2>
+            <h2 className="text-lg font-semibold mb-2">{t("vacationsPage.coverage.title")}</h2>
             <p className="text-sm text-muted-foreground mb-3">
-              Showing next 30 days where department vacations exceed threshold ({coverage.threshold}).
+              {t("vacationsPage.coverage.description", { threshold: coverage.threshold })}
             </p>
             <div className="space-y-2 text-sm">
               {Object.entries(coverage.coverage).flatMap(([date, byDept]: any) =>
@@ -926,23 +946,27 @@ export default function Vacations() {
                   .filter(([, count]: any) => (count as number) >= coverage.threshold)
                   .map(([deptId, count]: any) => (
                     <div key={`${date}-${deptId}`} className="flex justify-between border rounded p-2">
-                      <div>{new Date(date).toLocaleDateString()}</div>
+                      <div>{new Date(date).toLocaleDateString(locale)}</div>
                       <div>
-                        Dept: {coverage.departments?.[deptId] ?? deptId}
+                        {t("vacationsPage.coverage.departmentLabel", {
+                          department: coverage.departments?.[deptId] ?? deptId,
+                        })}
                         <a
                           className="ml-2 text-blue-600 underline"
                           href={`/people?tab=departments&deptId=${encodeURIComponent(String(deptId))}`}
                         >
-                          View
+                          {t("vacationsPage.coverage.viewLink")}
                         </a>
                       </div>
-                      <div className="font-medium">On leave: {count}</div>
+                      <div className="font-medium">
+                        {t("vacationsPage.coverage.onLeave", { count })}
+                      </div>
                     </div>
                   )),
               )}
               {Object.entries(coverage.coverage).every(([_, byDept]: any) =>
                 Object.values(byDept as any).every((count: any) => (count as number) < coverage.threshold),
-              ) && <div className="text-muted-foreground">No coverage alerts</div>}
+              ) && <div className="text-muted-foreground">{t("vacationsPage.coverage.empty")}</div>}
             </div>
           </CardContent>
         </Card>
@@ -952,10 +976,12 @@ export default function Vacations() {
         <Card>
           <CardContent className="p-4">
             <h2 className="text-lg font-semibold mb-2">
-              {monthStart.toLocaleString(undefined, { month: "long", year: "numeric" })} coverage
+              {t("vacationsPage.calendar.monthCoverageTitle", {
+                period: monthStart.toLocaleString(locale, { month: "long", year: "numeric" }),
+              })}
             </h2>
             <div className="grid grid-cols-7 gap-2 text-center text-sm">
-              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
+              {weekDays.map(day => (
                 <div key={day} className="text-muted-foreground">
                   {day}
                 </div>
@@ -984,7 +1010,7 @@ export default function Vacations() {
                   >
                     <div className="text-xs font-medium">{day}</div>
                     <div className={`text-xs ${over ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
-                      {total} on leave
+                      {t("vacationsPage.calendar.onLeave", { count: total })}
                     </div>
                   </div>
                 );
@@ -1013,8 +1039,8 @@ export default function Vacations() {
             <Card>
               <CardContent className="p-6 text-center space-y-2">
                 <Calendar className="mx-auto h-12 w-12 text-muted-foreground" />
-                <h3 className="text-lg font-medium">No vacation requests</h3>
-                <p className="text-muted-foreground">Submit a vacation request to get started.</p>
+                <h3 className="text-lg font-medium">{t("vacationsPage.empty.title")}</h3>
+                <p className="text-muted-foreground">{t("vacationsPage.empty.description")}</p>
               </CardContent>
             </Card>
           ) : (
@@ -1047,7 +1073,7 @@ export default function Vacations() {
                             onClick={() => markReturnedMutation.mutate({ id: request.id! })}
                             disabled={markReturnedMutation.isPending}
                           >
-                            <CheckCircle className="w-3 h-3 mr-1" /> Mark completed
+                            <CheckCircle className="w-3 h-3 mr-1" /> {t("vacationsPage.requests.markCompleted")}
                           </Button>
                         )}
                         <Button
@@ -1069,20 +1095,27 @@ export default function Vacations() {
 
                     {request.policy && (
                       <div className="text-sm text-muted-foreground">
-                        Policy: {request.policy.name} · {request.policy.leaveType} (monthly accrual {request.policy.accrualRatePerMonth}
-                        )
+                        {t("vacationsPage.requests.policyDetail", {
+                          name: request.policy.name,
+                          type: leaveTypeLabels[request.policy.leaveType as keyof typeof leaveTypeLabels] ??
+                            request.policy.leaveType,
+                          rate: request.policy.accrualRatePerMonth,
+                        })}
                       </div>
                     )}
 
                     {balance && (
                       <div className="text-sm">
-                        <span className="font-medium">Current balance:</span> {Number(balance.balanceDays).toFixed(2)} days
+                        <span className="font-medium">{t("vacationsPage.requests.currentBalance")}</span>{" "}
+                        {t("vacationsPage.requests.daysLabel", {
+                          value: Number(balance.balanceDays).toFixed(2),
+                        })}
                       </div>
                     )}
 
                     <div className="space-y-2">
                       <h4 className="text-sm font-semibold flex items-center space-x-2">
-                        <span>Approval chain</span>
+                        <span>{t("vacationsPage.requests.approvalChain")}</span>
                       </h4>
                       <div className="space-y-2">
                         {(request.approvalChain as VacationApprovalStep[] | undefined)?.length ? (
@@ -1092,10 +1125,20 @@ export default function Vacations() {
                               className="flex items-center justify-between rounded border p-2"
                             >
                               <div>
-                                <div className="font-medium">Approver: {step.approverId || "Unassigned"}</div>
+                                <div className="font-medium">
+                                  {t("vacationsPage.requests.approver", {
+                                    approver: step.approverId || t("vacationsPage.requests.unassigned"),
+                                  })}
+                                </div>
                                 <div className="text-xs text-muted-foreground">
-                                  Status: {step.status}
-                                  {step.delegatedToId ? ` · delegated to ${step.delegatedToId}` : ""}
+                                  {t("vacationsPage.requests.status", {
+                                    status: t(`vacationsPage.status.${step.status as "approved"}`, {
+                                      defaultValue: step.status,
+                                    }),
+                                  })}
+                                  {step.delegatedToId
+                                    ? ` ${t("vacationsPage.requests.delegatedTo", { delegateId: step.delegatedToId })}`
+                                    : ""}
                                 </div>
                               </div>
                               <div className="flex items-center space-x-2">
@@ -1107,7 +1150,7 @@ export default function Vacations() {
                                       onClick={() => handleApprovalAction(request, step, "approve")}
                                       disabled={approvalMutation.isPending}
                                     >
-                                      Approve
+                                      {t("vacationsPage.requests.approve")}
                                     </Button>
                                     <Button
                                       size="sm"
@@ -1115,7 +1158,7 @@ export default function Vacations() {
                                       onClick={() => handleApprovalAction(request, step, "reject")}
                                       disabled={approvalMutation.isPending}
                                     >
-                                      Reject
+                                      {t("vacationsPage.requests.reject")}
                                     </Button>
                                     <Button
                                       size="sm"
@@ -1123,7 +1166,7 @@ export default function Vacations() {
                                       onClick={() => handleApprovalAction(request, step, "delegate")}
                                       disabled={approvalMutation.isPending}
                                     >
-                                      Delegate
+                                      {t("vacationsPage.requests.delegate")}
                                     </Button>
                                   </>
                                 )}
@@ -1131,13 +1174,13 @@ export default function Vacations() {
                             </div>
                           ))
                         ) : (
-                          <p className="text-sm text-muted-foreground">No approval chain configured.</p>
+                          <p className="text-sm text-muted-foreground">{t("vacationsPage.requests.noApprovalChain")}</p>
                         )}
                       </div>
                     </div>
 
                     <div className="space-y-2">
-                      <h4 className="text-sm font-semibold">Audit trail</h4>
+                      <h4 className="text-sm font-semibold">{t("vacationsPage.requests.auditTrail")}</h4>
                       <div className="space-y-1 text-xs text-muted-foreground">
                         {(request.auditLog as VacationAuditLogEntry[] | undefined)?.length ? (
                           (request.auditLog as VacationAuditLogEntry[]).map(entry => (
@@ -1150,17 +1193,20 @@ export default function Vacations() {
                             </div>
                           ))
                         ) : (
-                          <p>No audit events recorded.</p>
+                          <p>{t("vacationsPage.requests.noAudit")}</p>
                         )}
                       </div>
                     </div>
 
                     {assignmentsForEmployee.length > 0 && (
                       <div className="space-y-1 text-xs text-muted-foreground">
-                        <div className="font-semibold text-sm">Active policy assignments</div>
+                        <div className="font-semibold text-sm">{t("vacationsPage.requests.activeAssignments")}</div>
                         {assignmentsForEmployee.map(assignment => (
                           <div key={assignment.id}>
-                            {policyMap.get(assignment.policyId)?.name ?? assignment.policyId} · from {assignment.effectiveFrom}
+                            {t("vacationsPage.requests.assignmentDetail", {
+                              name: policyMap.get(assignment.policyId)?.name ?? assignment.policyId,
+                              start: assignment.effectiveFrom,
+                            })}
                           </div>
                         ))}
                       </div>

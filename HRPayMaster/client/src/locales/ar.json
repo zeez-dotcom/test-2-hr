@@ -410,12 +410,137 @@
     "creating": "جاري الإنشاء..."
   },
   "vacationsPage": {
-    "subtitle": "إدارة طلبات الإجازات",
-    "newRequest": "تقديم طلب إجازة",
-    "startDate": "تاريخ البدء",
-    "endDate": "تاريخ الانتهاء",
-    "type": "النوع",
-    "reasonOptional": "السبب (اختياري)"
+    "header": {
+      "subtitle": "إدارة طلبات الإجازات، الأرصدة، وسير الموافقات"
+    },
+    "actions": {
+      "newRequest": "طلب جديد",
+      "submitRequest": "إرسال الطلب"
+    },
+    "dialog": {
+      "title": "تقديم طلب إجازة",
+      "description": "أرسل طلب إجازة أو وقت مستقطع للمراجعة."
+    },
+    "form": {
+      "startDate": "تاريخ البدء",
+      "endDate": "تاريخ الانتهاء",
+      "type": "النوع",
+      "typePlaceholder": "اختر النوع",
+      "leaveTypes": {
+        "vacation": "إجازة اعتيادية",
+        "sick": "إجازة مرضية",
+        "personal": "إجازة شخصية",
+        "other": "أخرى"
+      },
+      "accrualPolicy": "سياسة الاحتساب",
+      "policyPlaceholder": "اختر السياسة (اختياري)",
+      "noPolicy": "بدون سياسة",
+      "reasonOptional": "السبب (اختياري)",
+      "reasonPlaceholder": "شرح مختصر...",
+      "pauseLoans": "إيقاف خصومات القروض أثناء الإجازة",
+      "pauseAllowances": "إيقاف البدلات المتكررة أثناء الإجازة"
+    },
+    "balances": {
+      "title": "أرصدة الإجازات",
+      "description": "الأرصدة الحالية لأنواع الإجازات المتابعة.",
+      "empty": "لا توجد أرصدة مسجلة بعد.",
+      "daysLabel": "{{value}} يومًا",
+      "policyLabel": "السياسة: {{name}}"
+    },
+    "policies": {
+      "title": "سياسات الاحتساب",
+      "description": "إنشاء أو إسناد سياسات احتساب شهرية.",
+      "form": {
+        "nameLabel": "اسم السياسة",
+        "namePlaceholder": "احتساب مرضي شهري",
+        "leaveTypeLabel": "نوع الإجازة",
+        "leaveTypePlaceholder": "مرضي",
+        "accrualLabel": "الاحتساب (أيام/شهر)",
+        "maxBalanceLabel": "الحد الأقصى للرصيد (اختياري)",
+        "carryoverLabel": "حد الترحيل",
+        "effectiveFromLabel": "سريان من",
+        "expiresOnLabel": "ينتهي في",
+        "allowNegative": "السماح برصيد سالب",
+        "submit": "حفظ السياسة"
+      },
+      "assignment": {
+        "employeeLabel": "إسناد إلى موظف",
+        "employeePlaceholder": "اختر الموظف",
+        "policyLabel": "السياسة",
+        "policyPlaceholder": "اختر السياسة",
+        "effectiveFromLabel": "سريان من",
+        "effectiveToLabel": "سريان إلى",
+        "customAccrualLabel": "احتساب شهري مخصص",
+        "submit": "إسناد السياسة"
+      }
+    },
+    "coverage": {
+      "title": "تنبيهات التغطية القادمة",
+      "description": "عرض 30 يومًا القادمة التي تتجاوز فيها إجازات الأقسام الحد ({{threshold}}).",
+      "departmentLabel": "القسم: {{department}}",
+      "viewLink": "عرض",
+      "onLeave": "في إجازة: {{count}}",
+      "empty": "لا توجد تنبيهات تغطية"
+    },
+    "calendar": {
+      "monthCoverageTitle": "تغطية {{period}}",
+      "weekDays": ["أحد", "إثن", "ثلث", "أرب", "خمس", "جمع", "سبت"],
+      "onLeave": "{{count}} في إجازة"
+    },
+    "empty": {
+      "title": "لا توجد طلبات إجازة",
+      "description": "أرسل طلب إجازة لبدء المتابعة."
+    },
+    "requests": {
+      "markCompleted": "تعيين كمكتملة",
+      "policyDetail": "السياسة: {{name}} · {{type}} (احتساب شهري {{rate}})",
+      "currentBalance": "الرصيد الحالي:",
+      "daysLabel": "{{value}} يومًا",
+      "approvalChain": "سلسلة الموافقات",
+      "approver": "المعتمد: {{approver}}",
+      "unassigned": "غير محدد",
+      "status": "الحالة: {{status}}",
+      "delegatedTo": "· فُوضت إلى {{delegateId}}",
+      "approve": "اعتماد",
+      "reject": "رفض",
+      "delegate": "تفويض",
+      "noApprovalChain": "لا توجد سلسلة موافقات مضبوطة.",
+      "auditTrail": "سجل التغييرات",
+      "noAudit": "لم يتم تسجيل أحداث تدقيق.",
+      "activeAssignments": "تعيينات السياسات النشطة",
+      "assignmentDetail": "{{name}} · من {{start}}"
+    },
+    "errors": {
+      "submitRequest": "فشل في إرسال طلب الإجازة",
+      "updateRequest": "فشل في تحديث طلب الإجازة",
+      "processApproval": "تعذر معالجة خطوة الموافقة",
+      "markCompleted": "فشل في وضع الحالة كمكتملة",
+      "deleteRequest": "فشل في حذف طلب الإجازة",
+      "savePolicy": "فشل في حفظ سياسة الاحتساب",
+      "assignPolicy": "فشل في إسناد السياسة",
+      "approverMissing": "لا يوجد معتمد لهذه الخطوة",
+      "loadData": "حدث خطأ أثناء تحميل بيانات الإجازات."
+    },
+    "toasts": {
+      "requestSubmitted": "تم إرسال طلب الإجازة بنجاح",
+      "requestUpdated": "تم تحديث طلب الإجازة",
+      "approvalUpdated": "تم تحديث سير الموافقات",
+      "markedCompleted": "تم وضع الإجازة كمكتملة",
+      "requestDeleted": "تم حذف طلب الإجازة",
+      "policySaved": "تم حفظ سياسة الاحتساب",
+      "policyAssigned": "تم حفظ إسناد السياسة"
+    },
+    "prompts": {
+      "carAssignmentOverlap": "لدى هذا الموظف تخصيص سيارة نشط يتداخل مع الإجازة. هل ترغب بإنهائه في اليوم السابق لبداية الإجازة؟",
+      "enterDelegate": "أدخل رقم المعتمد المفوض",
+      "approvalNote": "إضافة ملاحظة للموافقة؟"
+    },
+    "status": {
+      "approved": "معتمد",
+      "completed": "مكتمل",
+      "rejected": "مرفوض",
+      "pending": "قيد الانتظار"
+    }
   }
   ,
   "attendancePage": {
