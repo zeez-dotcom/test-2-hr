@@ -340,7 +340,7 @@ export default function Reports() {
     carAssignmentsError ||
     payrollByDeptError
   ) {
-    return <div>Error loading reports data</div>;
+    return <div>{t('reports.errorLoadingData', 'Error loading reports data')}</div>;
   }
 
   // Generate year options (last 5 years)
@@ -407,7 +407,11 @@ export default function Reports() {
   const generateIndividualEmployeeReport = async (employeeId: string) => {
     const employee = employees?.find(emp => emp.id === employeeId);
     if (!employee) {
-      toast({ title: "Error", description: "Employee not found", variant: "destructive" });
+      toast({
+        title: t('reports.errorTitle', 'Error'),
+        description: t('reports.employeeNotFound', 'Employee not found'),
+        variant: "destructive",
+      });
       return;
     }
     const employeeEvents = filteredEvents.filter(event => event.employeeId === employeeId);
@@ -438,8 +442,8 @@ export default function Reports() {
 
     if (!filteredEmployees || filteredEmployees.length === 0) {
       toast({
-        title: "No Data",
-        description: "No employees found matching the selected criteria",
+        title: t('reports.noDataTitle', 'No Data'),
+        description: t('reports.noEmployeesMatch', 'No employees found matching the selected criteria'),
         variant: "destructive",
       });
       return;
@@ -456,8 +460,8 @@ export default function Reports() {
   const generateSalaryReport = () => {
     if (!payrollRuns || payrollRuns.length === 0) {
       toast({
-        title: "No Data",
-        description: "No payroll data available for salary report",
+        title: t('reports.noDataTitle', 'No Data'),
+        description: t('reports.noPayrollDataForReport', 'No payroll data available for salary report'),
         variant: "destructive",
       });
       return;
@@ -473,12 +477,15 @@ export default function Reports() {
         return { period: run.period, netPay: net, change };
       });
       setSalaryReport(trends);
-      toast({ title: "Success", description: "Salary report generated" });
+      toast({
+        title: t('reports.successTitle', 'Success'),
+        description: t('reports.salaryReportGenerated', 'Salary report generated'),
+      });
     } catch (err) {
       console.error(err);
       toast({
-        title: "Error",
-        description: "Failed to generate salary report",
+        title: t('reports.errorTitle', 'Error'),
+        description: t('reports.salaryReportFailed', 'Failed to generate salary report'),
         variant: "destructive",
       });
     }
@@ -676,7 +683,7 @@ export default function Reports() {
               <div className="flex justify-between items-center mt-6 pt-4 border-t">
                 <div className="flex items-center space-x-4 text-sm text-gray-600">
                   <span>{t('reports.foundEvents','Found')} {filteredEvents.length} {t('reports.events','events')}</span>
-                  <span>•</span>
+                  <span>{t('reports.separatorBullet', '•')}</span>
                   <span>{selectedEmployee === "all" ? employees?.length || 0 : 1} {t('reports.employees','employees')}</span>
                 </div>
                 <Button onClick={generateEmployeeHistoryReport} className="flex items-center gap-2">
@@ -697,7 +704,7 @@ export default function Reports() {
                     <p className="text-2xl font-bold">
                       {selectedEmployee === "all" ? employees?.length || 0 : 1}
                     </p>
-                    <p className="text-xs text-muted-foreground">Employees</p>
+                    <p className="text-xs text-muted-foreground">{t('reports.summaryEmployeesLabel', 'Employees')}</p>
                   </div>
                 </div>
               </CardContent>
@@ -715,7 +722,7 @@ export default function Reports() {
                           .reduce((sum, event) => sum + parseFloat(event.amount || "0"), 0)
                       )}
                     </p>
-                    <p className="text-xs text-muted-foreground">Total Bonuses</p>
+                    <p className="text-xs text-muted-foreground">{t('reports.totalBonusesLabel', 'Total Bonuses')}</p>
                   </div>
                 </div>
               </CardContent>
@@ -733,7 +740,7 @@ export default function Reports() {
                           .reduce((sum, event) => sum + parseFloat(event.amount || "0"), 0)
                       )}
                     </p>
-                    <p className="text-xs text-muted-foreground">Total Deductions</p>
+                    <p className="text-xs text-muted-foreground">{t('reports.totalDeductionsLabel', 'Total Deductions')}</p>
                   </div>
                 </div>
               </CardContent>
@@ -747,7 +754,7 @@ export default function Reports() {
                     <p className="text-2xl font-bold">
                       {filteredEvents.filter(event => event.eventType === "vacation").length}
                     </p>
-                    <p className="text-xs text-muted-foreground">Vacation Events</p>
+                    <p className="text-xs text-muted-foreground">{t('reports.vacationEventsLabel', 'Vacation Events')}</p>
                   </div>
                 </div>
               </CardContent>
