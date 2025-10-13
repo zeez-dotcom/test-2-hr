@@ -648,7 +648,57 @@
     "details": "Payroll Details",
     "edit": "Edit Payroll (Excel-like)",
     "deleteTitle": "Delete Payroll Run",
-    "deleteDesc": "Are you sure you want to delete this payroll run?"
+    "deleteDesc": "Are you sure you want to delete this payroll run?",
+    "toolbar": {
+      "copy": "Copy",
+      "copyTooltip": "Copy the value of the active cell",
+      "copyToastTitle": "Copied",
+      "copyToastDescription": "Value \"{{value}}\" copied to clipboard",
+      "paste": "Paste",
+      "pasteTooltip": "Paste into the active cell",
+      "pasteToastTitle": "Pasted",
+      "pasteToastDescription": "Value \"{{value}}\" pasted",
+      "undo": "Undo",
+      "undoTooltip": "Undo the most recent change",
+      "redo": "Redo",
+      "redoTooltip": "Redo the last undone change",
+      "employeeCount": "{{count}} employees",
+      "smartEditing": "Smart editing enabled"
+    },
+    "columns": {
+      "employee": "Employee",
+      "baseSalary": "Base Salary",
+      "workingDaysAdjustment": "Working Days Adjustment",
+      "workingDays": "Working Days",
+      "vacationDays": "Vacation Days",
+      "allowances": "Allowances",
+      "deductions": "Deductions",
+      "netPay": "Net Pay",
+      "status": "Status",
+      "tooltips": {
+        "vacationDays": "Click to add vacation days",
+        "deduction": "Click to add deduction",
+        "default": "Click to edit"
+      }
+    },
+    "summaries": {
+      "employeeCode": "Code: {{code}}",
+      "noAllowances": "—",
+      "health": {
+        "healthy": "Healthy",
+        "moderate": "Moderate",
+        "highDeductions": "High Deductions"
+      }
+    },
+    "messages": {
+      "success": "Success",
+      "updateEntrySuccess": "Payroll entry updated successfully",
+      "updateEntryError": "Failed to update payroll entry",
+      "undoSuccess": "Change reverted successfully",
+      "redoSuccess": "Change reapplied successfully",
+      "undoError": "Failed to undo change",
+      "redoError": "Failed to redo change"
+    }
   }
   ,
   "cars": {
