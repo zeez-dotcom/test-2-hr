@@ -1422,23 +1422,27 @@ export default function Cars() {
         <TabsContent value="maintenance" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Vehicles in Maintenance</CardTitle>
-              <CardDescription>Fleet vehicles currently out of service for maintenance.</CardDescription>
+              <CardTitle>{t('cars.maintenance.title', 'Vehicles in Maintenance')}</CardTitle>
+              <CardDescription>
+                {t('cars.maintenance.description', 'Fleet vehicles currently out of service for maintenance.')}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {maintenanceCars.length > 0 ? (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Vehicle</TableHead>
-                      <TableHead>Assignment</TableHead>
-                      <TableHead>Dates</TableHead>
-                      <TableHead>Notes</TableHead>
+                      <TableHead>{t('cars.maintenance.vehicleHeader', 'Vehicle')}</TableHead>
+                      <TableHead>{t('cars.maintenance.assignmentHeader', 'Assignment')}</TableHead>
+                      <TableHead>{t('cars.maintenance.datesHeader', 'Dates')}</TableHead>
+                      <TableHead>{t('cars.maintenance.notesHeader', 'Notes')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {maintenanceCars.map((car) => {
-                      const vehicleName = [car.year, car.make, car.model].filter(Boolean).join(" ") || "Vehicle";
+                      const vehicleName =
+                        [car.year, car.make, car.model].filter(Boolean).join(" ") ||
+                        t('cars.maintenance.vehicleFallback', 'Vehicle');
                       const plateDetails = [car.plateNumber, car.vin].filter(Boolean).join(" • ");
                       const assignedEmployee = car.currentAssignment?.employee
                         ? `${car.currentAssignment.employee.firstName ?? ""} ${car.currentAssignment.employee.lastName ?? ""}`.trim()
@@ -1450,7 +1454,7 @@ export default function Cars() {
                           <TableCell>
                             <div className="font-medium">{vehicleName}</div>
                             <div className="text-sm text-muted-foreground">
-                              {plateDetails || "No plate or VIN provided"}
+                              {plateDetails || t('cars.maintenance.noPlate', 'No plate or VIN provided')}
                             </div>
                             <div className="mt-2">{getStatusBadge(car.status)}</div>
                           </TableCell>
@@ -1465,18 +1469,36 @@ export default function Cars() {
                                 )}
                               </div>
                             ) : (
-                              <span className="text-sm text-muted-foreground">Not currently assigned</span>
+                              <span className="text-sm text-muted-foreground">
+                                {t('cars.maintenance.unassigned', 'Not currently assigned')}
+                              </span>
                             )}
                           </TableCell>
                           <TableCell>
                             <div className="space-y-1 text-sm">
-                              <div>Assigned: {formatDateSafely(car.currentAssignment?.assignedDate)}</div>
-                              <div>Returned: {formatDateSafely(car.currentAssignment?.returnDate)}</div>
+                              <div>
+                                {t('cars.maintenance.assignedLabel', 'Assigned: {{date}}', {
+                                  date: formatDateSafely(car.currentAssignment?.assignedDate),
+                                })}
+                              </div>
+                              <div>
+                                {t('cars.maintenance.returnedLabel', 'Returned: {{date}}', {
+                                  date: formatDateSafely(car.currentAssignment?.returnDate),
+                                })}
+                              </div>
                               {car.registrationExpiry && (
-                                <div>Registration: {formatDateSafely(car.registrationExpiry)}</div>
+                                <div>
+                                  {t('cars.maintenance.registrationLabel', 'Registration: {{date}}', {
+                                    date: formatDateSafely(car.registrationExpiry),
+                                  })}
+                                </div>
                               )}
                               {car.insuranceExpiry && (
-                                <div>Insurance: {formatDateSafely(car.insuranceExpiry)}</div>
+                                <div>
+                                  {t('cars.maintenance.insuranceLabel', 'Insurance: {{date}}', {
+                                    date: formatDateSafely(car.insuranceExpiry),
+                                  })}
+                                </div>
                               )}
                             </div>
                           </TableCell>
@@ -1486,7 +1508,9 @@ export default function Cars() {
                                 {assignmentNotes}
                               </div>
                             ) : (
-                              <span className="text-sm text-muted-foreground">No notes recorded.</span>
+                              <span className="text-sm text-muted-foreground">
+                                {t('cars.maintenance.noNotes', 'No notes recorded.')}
+                              </span>
                             )}
                           </TableCell>
                         </TableRow>
@@ -1497,7 +1521,7 @@ export default function Cars() {
               ) : (
                 <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20 p-6 text-sm text-muted-foreground">
                   <Car className="h-10 w-10 text-gray-400" />
-                  No vehicles are currently marked for maintenance.
+                  {t('cars.maintenance.empty', 'No vehicles are currently marked for maintenance.')}
                 </div>
               )}
             </CardContent>
@@ -1507,20 +1531,22 @@ export default function Cars() {
         <TabsContent value="history" className="space-y-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h3 className="text-lg font-medium">Assignment History</h3>
+              <h3 className="text-lg font-medium">{t('cars.history.title', 'Assignment History')}</h3>
               <p className="text-sm text-muted-foreground">
-                Search across active and completed vehicle assignments.
+                {t('cars.history.description', 'Search across active and completed vehicle assignments.')}
               </p>
             </div>
             <div className="sm:w-72">
               <Input
-                placeholder="Search by plate, VIN, or serial"
+                placeholder={t('cars.history.searchPlaceholder', 'Search by plate, VIN, or serial')}
                 value={assignmentSearch}
                 onChange={event => setAssignmentSearch(event.target.value)}
-                aria-label="Search assignments"
+                aria-label={t('cars.history.searchAria', 'Search assignments')}
               />
               {historyRefreshing && (
-                <p className="mt-1 text-xs text-muted-foreground">Updating results…</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t('cars.history.refreshing', 'Updating results…')}
+                </p>
               )}
             </div>
           </div>
@@ -1529,7 +1555,7 @@ export default function Cars() {
             <Card>
               <CardContent className="p-6">
                 <p className="text-sm text-destructive">
-                  {historyErrorMessage || "Unable to load assignments."}
+                  {historyErrorMessage || t('cars.history.error', 'Unable to load assignments.')}
                 </p>
               </CardContent>
             </Card>
@@ -1551,8 +1577,12 @@ export default function Cars() {
             <Card>
               <CardContent className="p-6 text-center space-y-2">
                 <Users className="mx-auto h-12 w-12 text-gray-400" />
-                <h3 className="text-lg font-medium text-gray-900">No assignments found</h3>
-                <p className="text-gray-500">Try adjusting your search to find historical records.</p>
+                <h3 className="text-lg font-medium text-gray-900">
+                  {t('cars.history.emptyTitle', 'No assignments found')}
+                </h3>
+                <p className="text-gray-500">
+                  {t('cars.history.emptyDescription', 'Try adjusting your search to find historical records.')}
+                </p>
               </CardContent>
             </Card>
           ) : (
@@ -1560,18 +1590,25 @@ export default function Cars() {
               {historyAssignments.map(assignment => {
                 const startDate = assignment.assignedDate
                   ? format(new Date(assignment.assignedDate), "MMM d, yyyy")
-                  : "Unknown";
+                  : t('cars.history.unknownDate', 'Unknown');
                 const endDate = assignment.returnDate
                   ? format(new Date(assignment.returnDate), "MMM d, yyyy")
-                  : "Present";
+                  : t('cars.history.present', 'Present');
                 const vehicleNameParts = [assignment.car?.year, assignment.car?.make, assignment.car?.model].filter(Boolean) as string[];
-                const vehicleName = vehicleNameParts.length > 0 ? vehicleNameParts.join(" ") : "Vehicle Assignment";
+                const vehicleName =
+                  vehicleNameParts.length > 0
+                    ? vehicleNameParts.join(" ")
+                    : t('cars.history.vehicleFallback', 'Vehicle Assignment');
                 const employeeName = assignment.employee
-                  ? [assignment.employee.firstName, assignment.employee.lastName].filter(Boolean).join(" ").trim() || "Unknown employee"
-                  : "Unknown employee";
+                  ?
+                      [assignment.employee.firstName, assignment.employee.lastName]
+                        .filter(Boolean)
+                        .join(" ")
+                        .trim() || t('cars.history.unknownEmployee', 'Unknown employee')
+                  : t('cars.history.unknownEmployee', 'Unknown employee');
                 const statusLabel = assignment.status
                   ? assignment.status.charAt(0).toUpperCase() + assignment.status.slice(1)
-                  : "Status";
+                  : t('cars.status', 'Status');
 
                 return (
                   <Card key={assignment.id}>
@@ -1579,7 +1616,9 @@ export default function Cars() {
                       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                         <div>
                           <CardTitle className="text-lg">{vehicleName}</CardTitle>
-                          <CardDescription>{assignment.car?.plateNumber ?? "Unknown plate"}</CardDescription>
+                          <CardDescription>
+                            {assignment.car?.plateNumber ?? t('cars.history.unknownPlate', 'Unknown plate')}
+                          </CardDescription>
                         </div>
                         <div className="flex items-center gap-2">
                           {getAssignmentStatusBadge(assignment.status)}
@@ -1589,24 +1628,28 @@ export default function Cars() {
                     <CardContent className="space-y-4 text-sm">
                       <div className="grid gap-4 sm:grid-cols-3">
                         <div>
-                          <span className="text-muted-foreground">Assignment Period</span>
+                          <span className="text-muted-foreground">
+                            {t('cars.history.periodLabel', 'Assignment Period')}
+                          </span>
                           <p className="font-medium">{startDate} – {endDate}</p>
                         </div>
                         <div>
-                          <span className="text-muted-foreground">Employee</span>
+                          <span className="text-muted-foreground">{t('cars.employee', 'Employee')}</span>
                           <p className="font-medium">{employeeName}</p>
                           {assignment.employee?.phone && (
                             <p className="text-muted-foreground">{assignment.employee.phone}</p>
                           )}
                         </div>
                         <div>
-                          <span className="text-muted-foreground">Status</span>
+                          <span className="text-muted-foreground">{t('cars.status', 'Status')}</span>
                           <p className="font-medium">{statusLabel}</p>
                         </div>
                       </div>
                       {assignment.notes && (
                         <div className="pt-4 border-t">
-                          <span className="text-muted-foreground block mb-1">Notes</span>
+                          <span className="text-muted-foreground block mb-1">
+                            {t('cars.history.notesLabel', 'Notes')}
+                          </span>
                           <p>{assignment.notes}</p>
                         </div>
                       )}

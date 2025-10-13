@@ -592,7 +592,41 @@
     "returnedToService": "تم إرجاع السيارة إلى الخدمة",
     "loadingRepairs": "جاري تحميل الصيانات…",
     "noRepairs": "لا توجد صيانات.",
-    "repairLabel": "صيانة"
+    "repairLabel": "صيانة",
+    "maintenance": {
+      "title": "المركبات في الصيانة",
+      "description": "مركبات الأسطول الخارجة عن الخدمة للصيانة حاليًا.",
+      "vehicleHeader": "المركبة",
+      "assignmentHeader": "التعيين",
+      "datesHeader": "التواريخ",
+      "notesHeader": "الملاحظات",
+      "vehicleFallback": "المركبة",
+      "noPlate": "لا يوجد رقم لوحة أو رقم تسلسلي",
+      "unassigned": "غير مُسند حاليًا",
+      "assignedLabel": "تاريخ الإسناد: {{date}}",
+      "returnedLabel": "تاريخ الإرجاع: {{date}}",
+      "registrationLabel": "تسجيل المركبة: {{date}}",
+      "insuranceLabel": "التأمين: {{date}}",
+      "noNotes": "لا توجد ملاحظات مسجلة.",
+      "empty": "لا توجد مركبات محددة للصيانة حاليًا."
+    },
+    "history": {
+      "title": "سجل التعيينات",
+      "description": "ابحث في التعيينات النشطة والمكتملة للمركبات.",
+      "searchPlaceholder": "ابحث برقم اللوحة أو الرقم التسلسلي للمركبة",
+      "searchAria": "ابحث في التعيينات",
+      "refreshing": "جاري تحديث النتائج…",
+      "error": "تعذّر تحميل التعيينات.",
+      "emptyTitle": "لم يتم العثور على تعيينات",
+      "emptyDescription": "جرّب تعديل البحث للعثور على السجلات التاريخية.",
+      "unknownDate": "غير معروف",
+      "present": "حاليًا",
+      "vehicleFallback": "تعيين مركبة",
+      "unknownEmployee": "موظف غير معروف",
+      "unknownPlate": "لوحة غير معروفة",
+      "periodLabel": "فترة التعيين",
+      "notesLabel": "ملاحظات"
+    }
   },
   "pdf": {
     "employeeFile": {

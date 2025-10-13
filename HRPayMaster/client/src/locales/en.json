@@ -592,7 +592,41 @@
     "returnedToService": "Car returned to service",
     "loadingRepairs": "Loading repairs…",
     "noRepairs": "No repairs found.",
-    "repairLabel": "Repair"
+    "repairLabel": "Repair",
+    "maintenance": {
+      "title": "Vehicles in Maintenance",
+      "description": "Fleet vehicles currently out of service for maintenance.",
+      "vehicleHeader": "Vehicle",
+      "assignmentHeader": "Assignment",
+      "datesHeader": "Dates",
+      "notesHeader": "Notes",
+      "vehicleFallback": "Vehicle",
+      "noPlate": "No plate or VIN provided",
+      "unassigned": "Not currently assigned",
+      "assignedLabel": "Assigned: {{date}}",
+      "returnedLabel": "Returned: {{date}}",
+      "registrationLabel": "Registration: {{date}}",
+      "insuranceLabel": "Insurance: {{date}}",
+      "noNotes": "No notes recorded.",
+      "empty": "No vehicles are currently marked for maintenance."
+    },
+    "history": {
+      "title": "Assignment History",
+      "description": "Search across active and completed vehicle assignments.",
+      "searchPlaceholder": "Search by plate, VIN, or serial",
+      "searchAria": "Search assignments",
+      "refreshing": "Updating results…",
+      "error": "Unable to load assignments.",
+      "emptyTitle": "No assignments found",
+      "emptyDescription": "Try adjusting your search to find historical records.",
+      "unknownDate": "Unknown",
+      "present": "Present",
+      "vehicleFallback": "Vehicle Assignment",
+      "unknownEmployee": "Unknown employee",
+      "unknownPlate": "Unknown plate",
+      "periodLabel": "Assignment Period",
+      "notesLabel": "Notes"
+    }
   },
   "pdf": {
     "employeeFile": {
