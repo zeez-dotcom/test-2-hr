@@ -30,6 +30,7 @@ import { SmartDeductionForm } from "@/components/payroll/smart-deduction-form";
 import { apiPut } from "@/lib/http";
 import { toastApiError } from "@/lib/toastError";
 import { getEmployeeDisplayDetails } from "./employee-display";
+import { useTranslation } from "react-i18next";
 
 interface EnhancedPayrollTableProps {
   entries: any[];
@@ -42,6 +43,7 @@ const formatSignedCurrency = (amount: number) => {
 };
 
 export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTableProps) {
+  const { t } = useTranslation();
   const [editingCell, setEditingCell] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<{ [key: string]: string }>({});
   const [copiedValue, setCopiedValue] = useState<string>("");
@@ -70,12 +72,12 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
       queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
       queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
       toast({
-        title: "Success",
-        description: "Payroll entry updated successfully",
+        title: t("payroll.messages.success"),
+        description: t("payroll.messages.updateEntrySuccess"),
       });
     },
     onError: (err) => {
-      toastApiError(err as any, "Failed to update payroll entry");
+      toastApiError(err as any, t("payroll.messages.updateEntryError"));
     },
   });
 
@@ -135,16 +137,18 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
       queryClient.invalidateQueries({ queryKey: ["/api/payroll", payrollId] });
 
       toast({
-        title: "Success",
+        title: t("payroll.messages.success"),
         description:
           action === "undo"
-            ? "Change reverted successfully"
-            : "Change reapplied successfully",
+            ? t("payroll.messages.undoSuccess")
+            : t("payroll.messages.redoSuccess"),
       });
     } catch (err) {
       toastApiError(
         err as any,
-        action === "undo" ? "Failed to undo change" : "Failed to redo change",
+        action === "undo"
+          ? t("payroll.messages.undoError")
+          : t("payroll.messages.redoError"),
       );
     }
   };
@@ -195,8 +199,10 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
       const value = editValues[editingCell];
       setCopiedValue(value || "");
       toast({
-        title: "Copied",
-        description: `Value "${value}" copied to clipboard`,
+        title: t("payroll.toolbar.copyToastTitle"),
+        description: t("payroll.toolbar.copyToastDescription", {
+          value: value ?? "",
+        }),
       });
     }
   };
@@ -205,8 +211,10 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
     if (editingCell && copiedValue) {
       setEditValues({ ...editValues, [editingCell]: copiedValue });
       toast({
-        title: "Pasted",
-        description: `Value "${copiedValue}" pasted`,
+        title: t("payroll.toolbar.pasteToastTitle"),
+        description: t("payroll.toolbar.pasteToastDescription", {
+          value: copiedValue,
+        }),
       });
     }
   };
@@ -228,9 +236,23 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
     const baseSalary = parseFloat(entry.baseSalary?.toString() || "0");
     const ratio = netPay / baseSalary;
     
-    if (ratio > 0.85) return { color: "text-green-600", icon: CheckCircle, label: "Healthy" };
-    if (ratio > 0.70) return { color: "text-yellow-600", icon: AlertCircle, label: "Moderate" };
-    return { color: "text-red-600", icon: AlertCircle, label: "High Deductions" };
+    if (ratio > 0.85)
+      return {
+        color: "text-green-600",
+        icon: CheckCircle,
+        label: t("payroll.summaries.health.healthy"),
+      };
+    if (ratio > 0.70)
+      return {
+        color: "text-yellow-600",
+        icon: AlertCircle,
+        label: t("payroll.summaries.health.moderate"),
+      };
+    return {
+      color: "text-red-600",
+      icon: AlertCircle,
+      label: t("payroll.summaries.health.highDeductions"),
+    };
   };
 
   const EditableCell = ({ 
@@ -288,9 +310,13 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
           field.includes("Deduction") || field === "otherDeductions" ? "bg-red-50 hover:bg-red-100" : ""
         }`}
         onClick={() => handleCellClick(entryId, field, value)}
-        title={field === "vacationDays" ? "Click to add vacation days" : 
-              field.includes("Deduction") ? "Click to add deduction" : 
-              "Click to edit"}
+        title={
+          field === "vacationDays"
+            ? t("payroll.columns.tooltips.vacationDays")
+            : field.includes("Deduction") || field === "otherDeductions"
+              ? t("payroll.columns.tooltips.deduction")
+              : t("payroll.columns.tooltips.default")
+        }
       >
         <div className="flex items-center justify-between">
           <span>{displayValue}</span>
@@ -311,20 +337,20 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
             variant="outline"
             onClick={handleCopy}
             disabled={!editingCell}
-            title="Copy the value of the active cell"
+            title={t("payroll.toolbar.copyTooltip")}
           >
             <Copy className="h-4 w-4 mr-1" />
-            Copy
+            {t("payroll.toolbar.copy")}
           </Button>
           <Button
             size="sm"
             variant="outline"
             onClick={handlePaste}
             disabled={!copiedValue}
-            title="Paste into the active cell"
+            title={t("payroll.toolbar.pasteTooltip")}
           >
             <ClipboardPaste className="h-4 w-4 mr-1" />
-            Paste
+            {t("payroll.toolbar.paste")}
           </Button>
           <div className="h-4 w-px bg-gray-300" />
           <Button
@@ -334,10 +360,10 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
               void handleUndo();
             }}
             disabled={changeHistory.length === 0}
-            title="Undo the most recent change"
+            title={t("payroll.toolbar.undoTooltip")}
           >
             <Undo className="h-4 w-4 mr-1" />
-            Undo
+            {t("payroll.toolbar.undo")}
           </Button>
           <Button
             size="sm"
@@ -346,18 +372,18 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
               void handleRedo();
             }}
             disabled={redoStack.length === 0}
-            title="Redo the last undone change"
+            title={t("payroll.toolbar.redoTooltip")}
           >
             <Redo className="h-4 w-4 mr-1" />
-            Redo
+            {t("payroll.toolbar.redo")}
           </Button>
         </div>
         <div className="flex items-center space-x-2 text-sm text-gray-600">
           <Calculator className="h-4 w-4" />
-          <span>{entries.length} employees</span>
+          <span>{t("payroll.toolbar.employeeCount", { count: entries.length })}</span>
           <div className="h-4 w-px bg-gray-300" />
           <TrendingUp className="h-4 w-4" />
-          <span>Smart editing enabled</span>
+          <span>{t("payroll.toolbar.smartEditing")}</span>
         </div>
       </div>
 
@@ -369,38 +395,38 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <div className="flex items-center space-x-1">
                   <User className="h-4 w-4" />
-                  <span>Employee</span>
+                  <span>{t("payroll.columns.employee")}</span>
                 </div>
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Base Salary
+                {t("payroll.columns.baseSalary")}
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Working Days Adjustment
+                {t("payroll.columns.workingDaysAdjustment")}
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Working Days
+                {t("payroll.columns.workingDays")}
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <div className="flex items-center space-x-1">
                   <Calendar className="h-4 w-4 text-orange-600" />
-                  <span>Vacation Days</span>
+                  <span>{t("payroll.columns.vacationDays")}</span>
                 </div>
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Allowances
+                {t("payroll.columns.allowances")}
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <div className="flex items-center space-x-1">
                   <DollarSign className="h-4 w-4 text-red-600" />
-                  <span>Deductions</span>
+                  <span>{t("payroll.columns.deductions")}</span>
                 </div>
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Net Pay
+                {t("payroll.columns.netPay")}
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Status
+                {t("payroll.columns.status")}
               </th>
             </tr>
           </thead>
@@ -434,7 +460,7 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
                           </div>
                         ) : null}
                         <div className="text-xs text-gray-500">
-                          Code: {code}
+                          {t("payroll.summaries.employeeCode", { code })}
                         </div>
                       </div>
                     </div>
@@ -480,7 +506,9 @@ export function EnhancedPayrollTable({ entries, payrollId }: EnhancedPayrollTabl
                         </div>
                       </div>
                     ) : (
-                      <span className="text-muted-foreground">—</span>
+                      <span className="text-muted-foreground">
+                        {t("payroll.summaries.noAllowances")}
+                      </span>
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">

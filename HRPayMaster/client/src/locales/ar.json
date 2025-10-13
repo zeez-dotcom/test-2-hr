@@ -648,7 +648,57 @@
     "details": "تفاصيل الرواتب",
     "edit": "تعديل الرواتب (مشابه للإكسل)",
     "deleteTitle": "حذف تشغيل الرواتب",
-    "deleteDesc": "هل أنت متأكد أنك تريد حذف تشغيل الرواتب هذا؟"
+    "deleteDesc": "هل أنت متأكد أنك تريد حذف تشغيل الرواتب هذا؟",
+    "toolbar": {
+      "copy": "نسخ",
+      "copyTooltip": "انسخ قيمة الخلية النشطة",
+      "copyToastTitle": "تم النسخ",
+      "copyToastDescription": "تم نسخ القيمة \"{{value}}\" إلى الحافظة",
+      "paste": "لصق",
+      "pasteTooltip": "الصق في الخلية النشطة",
+      "pasteToastTitle": "تم اللصق",
+      "pasteToastDescription": "تم لصق القيمة \"{{value}}\"",
+      "undo": "تراجع",
+      "undoTooltip": "التراجع عن التغيير الأخير",
+      "redo": "إعادة",
+      "redoTooltip": "إعادة تطبيق آخر تغيير تم التراجع عنه",
+      "employeeCount": "{{count}} موظف",
+      "smartEditing": "التحرير الذكي مفعّل"
+    },
+    "columns": {
+      "employee": "الموظف",
+      "baseSalary": "الراتب الأساسي",
+      "workingDaysAdjustment": "تعديل أيام العمل",
+      "workingDays": "أيام العمل",
+      "vacationDays": "أيام الإجازة",
+      "allowances": "البدلات",
+      "deductions": "الخصومات",
+      "netPay": "صافي الراتب",
+      "status": "الحالة",
+      "tooltips": {
+        "vacationDays": "انقر لإضافة أيام إجازة",
+        "deduction": "انقر لإضافة خصم",
+        "default": "انقر للتحرير"
+      }
+    },
+    "summaries": {
+      "employeeCode": "الرمز: {{code}}",
+      "noAllowances": "—",
+      "health": {
+        "healthy": "صحي",
+        "moderate": "متوسط",
+        "highDeductions": "خصومات مرتفعة"
+      }
+    },
+    "messages": {
+      "success": "نجاح",
+      "updateEntrySuccess": "تم تحديث بند الرواتب بنجاح",
+      "updateEntryError": "فشل تحديث بند الرواتب",
+      "undoSuccess": "تم التراجع عن التغيير بنجاح",
+      "redoSuccess": "تمت إعادة تطبيق التغيير بنجاح",
+      "undoError": "فشل التراجع عن التغيير",
+      "redoError": "فشلت إعادة تطبيق التغيير"
+    }
   }
   ,
   "cars": {
