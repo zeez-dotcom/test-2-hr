@@ -188,8 +188,8 @@ describe('pdf utility', () => {
     const def = buildBilingualActionReceipt({
       titleEn: 'Custom Receipt',
       titleAr: 'إيصال مخصص',
-      detailsEn: ['First detail'],
-      detailsAr: ['التفصيل الأول'],
+      detailsEn: ['First detail: 123'],
+      detailsAr: ['التفصيل الأول: 123'],
       docNumber: 'DOC-123',
       issuedDate: '2024-01-01',
       employee: {
@@ -221,11 +221,27 @@ describe('pdf utility', () => {
 
     const texts = collectTexts(def.content);
     expect(texts).toContain('Doc No: DOC-123');
-    expect(texts).toContain('رقم الوثيقة: DOC-123');
+    expect(texts).toContain('رقم الوثيقة\u061C: DOC-123');
+    expect(texts).not.toContain('رقم الوثيقة: DOC-123');
+    expect(texts).toContain('Issued On: 2024-01-01');
+    expect(texts).toContain('تاريخ الإصدار\u061C: 2024-01-01');
+    expect(texts).not.toContain('تاريخ الإصدار: 2024-01-01');
     expect(texts).toContain('Staff: Alice Smith');
-    expect(texts).toContain('الموظفون: Alice Smith');
+    expect(texts).toContain('الموظفون\u061C: Alice Smith');
+    expect(texts).not.toContain('الموظفون: Alice Smith');
     expect(texts).toContain('Staff Code: EMP-999');
-    expect(texts).toContain('رمز الطاقم: EMP-999');
+    expect(texts).toContain('رمز الطاقم\u061C: EMP-999');
+    expect(texts).not.toContain('رمز الطاقم: EMP-999');
+    expect(texts).toContain('Staff ID: 99');
+    expect(texts).toContain('هوية الطاقم\u061C: 99');
+    expect(texts).not.toContain('هوية الطاقم: 99');
+    expect(texts).toContain('Contact: 555-0100');
+    expect(texts).toContain('الاتصال\u061C: 555-0100');
+    expect(texts).toContain('Role: Manager');
+    expect(texts).toContain('الدور\u061C: Manager');
+    expect(texts).toContain('التفصيل الأول\u061C: 123');
+    expect(texts).not.toContain('التفصيل الأول: 123');
+    expect(texts).toContain('First detail: 123');
     expect(texts).toContain('Overview');
     expect(texts).toContain('نظرة عامة');
   });

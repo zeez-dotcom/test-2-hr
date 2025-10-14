@@ -318,6 +318,24 @@ const normalizeText = (value: string | null | undefined): string => {
   return value.replace(/\s+/g, ' ').trim();
 };
 
+const toDualLabel = (value: string | DualLabel): DualLabel =>
+  typeof value === 'string' ? { en: value, ar: value } : value;
+
+const ARABIC_TEXT_REGEX = /[\u0600-\u06FF]/;
+
+const ensureArabicColonOrder = (text: string): string => {
+  if (!text || !ARABIC_TEXT_REGEX.test(text)) {
+    return text;
+  }
+
+  return text.replace(/:/g, (match, offset, original) => {
+    if (offset > 0 && original[offset - 1] === ARABIC_LETTER_MARK) {
+      return match;
+    }
+    return `${ARABIC_LETTER_MARK}:`;
+  });
+};
+
 const formatSummaryLabelValue = (label: DualLabel, value: DualLabel): DualLabel => {
   const format = (lang: 'en' | 'ar'): string => {
     const labelText = normalizeText(label[lang]);
@@ -339,6 +357,9 @@ const formatSummaryLabelValue = (label: DualLabel, value: DualLabel): DualLabel 
     ar: format('ar'),
   };
 };
+
+const formatReceiptLabelValue = (label: DualLabel, value: string | DualLabel): DualLabel =>
+  formatSummaryLabelValue(label, toDualLabel(value));
 
 const formatReportTimestamp = (date: Date): DualLabel => {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
@@ -1416,20 +1437,23 @@ export function buildBilingualActionReceipt(params: {
     });
   }
 
+  const documentNumberRow = formatReceiptLabelValue(metaLabels.documentNumber, { en: docNo, ar: docNo });
+  const issuedDateRow = formatReceiptLabelValue(metaLabels.issuedDate, { en: issued, ar: issued });
+
   content.push({
     columns: [
       {
         width: '*',
         stack: [
-          { text: `${metaLabels.documentNumber.en}: ${docNo}`, style: 'meta' } as Content,
-          { text: `${metaLabels.documentNumber.ar}: ${docNo}`, style: 'metaAr', alignment: 'right' } as Content,
+          { text: documentNumberRow.en, style: 'meta' } as Content,
+          { text: documentNumberRow.ar, style: 'metaAr', alignment: 'right' } as Content,
         ],
       },
       {
         width: '*',
         stack: [
-          { text: `${metaLabels.issuedDate.en}: ${issued}`, style: 'meta', alignment: 'right' } as Content,
-          { text: `${metaLabels.issuedDate.ar}: ${issued}`, style: 'metaAr', alignment: 'right' } as Content,
+          { text: issuedDateRow.en, style: 'meta', alignment: 'right' } as Content,
+          { text: issuedDateRow.ar, style: 'metaAr', alignment: 'right' } as Content,
         ],
       },
     ],
@@ -1447,24 +1471,19 @@ export function buildBilingualActionReceipt(params: {
   }
 
   const employeeSummary: BilingualLabel[] = [
-    { en: `${employeeSummaryLabels.name.en}: ${fullName}`, ar: `${employeeSummaryLabels.name.ar}: ${fullName}` },
-    {
-      en: `${employeeSummaryLabels.code.en}: ${employeeCode || 'N/A'}`,
-      ar: `${employeeSummaryLabels.code.ar}: ${employeeCode || 'N/A'}`,
-    },
-    { en: `${employeeSummaryLabels.id.en}: ${employeeId}`, ar: `${employeeSummaryLabels.id.ar}: ${employeeId}` },
+    formatReceiptLabelValue(employeeSummaryLabels.name, { en: fullName, ar: fullName }),
+    formatReceiptLabelValue(employeeSummaryLabels.code, { en: employeeCode ?? 'N/A', ar: employeeCode ?? 'N/A' }),
+    formatReceiptLabelValue(employeeSummaryLabels.id, { en: employeeId, ar: employeeId }),
   ];
   if (employeePhone) {
-    employeeSummary.push({
-      en: `${employeeSummaryLabels.phone.en}: ${employeePhone}`,
-      ar: `${employeeSummaryLabels.phone.ar}: ${employeePhone}`,
-    });
+    employeeSummary.push(
+      formatReceiptLabelValue(employeeSummaryLabels.phone, { en: employeePhone, ar: employeePhone })
+    );
   }
   if (employeePosition) {
-    employeeSummary.push({
-      en: `${employeeSummaryLabels.position.en}: ${employeePosition}`,
-      ar: `${employeeSummaryLabels.position.ar}: ${employeePosition}`,
-    });
+    employeeSummary.push(
+      formatReceiptLabelValue(employeeSummaryLabels.position, { en: employeePosition, ar: employeePosition })
+    );
   }
 
   const summaryTable: Content = {
@@ -1504,7 +1523,7 @@ export function buildBilingualActionReceipt(params: {
 
   const detailsEn = (params.detailsEn ?? []).map((detail) => sanitizeString(detail));
   const detailsArSource = params.detailsAr ?? params.detailsEn ?? [];
-  const detailsAr = detailsArSource.map((detail) => sanitizeString(detail));
+  const detailsAr = detailsArSource.map((detail) => ensureArabicColonOrder(sanitizeString(detail)));
 
   if (detailsEn.length || detailsAr.length) {
 
