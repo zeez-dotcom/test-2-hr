@@ -620,272 +620,334 @@ export default function Assets() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold tracking-tight">Assets</h1>
-        <div className="space-x-2">
-          <Dialog open={isAssignOpen} onOpenChange={setIsAssignOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline">Assign Asset</Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
-              <DialogHeader>
-                <DialogTitle>Assign Asset</DialogTitle>
-                <DialogDescription>
-                  Select an asset, employee, assignment date, and add optional notes.
-                </DialogDescription>
-              </DialogHeader>
-              <Form {...assignmentForm}>
-                <form onSubmit={assignmentForm.handleSubmit(onSubmitAssignment)} className="space-y-4">
-                  <FormField
-                    control={assignmentForm.control}
-                    name="assetId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Asset</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || undefined}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select asset" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {availableAssets.map(a => (
-                              <SelectItem key={a.id} value={a.id}>
-                                {a.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={assignmentForm.control}
-                    name="employeeId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Employee</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || undefined}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select employee" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {employees.map((emp) => (
-                              <SelectItem key={emp.id} value={emp.id}>
-                                {emp.firstName} {emp.lastName}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={assignmentForm.control}
-                    name="assignedDate"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Assignment Date</FormLabel>
-                        <FormControl>
-                          <Input type="date" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={assignmentForm.control}
-                    name="notes"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Notes (Optional)</FormLabel>
-                        <FormControl>
-                          <Textarea placeholder="Assignment notes..." {...field} value={field.value || ""} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <Button type="submit">Assign</Button>
-                </form>
-              </Form>
-            </DialogContent>
-          </Dialog>
-
-          <Dialog
-            open={!!editingAsset}
-            onOpenChange={(open) => {
-              if (!open) {
-                setEditingAsset(null);
-                editAssetForm.reset({
-                  name: "",
-                  type: "",
-                  status: "available",
-                  details: "",
-                });
-              }
-            }}
-          >
-            <DialogContent className="sm:max-w-[425px]">
-              <DialogHeader>
-                <DialogTitle>{t('assets.editTitle', 'Edit Asset')}</DialogTitle>
-                <DialogDescription>
-                  {t('assets.editDescription', 'Update the asset details.')}
-                </DialogDescription>
-              </DialogHeader>
-              <Form {...editAssetForm}>
-                <form onSubmit={editAssetForm.handleSubmit(onSubmitEditAsset)} className="space-y-4">
-                  <FormField
-                    control={editAssetForm.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{t('assets.nameLabel', 'Name')}</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={editAssetForm.control}
-                    name="type"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{t('assets.typeLabel', 'Type')}</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={editAssetForm.control}
-                    name="status"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{t('assets.statusLabel', 'Status')}</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder={t('assets.statusPlaceholder', 'Select a status')} />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="available">{t('assets.statusAvailable', 'Available')}</SelectItem>
-                            <SelectItem value="assigned">{t('assets.statusAssigned', 'Assigned')}</SelectItem>
-                            <SelectItem value="maintenance">{t('assets.statusMaintenance', 'Maintenance')}</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={editAssetForm.control}
-                    name="details"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{t('assets.detailsLabel', 'Details')}</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <DialogFooter>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setEditingAsset(null);
-                        editAssetForm.reset({
-                          name: "",
-                          type: "",
-                          status: "available",
-                          details: "",
-                        });
-                      }}
-                    >
-                      {t('assets.cancel', 'Cancel')}
+      <Card className="overflow-hidden border-none bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 shadow-md">
+        <CardContent className="p-6 sm:p-8">
+          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start gap-4">
+              <div className="rounded-full bg-primary/15 p-3">
+                <Package className="h-8 w-8 text-primary" />
+              </div>
+              <div className="space-y-2">
+                <h1 className="text-3xl font-bold tracking-tight">
+                  {t("assets.heroTitle", "Assets workspace")}
+                </h1>
+                <p className="text-base text-muted-foreground">
+                  {t(
+                    "assets.heroSubtitle",
+                    "Oversee inventory, assignments, and maintenance in a single workspace."
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="grid w-full gap-3 sm:grid-cols-2 md:w-auto md:min-w-[420px]">
+              <Dialog open={isAssignOpen} onOpenChange={setIsAssignOpen}>
+                <div className="flex h-full flex-col justify-between gap-3 rounded-lg border border-border/60 bg-background/80 p-4 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/60">
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-foreground">
+                      {t("assets.assignTitle", "Assign an asset")}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {t(
+                        "assets.assignDescription",
+                        "Match available equipment with team members and capture the assignment details."
+                      )}
+                    </p>
+                  </div>
+                  <DialogTrigger asChild>
+                    <Button size="sm">
+                      {t("assets.assignAction", "Assign Asset")}
                     </Button>
-                    <Button type="submit" disabled={updateAssetMutation.isPending}>
-                      {updateAssetMutation.isPending
-                        ? t('assets.updating', 'Updating...')
-                        : t('assets.saveChanges', 'Save Changes')}
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </Form>
-            </DialogContent>
-          </Dialog>
+                  </DialogTrigger>
+                </div>
+                <DialogContent className="sm:max-w-[425px]">
+                  <DialogHeader>
+                    <DialogTitle>
+                      {t("assets.assignDialogTitle", "Assign Asset")}
+                    </DialogTitle>
+                    <DialogDescription>
+                      {t(
+                        "assets.assignDialogDescription",
+                        "Select an asset, employee, assignment date, and add optional notes."
+                      )}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <Form {...assignmentForm}>
+                    <form onSubmit={assignmentForm.handleSubmit(onSubmitAssignment)} className="space-y-4">
+                      <FormField
+                        control={assignmentForm.control}
+                        name="assetId"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t("assets.assetLabel", "Asset")}</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value || undefined}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder={t("assets.assetPlaceholder", "Select asset")} />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {availableAssets.map(a => (
+                                  <SelectItem key={a.id} value={a.id}>
+                                    {a.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
-          <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-            <DialogTrigger asChild>
-              <Button>Create Asset</Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
-              <DialogHeader>
-                <DialogTitle>New Asset</DialogTitle>
-              </DialogHeader>
-              <Form {...assetForm}>
-                <form onSubmit={assetForm.handleSubmit(onSubmitAsset)} className="space-y-4">
-                  <FormField
-                    control={assetForm.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Name</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={assetForm.control}
-                    name="type"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Type</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={assetForm.control}
-                    name="details"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Details</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <Button type="submit">Save</Button>
-                </form>
-              </Form>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
+                      <FormField
+                        control={assignmentForm.control}
+                        name="employeeId"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t("assets.employeeLabel", "Employee")}</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value || undefined}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder={t("assets.employeePlaceholder", "Select employee")} />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {employees.map((emp) => (
+                                  <SelectItem key={emp.id} value={emp.id}>
+                                    {emp.firstName} {emp.lastName}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={assignmentForm.control}
+                        name="assignedDate"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t("assets.assignmentDateLabel", "Assignment Date")}</FormLabel>
+                            <FormControl>
+                              <Input type="date" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={assignmentForm.control}
+                        name="notes"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t("assets.notesLabel", "Notes")}</FormLabel>
+                            <FormControl>
+                              <Textarea {...field} value={field.value || ""} placeholder={t("assets.notesPlaceholder", "Assignment notes...")} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <DialogFooter>
+                        <Button type="submit" disabled={assignAsset.isPending}>
+                          {assignAsset.isPending
+                            ? t("assets.assigning", "Assigning...")
+                            : t("assets.assignSubmit", "Assign")}
+                        </Button>
+                      </DialogFooter>
+                    </form>
+                  </Form>
+                </DialogContent>
+              </Dialog>
+
+              <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+                <div className="flex h-full flex-col justify-between gap-3 rounded-lg border border-border/60 bg-background/80 p-4 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/60">
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-foreground">
+                      {t("assets.createTitle", "Add a new asset")}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {t(
+                        "assets.createDescription",
+                        "Capture asset details to grow your catalog and keep records current."
+                      )}
+                    </p>
+                  </div>
+                  <DialogTrigger asChild>
+                    <Button variant="secondary" size="sm">
+                      {t("assets.createAction", "Create Asset")}
+                    </Button>
+                  </DialogTrigger>
+                </div>
+                <DialogContent className="sm:max-w-[425px]">
+                  <DialogHeader>
+                    <DialogTitle>{t("assets.createDialogTitle", "New Asset")}</DialogTitle>
+                  </DialogHeader>
+                  <Form {...assetForm}>
+                    <form onSubmit={assetForm.handleSubmit(onSubmitAsset)} className="space-y-4">
+                      <FormField
+                        control={assetForm.control}
+                        name="name"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t("assets.nameLabel", "Name")}</FormLabel>
+                            <FormControl>
+                              <Input {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={assetForm.control}
+                        name="type"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t("assets.typeLabel", "Type")}</FormLabel>
+                            <FormControl>
+                              <Input {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={assetForm.control}
+                        name="details"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t("assets.detailsLabel", "Details")}</FormLabel>
+                            <FormControl>
+                              <Input {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <Button type="submit">
+                        {t("assets.saveAsset", "Save Asset")}
+                      </Button>
+                    </form>
+                  </Form>
+                </DialogContent>
+              </Dialog>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog
+        open={!!editingAsset}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingAsset(null);
+            editAssetForm.reset({
+              name: "",
+              type: "",
+              status: "available",
+              details: "",
+            });
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>{t('assets.editTitle', 'Edit Asset')}</DialogTitle>
+            <DialogDescription>
+              {t('assets.editDescription', 'Update the asset details.')}
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...editAssetForm}>
+            <form onSubmit={editAssetForm.handleSubmit(onSubmitEditAsset)} className="space-y-4">
+              <FormField
+                control={editAssetForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('assets.nameLabel', 'Name')}</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={editAssetForm.control}
+                name="type"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('assets.typeLabel', 'Type')}</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={editAssetForm.control}
+                name="status"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('assets.statusLabel', 'Status')}</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder={t('assets.statusPlaceholder', 'Select a status')} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="available">{t('assets.statusAvailable', 'Available')}</SelectItem>
+                        <SelectItem value="assigned">{t('assets.statusAssigned', 'Assigned')}</SelectItem>
+                        <SelectItem value="maintenance">{t('assets.statusMaintenance', 'Maintenance')}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={editAssetForm.control}
+                name="details"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('assets.detailsLabel', 'Details')}</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setEditingAsset(null);
+                    editAssetForm.reset({
+                      name: "",
+                      type: "",
+                      status: "available",
+                      details: "",
+                    });
+                  }}
+                >
+                  {t('assets.cancel', 'Cancel')}
+                </Button>
+                <Button type="submit" disabled={updateAssetMutation.isPending}>
+                  {updateAssetMutation.isPending
+                    ? t('assets.updating', 'Updating...')
+                    : t('assets.saveChanges', 'Save Changes')}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
 
       <Tabs defaultValue="overview" className="space-y-6">
         <TabsList>
