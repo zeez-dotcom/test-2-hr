@@ -42,7 +42,7 @@ vi.mock('./db', () => ({
 }));
 
 import { storage } from './storage';
-import { loanPayments, sickLeaveTracking, loanAmortizationSchedules } from '@shared/schema';
+import { loanPayments, sickLeaveTracking, loanAmortizationSchedules, employees } from '@shared/schema';
 
 describe('getMonthlyEmployeeSummary', () => {
   beforeEach(() => {
@@ -682,6 +682,51 @@ describe('sick leave balance methods', () => {
     expect(sickLeaveTrackingFindFirstMock).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.any(Function) }),
     );
+  });
+});
+
+describe('updateEmployee', () => {
+  beforeEach(() => {
+    updateMock.mockReset();
+  });
+
+  it('persists document expiry fields to the employee record', async () => {
+    updateMock.mockImplementationOnce((table) => {
+      expect(table).toBe(employees);
+      return {
+        set: (vals: any) => {
+          expect(vals).toEqual({
+            visaExpiryDate: '2030-01-01',
+            visaNumber: 'V-999',
+            visaAlertDays: 60,
+            civilIdExpiryDate: '2030-06-01',
+          });
+          return {
+            where: vi.fn().mockReturnValue({
+              returning: vi.fn().mockResolvedValue([
+                { id: 'emp-1', ...vals },
+              ]),
+            }),
+          };
+        },
+      };
+    });
+
+    const result = await storage.updateEmployee('emp-1', {
+      visaExpiryDate: '2030-01-01',
+      visaNumber: 'V-999',
+      visaAlertDays: 60,
+      civilIdExpiryDate: '2030-06-01',
+      employeeCode: 'should-be-ignored' as any,
+    });
+
+    expect(result).toEqual({
+      id: 'emp-1',
+      visaExpiryDate: '2030-01-01',
+      visaNumber: 'V-999',
+      visaAlertDays: 60,
+      civilIdExpiryDate: '2030-06-01',
+    });
   });
 });
 
