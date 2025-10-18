@@ -455,7 +455,21 @@ export default function Reports() {
         position: employee.position,
         profileImage,
       },
-      events: employeeEvents.map(e => ({ title: e.title, eventDate: e.eventDate })),
+      events: employeeEvents.map(e => {
+        const rawAmount = e.amount;
+        const parsedAmount =
+          typeof rawAmount === "number"
+            ? rawAmount
+            : Number.parseFloat(typeof rawAmount === "string" ? rawAmount : "");
+        const amount = Number.isFinite(parsedAmount) ? parsedAmount : null;
+
+        return {
+          title: e.title,
+          eventDate: e.eventDate,
+          eventType: e.eventType,
+          amount,
+        };
+      }),
       assets: employeeAssets,
     });
     openPdf(doc);

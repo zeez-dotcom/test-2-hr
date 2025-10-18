@@ -3,6 +3,7 @@ import pdfFonts from 'pdfmake/build/vfs_fonts';
 import type { TDocumentDefinitions, Content, TableLayout } from 'pdfmake/interfaces';
 import enLocale from '@/locales/en.json';
 import arLocale from '@/locales/ar.json';
+import { formatCurrency } from '@/lib/utils';
 import { amiriRegularVfs, interRegularVfs, interSemiBoldVfs, interItalicVfs } from './font-vfs';
 import { getBrand } from './brand';
 import { sanitizeImageSrc } from './sanitizeImageSrc';
@@ -182,6 +183,24 @@ function formatYMD(value: string | Date | null | undefined, fallback = 'N/A'): s
 const formatDisplayDate = (value: string | Date | null | undefined): string => {
   if (!value) return '-';
   return formatYMD(value, '-');
+};
+
+const formatEventTypeLabel = (value: string | null | undefined): string => {
+  if (!value) return '-';
+  const normalized = value
+    .replace(/[_\s-]+/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+  return normalized || '-';
+};
+
+const formatEventAmount = (value: number | null | undefined): string => {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return '-';
+  }
+  return formatCurrency(value);
 };
 
 const formatCurrencyValue = (value: number | null | undefined): string => {
@@ -387,7 +406,8 @@ export interface EmployeeLite {
 export interface EmployeeEventLite {
   title: string;
   eventDate: string | Date;
-  amount?: string | null;
+  eventType?: string | null;
+  amount?: number | null;
 }
 
 export interface EmployeeProfileReportParams {
@@ -547,11 +567,13 @@ export function buildEmployeeReport(
     {
       table: {
         headerRows: 1,
-        widths: ['*', 'auto'],
+        widths: ['*', 'auto', 'auto', 'auto'],
         body: [
-          ['Title', 'Date'],
+          ['Title', 'Type', 'Amount', 'Date'],
           ...events.map(e => [
             sanitizeString(e.title),
+            sanitizeString(formatEventTypeLabel(e.eventType)),
+            sanitizeString(formatEventAmount(e.amount ?? null)),
             formatYMD(e.eventDate)
           ]),
         ],
