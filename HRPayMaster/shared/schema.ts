@@ -336,6 +336,9 @@ export const companies = pgTable("companies", {
     .$type<PayrollExportFormatConfig[]>()
     .notNull()
     .default(sql`'[]'::jsonb`),
+  companyLicenseNumber: text("company_license_number"),
+  companyLicenseExpiryDate: date("company_license_expiry_date"),
+  companyLicenseAlertDays: integer("company_license_alert_days").default(60),
 });
 
 export const employees = pgTable("employees", {
@@ -373,6 +376,7 @@ export const employees = pgTable("employees", {
   drivingLicenseNumber: text("driving_license_number"),
   drivingLicenseIssueDate: date("driving_license_issue_date"),
   drivingLicenseExpiryDate: date("driving_license_expiry_date"),
+  drivingLicenseAlertDays: integer("driving_license_alert_days").default(30),
   drivingLicenseImage: text("driving_license_image"),
   otherDocs: text("other_docs"),
   additionalDocs: text("additional_docs"),
@@ -1101,6 +1105,10 @@ export const insertCompanySchema = createInsertSchema(companies)
     payrollExportFormats: parseJsonInput(
       z.array(payrollExportFormatConfigSchema),
     ).default([]),
+    companyLicenseAlertDays: z
+      .preprocess(parseNumber, z.number().optional()),
+    companyLicenseExpiryDate: z
+      .preprocess(parseDate, z.string().nullable().optional()),
   });
 
 export const insertEmployeeSchema = createInsertSchema(employees)
@@ -1133,6 +1141,7 @@ export const insertEmployeeSchema = createInsertSchema(employees)
     drivingLicenseNumber: true,
     drivingLicenseIssueDate: true,
     drivingLicenseExpiryDate: true,
+    drivingLicenseAlertDays: true,
     drivingLicenseImage: true,
     otherDocs: true,
     additionalDocs: true,
@@ -1169,6 +1178,7 @@ export const insertEmployeeSchema = createInsertSchema(employees)
     visaAlertDays: z.preprocess(parseNumber, z.number().optional()),
     civilIdAlertDays: z.preprocess(parseNumber, z.number().optional()),
     passportAlertDays: z.preprocess(parseNumber, z.number().optional()),
+    drivingLicenseAlertDays: z.preprocess(parseNumber, z.number().optional()),
     standardWorkingDays: z.preprocess(parseNumber, z.number().optional()),
     transferable: z.preprocess(parseBoolean, z.boolean().optional()),
     residencyOnCompany: z.preprocess(parseBoolean, z.boolean().optional()),
@@ -2156,34 +2166,24 @@ export type NotificationWithEmployee = Notification & {
   routingRule?: NotificationRoutingRuleWithSteps | null;
 };
 
+export type DocumentExpiryDetail = {
+  number: string;
+  expiryDate: string;
+  alertDays: number;
+  daysUntilExpiry: number;
+};
+
 export type DocumentExpiryCheck = {
-  employeeId: string;
+  employeeId: string | null;
   employeeName: string;
   email: string | null;
-  visa?: {
-    number: string;
-    expiryDate: string;
-    alertDays: number;
-    daysUntilExpiry: number;
-  };
-  civilId?: {
-    number: string;
-    expiryDate: string;
-    alertDays: number;
-    daysUntilExpiry: number;
-  };
-  passport?: {
-    number: string;
-    expiryDate: string;
-    alertDays: number;
-    daysUntilExpiry: number;
-  };
-  drivingLicense?: {
-    number: string;
-    expiryDate: string;
-    alertDays: number;
-    daysUntilExpiry: number;
-  };
+  companyId?: string | null;
+  companyName?: string | null;
+  visa?: DocumentExpiryDetail;
+  civilId?: DocumentExpiryDetail;
+  passport?: DocumentExpiryDetail;
+  drivingLicense?: DocumentExpiryDetail;
+  companyLicense?: DocumentExpiryDetail;
 };
 
 export type FleetExpiryCheck = {

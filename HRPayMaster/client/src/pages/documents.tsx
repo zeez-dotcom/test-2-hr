@@ -52,6 +52,7 @@ import {
   FileText,
   CreditCard,
   BookOpen,
+  Building,
   Mail,
   Clock,
   RefreshCw,
@@ -283,7 +284,7 @@ type DocumentsPageProps = {
 };
 
 type ReplacementContext = {
-  employeeId: string;
+  employeeId: string | null;
   employeeName: string;
   cardType: string;
   cardTitle: string;
@@ -608,12 +609,24 @@ export default function DocumentsPage({
   }, [documents]);
 
   const findMatchingDocument = (
-    employeeId: string | null | undefined,
+    ownerId: string | null | undefined,
     card: { type: string; number?: string | null; title: string },
   ): GenericDocument | undefined => {
-    if (!employeeId) return undefined;
-    const docs = documentsByEmployee.get(employeeId) ?? [];
     const normalizedTitle = card.title.toLowerCase();
+
+    if (card.type === "company_license") {
+      return documents.find((doc) => {
+        const matchesNumber = card.number
+          ? doc.referenceNumber === card.number || doc.controllerNumber === card.number
+          : false;
+        const matchesCategory = (doc.category ?? "").toLowerCase() === card.type;
+        const matchesTitle = doc.title.toLowerCase().includes(normalizedTitle);
+        return matchesNumber || matchesCategory || matchesTitle;
+      });
+    }
+
+    if (!ownerId) return undefined;
+    const docs = documentsByEmployee.get(ownerId) ?? [];
     return docs.find((doc) => {
       const matchesNumber = card.number
         ? doc.referenceNumber === card.number || doc.controllerNumber === card.number
@@ -949,6 +962,8 @@ export default function DocumentsPage({
           return <BookOpen className="w-5 h-5 text-purple-600" />;
         case "driving_license":
           return <AlertTriangle className="w-5 h-5 text-amber-600" />;
+        case "company_license":
+          return <Building className="w-5 h-5 text-slate-600" />;
         default:
           return <FileText className="w-5 h-5 text-gray-600" />;
       }
@@ -991,6 +1006,7 @@ export default function DocumentsPage({
         expiryDate: string;
         daysUntilExpiry: number;
         alertDays: number;
+        ownerId: string | null;
       }[] = [];
 
       if (check.visa) {
@@ -1001,6 +1017,7 @@ export default function DocumentsPage({
           expiryDate: check.visa.expiryDate,
           daysUntilExpiry: check.visa.daysUntilExpiry,
           alertDays: check.visa.alertDays,
+          ownerId: check.employeeId,
         });
       }
       if (check.civilId) {
@@ -1011,6 +1028,7 @@ export default function DocumentsPage({
           expiryDate: check.civilId.expiryDate,
           daysUntilExpiry: check.civilId.daysUntilExpiry,
           alertDays: check.civilId.alertDays,
+          ownerId: check.employeeId,
         });
       }
       if (check.passport) {
@@ -1021,19 +1039,29 @@ export default function DocumentsPage({
           expiryDate: check.passport.expiryDate,
           daysUntilExpiry: check.passport.daysUntilExpiry,
           alertDays: check.passport.alertDays,
+          ownerId: check.employeeId,
         });
       }
-      const driving = (check as {
-        drivingLicense?: NonNullable<typeof check.visa> | null;
-      }).drivingLicense;
-      if (driving) {
+      if (check.drivingLicense) {
         cards.push({
           type: "driving_license",
           title: "Driving License",
-          number: driving.number,
-          expiryDate: driving.expiryDate,
-          daysUntilExpiry: driving.daysUntilExpiry,
-          alertDays: driving.alertDays,
+          number: check.drivingLicense.number,
+          expiryDate: check.drivingLicense.expiryDate,
+          daysUntilExpiry: check.drivingLicense.daysUntilExpiry,
+          alertDays: check.drivingLicense.alertDays,
+          ownerId: check.employeeId,
+        });
+      }
+      if (check.companyLicense) {
+        cards.push({
+          type: "company_license",
+          title: check.companyName ? `${check.companyName} License` : "Company License",
+          number: check.companyLicense.number,
+          expiryDate: check.companyLicense.expiryDate,
+          daysUntilExpiry: check.companyLicense.daysUntilExpiry,
+          alertDays: check.companyLicense.alertDays,
+          ownerId: null,
         });
       }
       return cards.filter((card) => card.daysUntilExpiry <= 0);
@@ -1044,8 +1072,8 @@ export default function DocumentsPage({
         (check.visa && check.visa.daysUntilExpiry <= 7) ||
         (check.civilId && check.civilId.daysUntilExpiry <= 7) ||
         (check.passport && check.passport.daysUntilExpiry <= 7) ||
-        ((check as any).drivingLicense &&
-          (check as any).drivingLicense.daysUntilExpiry <= 7),
+        (check.drivingLicense && check.drivingLicense.daysUntilExpiry <= 7) ||
+        (check.companyLicense && check.companyLicense.daysUntilExpiry <= 7),
     );
 
     const upcomingExpiries = expiryChecks.filter(
@@ -1053,8 +1081,10 @@ export default function DocumentsPage({
         (check.visa && check.visa.daysUntilExpiry <= check.visa.alertDays) ||
         (check.civilId && check.civilId.daysUntilExpiry <= check.civilId.alertDays) ||
         (check.passport && check.passport.daysUntilExpiry <= check.passport.alertDays) ||
-        ((check as any).drivingLicense &&
-          (check as any).drivingLicense.daysUntilExpiry <= (check as any).drivingLicense.alertDays),
+        (check.drivingLicense &&
+          check.drivingLicense.daysUntilExpiry <= check.drivingLicense.alertDays) ||
+        (check.companyLicense &&
+          check.companyLicense.daysUntilExpiry <= check.companyLicense.alertDays),
     );
 
     const expiredCheckCards = expiryChecks
@@ -1198,10 +1228,11 @@ export default function DocumentsPage({
                   </CardHeader>
                   <CardContent className="grid gap-4 md:grid-cols-2">
                     {cards.map(card => {
-                      const linkedDocument = findMatchingDocument(check.employeeId, card);
+                      const linkedDocument = findMatchingDocument(card.ownerId, card);
+                      const entityKey = check.employeeId ?? check.companyId ?? "unknown";
                       return (
                         <div
-                          key={`${check.employeeId}-${card.type}`}
+                          key={`${entityKey}-${card.type}`}
                           className="flex flex-col gap-3 rounded-lg border border-slate-200 dark:border-slate-800 p-4"
                         >
                           <div className="flex items-start space-x-3">
@@ -1252,7 +1283,7 @@ export default function DocumentsPage({
                                 const defaultTitle = `${card.title} - ${check.employeeName ?? ""}`.trim();
                                 const matched = linkedDocument;
                                 setReplacementContext({
-                                  employeeId: check.employeeId,
+                                  employeeId: card.ownerId ?? null,
                                   employeeName: check.employeeName,
                                   cardType: card.type,
                                   cardTitle: card.title,
@@ -1695,7 +1726,13 @@ export default function DocumentsPage({
   };
 
   const replacementDocuments = replacementContext
-    ? documentsByEmployee.get(replacementContext.employeeId) ?? []
+    ? replacementContext.cardType === "company_license"
+      ? documents.filter(
+          (doc) => (doc.category ?? "").toLowerCase() === "company_license",
+        )
+      : replacementContext.employeeId
+      ? documentsByEmployee.get(replacementContext.employeeId) ?? []
+      : []
     : [];
 
   const handleReplacementDocumentChange = (value: string) => {
