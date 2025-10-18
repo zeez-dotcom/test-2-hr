@@ -846,10 +846,11 @@ export default function DocumentsPage({
       : "";
     const signatureStyle = signatureBadgeStyles[doc.signatureStatus ?? ""] ??
       signatureBadgeStyles.not_requested;
+    const normalizedCategory = doc.category?.toLowerCase();
     const isTrackedReplacementCandidate = Boolean(
       doc.employeeId &&
-      doc.category &&
-      trackedReplacementCategories.has(doc.category),
+      normalizedCategory &&
+      trackedReplacementCategories.has(normalizedCategory),
     );
 
     return (
@@ -914,7 +915,7 @@ export default function DocumentsPage({
                     employeeId: doc.employeeId ?? null,
                     employeeName,
                     companyId: employee?.companyId ?? null,
-                    cardType: doc.category as string,
+                    cardType: normalizedCategory as string,
                     cardTitle: doc.title,
                     number: doc.referenceNumber,
                     expiryDate: doc.expiryDate ?? undefined,
