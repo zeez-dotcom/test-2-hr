@@ -3793,6 +3793,9 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
       let emailsSent = 0;
 
       for (const check of expiryChecks) {
+        if (!check.employeeId) {
+          continue;
+        }
         const employee = await storage.getEmployee(check.employeeId);
         if (!employee) continue;
 
@@ -3904,28 +3907,28 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
         }
 
         // Check driving license expiry (optional property populated by storage)
-        if ((check as any).drivingLicense && shouldSendAlert((check as any).drivingLicense.expiryDate, (check as any).drivingLicense.alertDays)) {
+        if (check.drivingLicense && shouldSendAlert(check.drivingLicense.expiryDate, check.drivingLicense.alertDays)) {
           const emailContent = generateExpiryWarningEmail(
             employee,
             'driving_license',
-            (check as any).drivingLicense.expiryDate,
-            (check as any).drivingLicense.daysUntilExpiry,
-            (check as any).drivingLicense.number
+            check.drivingLicense.expiryDate,
+            check.drivingLicense.daysUntilExpiry,
+            check.drivingLicense.number
           );
 
           await storage.createNotification({
             employeeId: check.employeeId,
             type: 'driving_license_expiry',
             title: emailContent.subject,
-            message: `Driving License expires in ${(check as any).drivingLicense.daysUntilExpiry} days`,
+            message: `Driving License expires in ${check.drivingLicense.daysUntilExpiry} days`,
             priority:
-              (check as any).drivingLicense.daysUntilExpiry <= 7
+              check.drivingLicense.daysUntilExpiry <= 7
                 ? 'critical'
-                : (check as any).drivingLicense.daysUntilExpiry <= 30
+                : check.drivingLicense.daysUntilExpiry <= 30
                 ? 'high'
                 : 'medium',
-            expiryDate: (check as any).drivingLicense.expiryDate,
-            daysUntilExpiry: (check as any).drivingLicense.daysUntilExpiry,
+            expiryDate: check.drivingLicense.expiryDate,
+            daysUntilExpiry: check.drivingLicense.daysUntilExpiry,
             emailSent: false,
             deliveryChannels: ['email'],
             escalationHistory: [],
@@ -3940,7 +3943,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
           });
 
           if (emailSent) emailsSent++;
-          alerts.push({ type: 'driving_license', employee: check.employeeName, daysUntilExpiry: (check as any).drivingLicense.daysUntilExpiry });
+          alerts.push({ type: 'driving_license', employee: check.employeeName, daysUntilExpiry: check.drivingLicense.daysUntilExpiry });
         }
       }
 

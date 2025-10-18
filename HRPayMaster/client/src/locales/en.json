@@ -299,7 +299,8 @@
       "visa": "Visa",
       "civil_id": "Civil ID",
       "passport": "Passport",
-      "driving_license": "Driving License"
+      "driving_license": "Driving License",
+      "company_license": "Company License"
     }
   }
   ,

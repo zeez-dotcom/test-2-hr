@@ -306,6 +306,9 @@ app.use((req, res, next) => {
       await trackBackgroundJob("document_expiry_alerts", async () => {
         const checks = await storage.checkDocumentExpiries();
         for (const check of checks) {
+          if (!check.employeeId) {
+            continue;
+          }
           const employee = await storage.getEmployee(check.employeeId);
           if (!employee) continue;
 
