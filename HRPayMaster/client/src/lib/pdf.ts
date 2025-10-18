@@ -1239,10 +1239,10 @@ export function buildEmployeeProfileReport(data: EmployeeProfileReportParams): T
 
   const eventRows = data.events.map(event => [
     formatDisplayDate(event.eventDate),
-    event.type || '-',
-    event.title || '-',
+    sanitizeString(formatEventTypeLabel(event.eventType)),
+    sanitizeString(event.title || '-'),
     formatCurrencyValue(event.amount ?? null),
-    event.description || '-',
+    sanitizeString(event.description || '-'),
   ]);
   addTableSection('Payroll-affecting Events', ['Date', 'Type', 'Title', 'Amount', 'Description'], eventRows, 'No payroll events recorded for this employee.');
 

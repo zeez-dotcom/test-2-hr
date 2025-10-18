@@ -145,11 +145,24 @@ export default function EmployeeFile() {
             position: employee.position,
             profileImage: employee.profileImage,
           },
-          events: sortedExpandedEvents.map((e) => ({
-            title: String(e.title ?? ''),
-            eventDate: String(e.eventDate ?? ''),
-            amount: String(e.amount ?? ''),
-          })),
+          events: sortedExpandedEvents.map((e) => {
+            const rawAmount = e.amount;
+            const parsedAmount =
+              rawAmount === null || rawAmount === undefined || rawAmount === ''
+                ? null
+                : Number.parseFloat(String(rawAmount));
+            const amount =
+              typeof parsedAmount === 'number' && Number.isFinite(parsedAmount)
+                ? parsedAmount
+                : null;
+
+            return {
+              title: String(e.title ?? ''),
+              eventDate: String(e.eventDate ?? ''),
+              eventType: e.eventType ?? null,
+              amount,
+            };
+          }),
           loans: sections.size === 0 || sections.has('loans') ? lns : [],
           documents: sections.size === 0 || sections.has('documents') ? docs : [],
           assets: sections.size === 0 || sections.has('assets') ? assignments : undefined,
