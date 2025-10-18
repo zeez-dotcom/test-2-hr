@@ -4,7 +4,7 @@ import { useLocation, useSearch } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Documents from "@/pages/documents";
 import Notifications from "@/pages/notifications";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { apiPut } from "@/lib/http";
@@ -14,6 +14,12 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
 import type { FleetExpiryCheck } from "@shared/schema";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
 
 export default function Compliance() {
   const { t } = useTranslation();
@@ -70,9 +76,87 @@ function ExpiredDocuments() {
 
 function FleetExpiry() {
   const { t } = useTranslation();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { data: fleetChecks = [], isLoading, error } = useQuery<FleetExpiryCheck[]>({
     queryKey: ["/api/fleet/expiry-check"],
   });
+
+  const [selectedCar, setSelectedCar] = useState<FleetExpiryCheck | null>(null);
+
+  const replaceRegistrationSchema = useMemo(
+    () =>
+      z.object({
+        registrationExpiry: z
+          .string()
+          .min(1, t("compliance.registrationExpiryRequired", "Registration expiry is required")),
+        registrationDocumentImage: z
+          .any()
+          .superRefine((value, ctx) => {
+            if (!value) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: t("compliance.registrationDocumentRequired", "Registration document is required"),
+              });
+              return;
+            }
+            if (typeof File !== "undefined" && !(value instanceof File)) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: t("compliance.registrationDocumentRequired", "Registration document is required"),
+              });
+            }
+          }),
+      }),
+    [t],
+  );
+
+  const replaceRegistrationForm = useForm<{
+    registrationExpiry: string;
+    registrationDocumentImage: File | undefined;
+  }>({
+    resolver: zodResolver(replaceRegistrationSchema),
+    defaultValues: {
+      registrationExpiry: "",
+      registrationDocumentImage: undefined,
+    },
+  });
+
+  const replaceRegistrationMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: FormData }) => {
+      const res = await apiPut(`/api/cars/${id}`, data);
+      if (!res.ok) throw res;
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/fleet/expiry-check"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
+      toast({ title: t("compliance.registrationReplaced", "Registration updated") });
+      setSelectedCar(null);
+      replaceRegistrationForm.reset({ registrationExpiry: "", registrationDocumentImage: undefined });
+    },
+    onError: (err: any) => {
+      const description = err?.error ? String(err.error) : undefined;
+      toast({
+        title: t("compliance.registrationReplaceFailed", "Failed to replace registration"),
+        description,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const closeDialog = () => {
+    setSelectedCar(null);
+    replaceRegistrationForm.reset({ registrationExpiry: "", registrationDocumentImage: undefined });
+  };
+
+  const onSubmitReplaceRegistration = (data: { registrationExpiry: string; registrationDocumentImage: File | undefined }) => {
+    if (!selectedCar || !data.registrationDocumentImage) return;
+    const formData = new FormData();
+    formData.append("registrationExpiry", data.registrationExpiry);
+    formData.append("registrationDocumentImage", data.registrationDocumentImage);
+    replaceRegistrationMutation.mutate({ id: selectedCar.carId, data: formData });
+  };
 
   if (error) {
     return <div className="text-sm text-destructive">{t('compliance.fleetError','Failed to load fleet expiries.')}</div>;
@@ -191,11 +275,16 @@ function FleetExpiry() {
                     <TableHead>{t('compliance.fleetStatus','Status')}</TableHead>
                     <TableHead>{t('compliance.fleetAssigned','Assigned To')}</TableHead>
                     <TableHead>{t('compliance.fleetOwner','Registration Owner')}</TableHead>
+                    <TableHead>{t('compliance.fleetActions','Actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {fleetChecks.map((check) => {
                     const vehicleLabel = `${check.year ? `${check.year} ` : ''}${check.make} ${check.model}`.trim();
+                    const eligibleForReplacement =
+                      !check.registrationExpiry ||
+                      check.daysUntilRegistrationExpiry === null ||
+                      (check.daysUntilRegistrationExpiry ?? 0) <= 0;
                     return (
                       <TableRow key={check.carId}>
                         <TableCell>
@@ -216,6 +305,32 @@ function FleetExpiry() {
                           )}
                         </TableCell>
                         <TableCell>{check.registrationOwner || '—'}</TableCell>
+                        <TableCell>
+                          {eligibleForReplacement ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedCar(check);
+                                const parsedExpiry = check.registrationExpiry
+                                  ? new Date(check.registrationExpiry)
+                                  : null;
+                                const formattedExpiry =
+                                  parsedExpiry && !Number.isNaN(parsedExpiry.getTime())
+                                    ? parsedExpiry.toISOString().split('T')[0]
+                                    : '';
+                                replaceRegistrationForm.reset({
+                                  registrationExpiry: formattedExpiry,
+                                  registrationDocumentImage: undefined,
+                                });
+                              }}
+                            >
+                              {t('compliance.replaceRegistration','Replace registration')}
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
                       </TableRow>
                     );
                   })}
@@ -225,6 +340,71 @@ function FleetExpiry() {
           )}
         </CardContent>
       </Card>
+      <Dialog open={!!selectedCar} onOpenChange={(open) => {
+        if (!open) {
+          closeDialog();
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('compliance.replaceRegistrationTitle','Replace registration')}</DialogTitle>
+            <DialogDescription>
+              {selectedCar
+                ? t('compliance.replaceRegistrationSubtitle','Upload a new registration document for {{vehicle}}', {
+                    vehicle: `${selectedCar.make} ${selectedCar.model}`,
+                  })
+                : null}
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...replaceRegistrationForm}>
+            <form onSubmit={replaceRegistrationForm.handleSubmit(onSubmitReplaceRegistration)} className="space-y-4">
+              <FormField
+                control={replaceRegistrationForm.control}
+                name="registrationExpiry"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('compliance.registrationExpiryLabel','New expiry date')}</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={replaceRegistrationForm.control}
+                name="registrationDocumentImage"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('compliance.registrationDocumentLabel','New registration document')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          field.onChange(file);
+                        }}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={closeDialog} disabled={replaceRegistrationMutation.isPending}>
+                  {t('actions.cancel','Cancel')}
+                </Button>
+                <Button type="submit" disabled={replaceRegistrationMutation.isPending}>
+                  {replaceRegistrationMutation.isPending
+                    ? t('actions.saving','Saving...')
+                    : t('actions.save','Save')}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -306,3 +486,5 @@ function Approvals() {
     </Card>
   );
 }
+
+export { FleetExpiry };

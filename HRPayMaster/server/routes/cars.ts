@@ -135,6 +135,18 @@ carsRouter.put("/:id", upload.any(), async (req, res, next) => {
       normalizedBody.registrationVideo = `data:video/*;base64,${normalizedBody.registrationVideo}`;
     }
 
+    if (typeof normalizedBody.registrationExpiry === "string") {
+      const trimmed = normalizedBody.registrationExpiry.trim();
+      if (!trimmed) {
+        normalizedBody.registrationExpiry = null;
+      } else {
+        const parsed = new Date(trimmed);
+        if (!Number.isNaN(parsed.getTime())) {
+          normalizedBody.registrationExpiry = parsed.toISOString().split("T")[0];
+        }
+      }
+    }
+
     // convert numerics
     for (const field of ["year", "mileage", "purchasePrice", "spareTireCount"]) {
       if (typeof normalizedBody[field] === "string" && normalizedBody[field] !== "") {
