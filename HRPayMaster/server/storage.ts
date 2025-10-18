@@ -6049,17 +6049,23 @@ export class DatabaseStorage implements IStorage {
 
   async updateCar(id: string, car: Partial<InsertCar>): Promise<Car | undefined> {
 
+    const filteredEntries = Object.entries(car).filter(([, value]) => value !== undefined);
+
+    const sanitized = Object.fromEntries(filteredEntries) as Partial<InsertCar>;
+
+    const updatePayload: Record<string, any> = { ...sanitized };
+
+    if (sanitized.purchasePrice !== undefined) {
+
+      updatePayload.purchasePrice = sanitized.purchasePrice?.toString();
+
+    }
+
     const [updated] = await db
 
       .update(cars)
 
-      .set({
-
-        ...car,
-
-        purchasePrice: car.purchasePrice?.toString(),
-
-      })
+      .set(updatePayload)
 
       .where(eq(cars.id, id))
 
