@@ -275,11 +275,34 @@ const invalidateDocuments = () =>
     predicate: (query) =>
       Array.isArray(query.queryKey) && query.queryKey[0] === "/api/documents",
   });
-export default function DocumentsPage() {
+
+type DocumentsPageProps = {
+  initialTab?: "library" | "expiry";
+  showExpiryOnly?: boolean;
+  expiredOnly?: boolean;
+};
+
+type ReplacementContext = {
+  employeeId: string;
+  employeeName: string;
+  cardType: string;
+  cardTitle: string;
+  number?: string | null;
+  expiryDate?: string;
+  alertDays?: number;
+};
+
+const NEW_DOCUMENT_VALUE = "__new_replacement__";
+
+export default function DocumentsPage({
+  initialTab = "library",
+  showExpiryOnly = false,
+  expiredOnly = false,
+}: DocumentsPageProps) {
   const { t } = useTranslation();
   const { toast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<string>("library");
+  const [activeTab, setActiveTab] = useState<string>(initialTab);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL_CATEGORIES_VALUE);
   const [tagFilter, setTagFilter] = useState<string>(ALL_TAGS_VALUE);
@@ -315,6 +338,14 @@ export default function DocumentsPage() {
   const [uploadMetadata, setUploadMetadata] = useState("");
   const [uploadDataUrl, setUploadDataUrl] = useState<string | undefined>();
 
+  const [replacementContext, setReplacementContext] = useState<ReplacementContext | null>(null);
+  const [replacementTitle, setReplacementTitle] = useState("");
+  const [replacementDescription, setReplacementDescription] = useState("");
+  const [replacementExpiryDate, setReplacementExpiryDate] = useState("");
+  const [replacementAlertDays, setReplacementAlertDays] = useState("");
+  const [replacementDocumentId, setReplacementDocumentId] = useState<string>(NEW_DOCUMENT_VALUE);
+  const [replacementDataUrl, setReplacementDataUrl] = useState<string | undefined>();
+
   const [templateKey, setTemplateKey] = useState<TemplateKey>("noc");
   const [templateEmployeeId, setTemplateEmployeeId] = useState("");
   const [templatePurpose, setTemplatePurpose] = useState("");
@@ -342,6 +373,10 @@ export default function DocumentsPage() {
   const [signatureMetadata, setSignatureMetadata] = useState("");
 
   const { data: employees = [] } = useQuery<any[]>({ queryKey: ["/api/employees"] });
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   useEffect(() => {
     if (!templateEmployeeId) return;
@@ -560,6 +595,34 @@ export default function DocumentsPage() {
     const entries = employees?.map((emp: any) => [emp.id, emp]) ?? [];
     return new Map(entries as [string, any][]);
   }, [employees]);
+
+  const documentsByEmployee = useMemo(() => {
+    const map = new Map<string, GenericDocument[]>();
+    for (const doc of documents) {
+      if (!doc.employeeId) continue;
+      const list = map.get(doc.employeeId) ?? [];
+      list.push(doc);
+      map.set(doc.employeeId, list);
+    }
+    return map;
+  }, [documents]);
+
+  const findMatchingDocument = (
+    employeeId: string | null | undefined,
+    card: { type: string; number?: string | null; title: string },
+  ): GenericDocument | undefined => {
+    if (!employeeId) return undefined;
+    const docs = documentsByEmployee.get(employeeId) ?? [];
+    const normalizedTitle = card.title.toLowerCase();
+    return docs.find((doc) => {
+      const matchesNumber = card.number
+        ? doc.referenceNumber === card.number || doc.controllerNumber === card.number
+        : false;
+      const matchesCategory = (doc.category ?? "").toLowerCase() === card.type;
+      const matchesTitle = doc.title.toLowerCase().includes(normalizedTitle);
+      return matchesNumber || matchesCategory || matchesTitle;
+    });
+  };
 
   const uniqueCategories = useMemo(() => {
     const set = new Set<string>();
@@ -973,7 +1036,7 @@ export default function DocumentsPage() {
           alertDays: driving.alertDays,
         });
       }
-      return cards;
+      return cards.filter((card) => card.daysUntilExpiry <= 0);
     };
 
     const criticalExpiries = expiryChecks.filter(
@@ -993,6 +1056,13 @@ export default function DocumentsPage() {
         ((check as any).drivingLicense &&
           (check as any).drivingLicense.daysUntilExpiry <= (check as any).drivingLicense.alertDays),
     );
+
+    const expiredCheckCards = expiryChecks
+      .map((check) => ({
+        check,
+        cards: buildCards(check),
+      }))
+      .filter(({ cards }) => cards.length > 0);
 
     if (expiryLoading) {
       return (
@@ -1092,13 +1162,22 @@ export default function DocumentsPage() {
           </Card>
         </div>
 
-          <div className="space-y-4">
-            {expiryChecks.map(check => {
+        <div className="space-y-4">
+          {expiredCheckCards.length === 0 ? (
+            <Card>
+              <CardContent className="p-8 text-center text-muted-foreground">
+                {t(
+                  "documents.noExpired",
+                  "No expired documents require replacement right now.",
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            expiredCheckCards.map(({ check, cards }) => {
               const extended = check as DocumentExpiryCheck & {
                 employeePosition?: string | null;
                 nextAlertDate?: string | null;
               };
-              const cards = buildCards(check);
               return (
                 <Card key={check.employeeId ?? Math.random()}>
                   <CardHeader className="pb-4">
@@ -1113,41 +1192,101 @@ export default function DocumentsPage() {
                       </div>
                       <Badge variant="secondary" className="flex items-center gap-1">
                         <Clock className="h-4 w-4" />
-                        {t("documents.nextAlert", "Next alert")}: {extended.nextAlertDate ?? "—"}
+                        {t("documents.expiredBadge", "Expired")}
                       </Badge>
                     </div>
                   </CardHeader>
                   <CardContent className="grid gap-4 md:grid-cols-2">
-                    {cards.map(card => (
-                      <div
-                        key={`${check.employeeId}-${card.type}`}
-                        className="flex items-start space-x-3 rounded-lg border border-slate-200 dark:border-slate-800 p-4"
-                      >
-                        <div>{getDocumentIcon(card.type)}</div>
-                        <div className="flex-1 space-y-1">
-                          <div className="flex items-center justify-between">
-                            <p className="font-medium text-slate-900 dark:text-slate-100">
-                              {card.title}
-                            </p>
-                            {getUrgencyBadge(card.daysUntilExpiry)}
+                    {cards.map(card => {
+                      const linkedDocument = findMatchingDocument(check.employeeId, card);
+                      return (
+                        <div
+                          key={`${check.employeeId}-${card.type}`}
+                          className="flex flex-col gap-3 rounded-lg border border-slate-200 dark:border-slate-800 p-4"
+                        >
+                          <div className="flex items-start space-x-3">
+                            <div>{getDocumentIcon(card.type)}</div>
+                            <div className="flex-1 space-y-1">
+                              <div className="flex items-center justify-between">
+                                <p className="font-medium text-slate-900 dark:text-slate-100">
+                                  {card.title}
+                                </p>
+                                {getUrgencyBadge(card.daysUntilExpiry)}
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                {t("documents.number", "Number")}: {card.number ?? "—"}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {t("documents.expiryDate", "Expiry date")}: {card.expiryDate ?? "—"}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {t("documents.daysRemaining", "Days remaining")}: {card.daysUntilExpiry}
+                              </p>
+                            </div>
                           </div>
-                          <p className="text-sm text-muted-foreground">
-                            {t("documents.number", "Number")}: {card.number ?? "—"}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {t("documents.expiryDate", "Expiry date")}: {card.expiryDate ?? "—"}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {t("documents.daysRemaining", "Days remaining")}: {card.daysUntilExpiry}
-                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={!linkedDocument}
+                              onClick={() => {
+                                if (linkedDocument) {
+                                  setHistoryDoc(linkedDocument);
+                                } else {
+                                  toast({
+                                    title: t(
+                                      "documents.historyUnavailable",
+                                      "History unavailable for this document",
+                                    ),
+                                    variant: "destructive",
+                                  });
+                                }
+                              }}
+                            >
+                              <History className="h-4 w-4 mr-1" />
+                              {t("documents.viewHistory", "View history")}
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                const defaultTitle = `${card.title} - ${check.employeeName ?? ""}`.trim();
+                                const matched = linkedDocument;
+                                setReplacementContext({
+                                  employeeId: check.employeeId,
+                                  employeeName: check.employeeName,
+                                  cardType: card.type,
+                                  cardTitle: card.title,
+                                  number: card.number,
+                                  expiryDate: card.expiryDate,
+                                  alertDays: card.alertDays,
+                                });
+                                setReplacementDocumentId(matched?.id ?? NEW_DOCUMENT_VALUE);
+                                setReplacementTitle(matched?.title ?? defaultTitle);
+                                setReplacementDescription(matched?.description ?? "");
+                                setReplacementExpiryDate(card.expiryDate ?? matched?.expiryDate ?? "");
+                                setReplacementAlertDays(
+                                  matched?.alertDays !== null && matched?.alertDays !== undefined
+                                    ? String(matched.alertDays)
+                                    : card.alertDays
+                                      ? String(card.alertDays)
+                                      : "",
+                                );
+                                setReplacementDataUrl(undefined);
+                              }}
+                            >
+                              <UploadCloud className="h-4 w-4 mr-1" />
+                              {t("documents.uploadReplacement", "Upload replacement")}
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </CardContent>
                 </Card>
               );
-            })}
-          </div>
+            })
+          )}
+        </div>
       </div>
     );
   };
@@ -1550,22 +1689,122 @@ export default function DocumentsPage() {
     </div>
   );
 
+  const handleTabChange = (value: string) => {
+    if (showExpiryOnly) return;
+    setActiveTab(value);
+  };
+
+  const replacementDocuments = replacementContext
+    ? documentsByEmployee.get(replacementContext.employeeId) ?? []
+    : [];
+
+  const handleReplacementDocumentChange = (value: string) => {
+    setReplacementDocumentId(value);
+    if (!replacementContext) return;
+    if (value === NEW_DOCUMENT_VALUE) {
+      setReplacementTitle(
+        `${replacementContext.cardTitle} - ${replacementContext.employeeName ?? ""}`.trim(),
+      );
+      setReplacementDescription("");
+      setReplacementExpiryDate(replacementContext.expiryDate ?? "");
+      setReplacementAlertDays(
+        replacementContext.alertDays !== undefined && replacementContext.alertDays !== null
+          ? String(replacementContext.alertDays)
+          : "",
+      );
+      setReplacementDataUrl(undefined);
+      return;
+    }
+    const selectedDoc = replacementDocuments.find((doc) => doc.id === value);
+    if (selectedDoc) {
+      setReplacementTitle(selectedDoc.title);
+      setReplacementDescription(selectedDoc.description ?? "");
+      setReplacementExpiryDate(selectedDoc.expiryDate ?? "");
+      setReplacementAlertDays(
+        selectedDoc.alertDays !== null && selectedDoc.alertDays !== undefined
+          ? String(selectedDoc.alertDays)
+          : "",
+      );
+      setReplacementDataUrl(undefined);
+    }
+  };
+
+  const closeReplacementModal = () => {
+    setReplacementContext(null);
+    setReplacementTitle("");
+    setReplacementDescription("");
+    setReplacementExpiryDate("");
+    setReplacementAlertDays("");
+    setReplacementDocumentId(NEW_DOCUMENT_VALUE);
+    setReplacementDataUrl(undefined);
+  };
+
+  const handleReplacementSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!replacementContext) return;
+    if (!replacementDataUrl) {
+      toast({
+        title: t("documents.missingFile", "Attach a document to upload"),
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const metadata = {
+      replacedDocumentType: replacementContext.cardType,
+      replacedDocumentNumber: replacementContext.number,
+      replacedAt: new Date().toISOString(),
+    } as Record<string, unknown>;
+
+    const basePayload: Record<string, unknown> = {
+      title: replacementTitle,
+      description: replacementDescription,
+      pdfDataUrl: replacementDataUrl,
+      metadata,
+      expiryDate: replacementExpiryDate || undefined,
+      alertDays: replacementAlertDays || undefined,
+    };
+
+    try {
+      if (replacementDocumentId !== NEW_DOCUMENT_VALUE) {
+        await createVersionMutation.mutateAsync({
+          id: replacementDocumentId,
+          body: basePayload,
+        });
+      } else {
+        await createDocumentMutation.mutateAsync({
+          ...basePayload,
+          employeeId: replacementContext.employeeId,
+          category: replacementContext.cardType,
+          referenceNumber: replacementContext.number ?? undefined,
+        });
+      }
+      closeReplacementModal();
+    } catch (error) {
+      // handled by mutation error handlers
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="library">{t("documents.library", "Document Library")}</TabsTrigger>
-          <TabsTrigger value="expiry">{t("documents.expiryTracking", "Expiry Tracking")}</TabsTrigger>
-        </TabsList>
+      {showExpiryOnly ? (
+        renderExpiryTab()
+      ) : (
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="library">{t("documents.library", "Document Library")}</TabsTrigger>
+            <TabsTrigger value="expiry">{t("documents.expiryTracking", "Expiry Tracking")}</TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="library" className="space-y-6">
-          {documentsContent}
-        </TabsContent>
+          <TabsContent value="library" className="space-y-6">
+            {documentsContent}
+          </TabsContent>
 
-        <TabsContent value="expiry" className="space-y-6">
-          {renderExpiryTab()}
-        </TabsContent>
-      </Tabs>
+          <TabsContent value="expiry" className="space-y-6">
+            {renderExpiryTab()}
+          </TabsContent>
+        </Tabs>
+      )}
 
       <Dialog open={Boolean(historyDoc)} onOpenChange={(open) => !open && setHistoryDoc(null)}>
         <DialogContent className="max-w-3xl">
@@ -1649,6 +1888,112 @@ export default function DocumentsPage() {
               </DialogFooter>
             </form>
           </div>
+      </DialogContent>
+    </Dialog>
+
+      <Dialog open={Boolean(replacementContext)} onOpenChange={(open) => !open && closeReplacementModal()}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>
+              {t("documents.replacementDialogTitle", "Upload replacement document")}
+            </DialogTitle>
+            <DialogDescription>
+              {replacementContext
+                ? t(
+                    "documents.replacementDialogDescription",
+                    "Provide a new file to replace the expired {{type}} for {{employee}}.",
+                    {
+                      type:
+                        t(`documents.type.${replacementContext.cardType}` as any, replacementContext.cardTitle) ||
+                        replacementContext.cardTitle,
+                      employee: replacementContext.employeeName,
+                    },
+                  )
+                : null}
+            </DialogDescription>
+          </DialogHeader>
+          {replacementContext && (
+            <form className="space-y-4" onSubmit={handleReplacementSubmit}>
+              <div className="grid gap-3">
+                <div className="grid gap-1">
+                  <Label htmlFor="replacement-document">
+                    {t("documents.replacementExistingLabel", "Existing document")}
+                  </Label>
+                  <Select value={replacementDocumentId} onValueChange={handleReplacementDocumentChange}>
+                    <SelectTrigger id="replacement-document">
+                      <SelectValue placeholder={t("documents.replacementSelect", "Select a document")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NEW_DOCUMENT_VALUE}>
+                        {t("documents.replacementCreateNew", "Create new document")}
+                      </SelectItem>
+                      {replacementDocuments.map((doc) => (
+                        <SelectItem key={doc.id} value={doc.id}>
+                          {doc.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-1">
+                  <Label htmlFor="replacement-title">{t("documents.titleLabel", "Title")}</Label>
+                  <Input
+                    id="replacement-title"
+                    value={replacementTitle}
+                    onChange={(event) => setReplacementTitle(event.target.value)}
+                    required
+                  />
+                </div>
+                <div className="grid gap-1">
+                  <Label htmlFor="replacement-description">{t("documents.description", "Description")}</Label>
+                  <Textarea
+                    id="replacement-description"
+                    value={replacementDescription}
+                    onChange={(event) => setReplacementDescription(event.target.value)}
+                  />
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="grid gap-1">
+                    <Label htmlFor="replacement-expiry">{t("documents.expiryDate", "Expiry date")}</Label>
+                    <Input
+                      id="replacement-expiry"
+                      type="date"
+                      value={replacementExpiryDate}
+                      onChange={(event) => setReplacementExpiryDate(event.target.value)}
+                    />
+                  </div>
+                  <div className="grid gap-1">
+                    <Label htmlFor="replacement-alert">{t("documents.alertDays", "Alert days")}</Label>
+                    <Input
+                      id="replacement-alert"
+                      type="number"
+                      min={0}
+                      value={replacementAlertDays}
+                      onChange={(event) => setReplacementAlertDays(event.target.value)}
+                    />
+                  </div>
+                </div>
+                <ImageUpload
+                  label={t("documents.replacementFileLabel", "Replacement document")}
+                  value={replacementDataUrl}
+                  onChange={setReplacementDataUrl}
+                />
+              </div>
+              <DialogFooter className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={closeReplacementModal}>
+                  {t("actions.cancel", "Cancel")}
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={createDocumentMutation.isPending || createVersionMutation.isPending}
+                >
+                  {createDocumentMutation.isPending || createVersionMutation.isPending
+                    ? t("documents.saving", "Saving...")
+                    : t("documents.replacementSubmit", "Save replacement")}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
 

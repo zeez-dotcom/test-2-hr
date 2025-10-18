@@ -48,7 +48,7 @@ export default function Compliance() {
           <TabsTrigger value="approvals">{t('compliance.approvals','Approvals')}</TabsTrigger>
         </TabsList>
         <TabsContent value="expiry">
-          <Documents />
+          <ExpiredDocuments />
         </TabsContent>
         <TabsContent value="fleet">
           <FleetExpiry />
@@ -62,6 +62,10 @@ export default function Compliance() {
       </Tabs>
     </div>
   );
+}
+
+function ExpiredDocuments() {
+  return <Documents initialTab="expiry" showExpiryOnly expiredOnly />;
 }
 
 function FleetExpiry() {
