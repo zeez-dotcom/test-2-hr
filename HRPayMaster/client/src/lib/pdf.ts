@@ -467,9 +467,20 @@ export interface EmployeeProfileReportParams {
 }
 
 export function buildEmployeeReport(
-  data: { employee: EmployeeLite; events: EmployeeEventLite[] }
+  data: {
+    employee: EmployeeLite;
+    events: EmployeeEventLite[];
+    assets?: Array<{
+      name: string;
+      type?: string | null;
+      status?: string | null;
+      assignedDate?: string | Date | null;
+      returnDate?: string | Date | null;
+      notes?: string | null;
+    }>;
+  }
 ): TDocumentDefinitions {
-  const { employee, events } = data;
+  const { employee, events, assets = [] } = data;
   const brand = getBrand();
   const brandName = sanitizeString(brand.name || 'HRPayMaster');
   const brandLogo = brand.logo ? sanitizeImageSrc(brand.logo) : undefined;
@@ -548,6 +559,28 @@ export function buildEmployeeReport(
       layout: tableLayout,
     },
   ];
+
+  if (assets.length > 0) {
+    content.push({ text: 'Asset Assignments', style: 'section' });
+    content.push({
+      table: {
+        headerRows: 1,
+        widths: ['*', 'auto', 'auto', 'auto', 'auto', '*'],
+        body: [
+          ['Asset', 'Type', 'Assigned', 'Returned', 'Status', 'Notes'],
+          ...assets.map(asset => [
+            sanitizeString(asset.name),
+            sanitizeString(asset.type ?? ''),
+            formatYMD(asset.assignedDate, ''),
+            formatYMD(asset.returnDate, ''),
+            sanitizeString(asset.status ?? ''),
+            sanitizeString(asset.notes ?? ''),
+          ]),
+        ],
+      },
+      layout: tableLayout,
+    });
+  }
 
   return {
     info: { title: `${firstName} ${lastName} Report` },
