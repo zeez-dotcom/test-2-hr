@@ -76,6 +76,28 @@ describe('pdf utility', () => {
     expect(buffer.length).toBeGreaterThan(100);
   });
 
+  it('includes asset assignments section when provided', () => {
+    const def = buildEmployeeReport({
+      employee: { firstName: 'Alice', lastName: 'Smith', id: '1' },
+      events: [],
+      assets: [
+        {
+          name: 'Laptop Pro 15',
+          type: 'Electronics',
+          assignedDate: new Date('2024-03-01'),
+          returnDate: null,
+          status: 'Active',
+          notes: 'Primary workstation',
+        },
+      ],
+    });
+
+    const serialized = JSON.stringify(def.content);
+    expect(serialized).toContain('Asset Assignments');
+    expect(serialized).toContain('Laptop Pro 15');
+    expect(serialized).toContain('2024-03-01');
+  });
+
   it('adds profile image when provided', () => {
     const def = buildEmployeeReport({
       employee: {
