@@ -103,6 +103,14 @@ const signatureBadgeStyles: Record<string, string> = {
 const splitTags = (value?: string | null): string[] =>
   value ? value.split(",").map(tag => tag.trim()).filter(Boolean) : [];
 
+const trackedReplacementCategories = new Set([
+  "visa",
+  "civil_id",
+  "passport",
+  "driving_license",
+  "company_license",
+]);
+
 const formatStatus = (status?: string | null) =>
   (status ?? "not_requested")
     .replace(/_/g, " ")
@@ -829,8 +837,20 @@ export default function DocumentsPage({
   const renderDocumentCard = (doc: GenericDocument) => {
     const tags = splitTags(doc.tags);
     const employee = doc.employeeId ? employeeMap.get(doc.employeeId) : undefined;
+    const employeeName = employee
+      ? `${employee.firstName ?? ""} ${employee.lastName ?? ""}`.trim() ||
+        employee.name ||
+        employee.employeeCode ||
+        employee.id ||
+        ""
+      : "";
     const signatureStyle = signatureBadgeStyles[doc.signatureStatus ?? ""] ??
       signatureBadgeStyles.not_requested;
+    const isTrackedReplacementCandidate = Boolean(
+      doc.employeeId &&
+      doc.category &&
+      trackedReplacementCategories.has(doc.category),
+    );
 
     return (
       <Card key={doc.id} className="border border-slate-200 dark:border-slate-800">
@@ -885,6 +905,37 @@ export default function DocumentsPage({
               <FileSignature className="mr-1 h-4 w-4" />
               {t("documents.signature", "Signature")}
             </Button>
+            {isTrackedReplacementCandidate && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setReplacementContext({
+                    employeeId: doc.employeeId ?? null,
+                    employeeName,
+                    companyId: employee?.companyId ?? null,
+                    cardType: doc.category as string,
+                    cardTitle: doc.title,
+                    number: doc.referenceNumber,
+                    expiryDate: doc.expiryDate ?? undefined,
+                    alertDays: doc.alertDays ?? undefined,
+                  });
+                  setReplacementDocumentId(doc.id);
+                  setReplacementTitle(doc.title ?? "");
+                  setReplacementDescription(doc.description ?? "");
+                  setReplacementExpiryDate(doc.expiryDate ?? "");
+                  setReplacementAlertDays(
+                    doc.alertDays !== null && doc.alertDays !== undefined
+                      ? String(doc.alertDays)
+                      : "",
+                  );
+                  setReplacementDataUrl(undefined);
+                }}
+              >
+                <UploadCloud className="mr-1 h-4 w-4" />
+                {t("documents.uploadReplacement", "Upload replacement")}
+              </Button>
+            )}
             <Button
               variant="destructive"
               size="sm"
