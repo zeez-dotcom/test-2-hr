@@ -1239,7 +1239,7 @@ export function buildEmployeeProfileReport(data: EmployeeProfileReportParams): T
 
   const eventRows = data.events.map(event => [
     formatDisplayDate(event.eventDate),
-    sanitizeString(formatEventTypeLabel(event.eventType)),
+    sanitizeString(formatEventTypeLabel(event.type)),
     sanitizeString(event.title || '-'),
     formatCurrencyValue(event.amount ?? null),
     sanitizeString(event.description || '-'),
