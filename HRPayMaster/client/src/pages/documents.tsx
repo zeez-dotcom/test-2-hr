@@ -40,7 +40,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import ImageUpload from "@/components/ui/image-upload";
 import { useToast } from "@/hooks/use-toast";
 import { toastApiError } from "@/lib/toastError";
-import { apiGet, apiPost, apiDelete } from "@/lib/http";
+import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/http";
 import { queryClient } from "@/lib/queryClient";
 import { defaultTemplates, type TemplateKey } from "@/lib/default-templates";
 import { buildAndEncodePdf, controllerNumber } from "@/lib/pdf";
@@ -286,6 +286,7 @@ type DocumentsPageProps = {
 type ReplacementContext = {
   employeeId: string | null;
   employeeName: string;
+  companyId: string | null;
   cardType: string;
   cardTitle: string;
   number?: string | null;
@@ -1285,6 +1286,7 @@ export default function DocumentsPage({
                                 setReplacementContext({
                                   employeeId: card.ownerId ?? null,
                                   employeeName: check.employeeName,
+                                  companyId: check.companyId ?? null,
                                   cardType: card.type,
                                   cardTitle: card.title,
                                   number: card.number,
@@ -1776,6 +1778,95 @@ export default function DocumentsPage({
     setReplacementDataUrl(undefined);
   };
 
+  const syncReplacementExpiry = async () => {
+    if (!replacementContext) return;
+
+    const trimmedExpiry = replacementExpiryDate?.trim();
+    const normalizedAlert = replacementAlertDays?.trim();
+    const parsedAlert =
+      normalizedAlert && normalizedAlert.length > 0 ? Number(normalizedAlert) : undefined;
+    const alertDays =
+      parsedAlert !== undefined && Number.isFinite(parsedAlert) ? parsedAlert : undefined;
+    const trimmedNumber =
+      typeof replacementContext.number === "string" && replacementContext.number.trim().length > 0
+        ? replacementContext.number.trim()
+        : undefined;
+
+    const payload: Record<string, unknown> = {};
+    let endpoint: string | null = null;
+
+    const assignEmployeePayload = (
+      fields: { expiry: string; number: string; alert?: string },
+    ): void => {
+      if (!replacementContext?.employeeId) return;
+      endpoint = `/api/employees/${replacementContext.employeeId}`;
+      if (trimmedExpiry) {
+        payload[fields.expiry] = trimmedExpiry;
+      }
+      if (trimmedNumber) {
+        payload[fields.number] = trimmedNumber;
+      }
+      if (fields.alert && alertDays !== undefined) {
+        payload[fields.alert] = alertDays;
+      }
+    };
+
+    switch (replacementContext.cardType) {
+      case "visa":
+        assignEmployeePayload({
+          expiry: "visaExpiryDate",
+          number: "visaNumber",
+          alert: "visaAlertDays",
+        });
+        break;
+      case "civil_id":
+        assignEmployeePayload({
+          expiry: "civilIdExpiryDate",
+          number: "civilId",
+          alert: "civilIdAlertDays",
+        });
+        break;
+      case "passport":
+        assignEmployeePayload({
+          expiry: "passportExpiryDate",
+          number: "passportNumber",
+          alert: "passportAlertDays",
+        });
+        break;
+      case "driving_license":
+        assignEmployeePayload({
+          expiry: "drivingLicenseExpiryDate",
+          number: "drivingLicenseNumber",
+          alert: "drivingLicenseAlertDays",
+        });
+        break;
+      case "company_license":
+        if (!replacementContext.companyId) break;
+        endpoint = `/api/companies/${replacementContext.companyId}`;
+        if (trimmedExpiry) {
+          payload.companyLicenseExpiryDate = trimmedExpiry;
+        }
+        if (trimmedNumber) {
+          payload.companyLicenseNumber = trimmedNumber;
+        }
+        if (alertDays !== undefined) {
+          payload.companyLicenseAlertDays = alertDays;
+        }
+        break;
+      default:
+        break;
+    }
+
+    if (!endpoint || Object.keys(payload).length === 0) {
+      return;
+    }
+
+    const res = await apiPut(endpoint, payload);
+    if (!res.ok) {
+      throw res;
+    }
+  };
+
   const handleReplacementSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!replacementContext) return;
@@ -1816,10 +1907,20 @@ export default function DocumentsPage({
           referenceNumber: replacementContext.number ?? undefined,
         });
       }
-      closeReplacementModal();
     } catch (error) {
       // handled by mutation error handlers
+      return;
     }
+
+    try {
+      await syncReplacementExpiry();
+    } catch (error) {
+      toastApiError(error, t("documents.expiryUpdateFailed", "Failed to update expiry information"));
+      return;
+    }
+
+    await queryClient.invalidateQueries({ queryKey: ["/api/documents/expiry-check"] });
+    closeReplacementModal();
   };
 
   return (
