@@ -1065,7 +1065,10 @@ export default function DocumentsPage({
           ownerId: null,
         });
       }
-      return cards.filter((card) => card.daysUntilExpiry <= 0);
+      return cards.filter(card => {
+        const alertWindow = Math.max(card.alertDays ?? 0, 0);
+        return card.daysUntilExpiry <= alertWindow;
+      });
     };
 
     const criticalExpiries = expiryChecks.filter(
