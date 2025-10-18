@@ -1036,7 +1036,9 @@ export default function DocumentsPage({
           alertDays: driving.alertDays,
         });
       }
-      return cards.filter((card) => card.daysUntilExpiry <= 0);
+      return expiredOnly
+        ? cards.filter((card) => card.daysUntilExpiry <= 0)
+        : cards;
     };
 
     const criticalExpiries = expiryChecks.filter(
