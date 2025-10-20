@@ -27,6 +27,7 @@
   --warning-foreground: hsl(210, 40%, 98%);
   --ring: hsl(20, 14.3%, 4.1%);
   --radius: 0.5rem;
+  color-scheme: light;
 }
 
 .dark {
@@ -54,6 +55,7 @@
   --warning-foreground: hsl(210, 40%, 98%);
   --ring: hsl(240, 4.9%, 83.9%);
   --radius: 0.5rem;
+  color-scheme: dark;
 }
 
 @layer base {
@@ -70,6 +72,10 @@
 @layer utilities {
   .text-success {
     color: hsl(var(--success));
+  }
+
+  .text-success-foreground {
+    color: hsl(var(--success-foreground));
   }
 
   .text-warning {
@@ -99,9 +105,149 @@
   .hover\:bg-success:hover {
     background-color: hsl(var(--success));
   }
+
+  .hover\:bg-success\/90:hover {
+    background-color: hsl(var(--success) / 0.9);
+  }
   
   .hover\:bg-warning:hover {
     background-color: hsl(var(--warning));
+  }
+
+  .dark :is(
+      .text-gray-900,
+      .text-gray-800,
+      .text-gray-700,
+      .text-slate-900,
+      .text-slate-800,
+      .text-slate-700,
+      .text-neutral-900,
+      .text-neutral-800,
+      .text-neutral-700,
+      .text-zinc-900,
+      .text-zinc-800,
+      .text-zinc-700
+    ) {
+    color: hsl(var(--foreground)) !important;
+  }
+
+  .dark :is(
+      .text-gray-600,
+      .text-gray-500,
+      .text-slate-600,
+      .text-slate-500,
+      .text-neutral-600,
+      .text-neutral-500,
+      .text-zinc-600,
+      .text-zinc-500
+    ) {
+    color: hsl(var(--muted-foreground)) !important;
+  }
+
+  .dark :is(
+      .text-gray-400,
+      .text-gray-300,
+      .text-slate-400,
+      .text-slate-300,
+      .text-neutral-400,
+      .text-neutral-300,
+      .text-zinc-400,
+      .text-zinc-300
+    ) {
+    color: hsl(var(--muted-foreground)) !important;
+  }
+
+  .dark :is(
+      .hover\:text-gray-900:hover,
+      .hover\:text-gray-800:hover,
+      .hover\:text-gray-700:hover,
+      .hover\:text-slate-900:hover,
+      .hover\:text-slate-800:hover,
+      .hover\:text-slate-700:hover
+    ) {
+    color: hsl(var(--foreground)) !important;
+  }
+
+  .dark :is(
+      .hover\:text-gray-600:hover,
+      .hover\:text-gray-500:hover,
+      .hover\:text-slate-600:hover,
+      .hover\:text-slate-500:hover
+    ) {
+    color: hsl(var(--muted-foreground)) !important;
+  }
+
+  .dark :is(
+      .bg-white,
+      .bg-gray-50,
+      .bg-slate-50,
+      .bg-neutral-50,
+      .bg-zinc-50
+    ) {
+    background-color: hsl(var(--card)) !important;
+    color: hsl(var(--foreground));
+  }
+
+  .dark :is(
+      .bg-gray-100,
+      .bg-gray-200,
+      .bg-slate-100,
+      .bg-slate-200,
+      .bg-neutral-100,
+      .bg-neutral-200,
+      .bg-zinc-100,
+      .bg-zinc-200
+    ) {
+    background-color: hsl(var(--muted)) !important;
+    color: hsl(var(--foreground));
+  }
+
+  .dark :is(
+      .hover\:bg-gray-50:hover,
+      .hover\:bg-gray-100:hover,
+      .hover\:bg-gray-200:hover,
+      .hover\:bg-slate-100:hover,
+      .hover\:bg-slate-200:hover
+    ) {
+    background-color: hsl(var(--muted)) !important;
+    color: hsl(var(--foreground));
+  }
+
+  .dark :is(
+      .border-gray-100,
+      .border-gray-200,
+      .border-gray-300,
+      .border-slate-100,
+      .border-slate-200,
+      .border-slate-300,
+      .border-neutral-100,
+      .border-neutral-200,
+      .border-neutral-300,
+      .border-zinc-100,
+      .border-zinc-200,
+      .border-zinc-300
+    ) {
+    border-color: hsl(var(--border)) !important;
+  }
+
+  .dark
+    :is(
+      .divide-gray-100,
+      .divide-gray-200,
+      .divide-gray-300,
+      .divide-slate-100,
+      .divide-slate-200,
+      .divide-slate-300,
+      .divide-neutral-100,
+      .divide-neutral-200,
+      .divide-neutral-300,
+      .divide-zinc-100,
+      .divide-zinc-200,
+      .divide-zinc-300
+    )
+    > :not([hidden])
+    ~ :not([hidden]) {
+    border-color: hsl(var(--border)) !important;
   }
 }
 

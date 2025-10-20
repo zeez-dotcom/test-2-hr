@@ -18,10 +18,14 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { downloadPayrollBankFile, downloadPayrollCsv } from "@/lib/payroll-export";
+import {
+  downloadPayrollBankFile,
+  downloadPayrollCsv,
+  type PayrollEntryWithEmployee,
+} from "@/lib/payroll-export";
 import { openPdf } from "@/lib/pdf";
 import type { TDocumentDefinitions } from "pdfmake/interfaces";
-import type { PayrollRunWithEntries, PayrollEntry, Employee } from "@shared/schema";
+import type { PayrollRunWithEntries, Employee } from "@shared/schema";
 
 interface ExportPayrollProps {
   payrollRun: PayrollRunWithEntries;
@@ -39,11 +43,13 @@ export function ExportPayroll({ payrollRun, isOpen, onClose }: ExportPayrollProp
   });
 
   if (!isOpen) return null;
-  const entries: PayrollEntry[] =
-    (payrollRun.entries ?? []).map((entry): PayrollEntry => ({
-      ...entry,
-      employee: employees?.find(e => e.id === entry.employeeId) ?? entry.employee,
-    }));
+  const entries = ((payrollRun.entries ?? []).map(entry => {
+    const fallback = employees?.find(e => e.id === entry.employeeId);
+    if (fallback) {
+      return { ...entry, employee: fallback };
+    }
+    return entry;
+  }) as PayrollEntryWithEmployee[]);
   // Get unique work locations
   const workLocations = Array.from(
     new Set(

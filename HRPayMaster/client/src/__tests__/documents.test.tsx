@@ -205,8 +205,8 @@ describe("DocumentsPage", () => {
         signatureDeclinedAt: null,
         signatureCancelledAt: null,
         signatureMetadata: {},
-        createdAt: new Date().toISOString(),
-      } as GenericDocument,
+        createdAt: new Date(),
+      } satisfies GenericDocument,
     ];
 
     const documentCalls: string[] = [];

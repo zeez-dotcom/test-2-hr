@@ -54,9 +54,11 @@ function Router() {
         <Route path="/login" component={Login} />
         <Route path="/forgot-password" component={PasswordResetRequest} />
         <Route path="/reset-password/:token">
-          {(params) => <PasswordReset initialToken={params.token} />}
+          {params => <PasswordReset initialToken={params.token} />}
         </Route>
-        <Route path="/reset-password" component={PasswordReset} />
+        <Route path="/reset-password">
+          {() => <PasswordReset />}
+        </Route>
         <Route>
           <Login />
         </Route>

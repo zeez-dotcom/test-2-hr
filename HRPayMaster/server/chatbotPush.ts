@@ -2,7 +2,7 @@ import type { IncomingMessage } from "http";
 import { ServerResponse } from "http";
 import type { Server } from "http";
 import type { RequestHandler } from "express";
-import { WebSocketServer, type WebSocket } from "ws";
+import { WebSocketServer, WebSocket } from "ws";
 import { chatbotEvents, CHATBOT_EVENT_TYPES } from "./chatbotEvents";
 import { log } from "./vite";
 import { storage } from "./storage";
@@ -119,12 +119,13 @@ export const setupChatbotPush = (
 
     try {
       const user = await storage.getUserById(userId);
-      if (user?.employeeId) {
+      const employeeId = (user as { employeeId?: string | null } | undefined)?.employeeId;
+      if (typeof employeeId === "string" && employeeId.trim().length > 0) {
         socket.send(
           JSON.stringify({
             type: "context",
             payload: {
-              employeeId: user.employeeId,
+              employeeId,
             },
           }),
         );

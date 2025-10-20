@@ -34,15 +34,25 @@ import {
   RefreshCcw,
   Printer,
   Download,
+  Loader2,
+  CheckCircle2,
+  Ban,
 } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
-import { apiPost, apiDelete, apiGet } from "@/lib/http";
+import { apiPost, apiDelete, apiGet, apiPut } from "@/lib/http";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import type { Company, PayrollExportArtifact, PayrollRun, User } from "@shared/schema";
+import type {
+  Company,
+  PayrollExportArtifact,
+  PayrollRun,
+  PayrollRunWithEntries,
+  User,
+} from "@shared/schema";
 import { useSearch, useLocation } from "wouter";
 import { toastApiError } from "@/lib/toastError";
 import { useTranslation } from "react-i18next";
+import { openPayrollRunReport } from "@/lib/payroll-run-report";
 
 type PayrollGenerateRequest = PayrollGenerationPayload;
 
@@ -82,6 +92,7 @@ export default function Payroll() {
   const [isCheckingLoanStatus, setIsCheckingLoanStatus] = useState(false);
   const [printHandler, setPrintHandler] = useState<(() => void) | null>(null);
   const [pendingPrint, setPendingPrint] = useState(false);
+  const [reportLoadingId, setReportLoadingId] = useState<string | null>(null);
   const { toast } = useToast();
   const searchParams = useSearchParams();
 
@@ -245,6 +256,30 @@ export default function Payroll() {
     },
   });
 
+  const updatePayrollStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: PayrollRun["status"] }) => {
+      const res = await apiPut(`/api/payroll/${id}`, { status });
+      if (!res.ok) throw res;
+      const data = res.data as PayrollRun | undefined;
+      return { id, status, data };
+    },
+    onSuccess: ({ id, status }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      const description =
+        status === "completed"
+          ? t('payroll.publishSuccess','Payroll run published successfully')
+          : status === "cancelled"
+          ? t('payroll.cancelSuccess','Payroll run cancelled')
+          : t('payroll.statusUpdated','Payroll status updated');
+      toast({ title: t('common.success','Success'), description });
+    },
+    onError: (err) => {
+      toastApiError(err as any, t('payroll.statusUpdateFailed','Failed to update payroll status'));
+    },
+  });
+
   const handleGeneratePayroll = (data: PayrollGenerateRequest) => {
     const calendarKey = data.calendarId ?? "default";
     const exists = payrollRuns?.some(
@@ -259,6 +294,30 @@ export default function Payroll() {
       return;
     }
     generatePayrollMutation.mutate(data);
+  };
+
+  const handleGenerateReport = async (payrollId: string) => {
+    try {
+      setReportLoadingId(payrollId);
+      const res = await apiGet(`/api/payroll/${payrollId}`);
+      if (!res.ok) {
+        throw res;
+      }
+      const payrollRun = res.data as PayrollRunWithEntries;
+      openPayrollRunReport(payrollRun);
+      toast({
+        title: t("common.success", "Success"),
+        description: t("payroll.reportSuccess", "Payroll report generated"),
+      });
+    } catch (error) {
+      toastApiError(error as any, t("payroll.reportFailed", "Failed to generate payroll report"));
+    } finally {
+      setReportLoadingId(current => (current === payrollId ? null : current));
+    }
+  };
+
+  const handleUpdatePayrollStatus = (id: string, status: PayrollRun["status"]) => {
+    updatePayrollStatusMutation.mutate({ id, status });
   };
 
   const handleDeletePayroll = useCallback(
@@ -406,15 +465,15 @@ export default function Payroll() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">{t('nav.payroll','Payroll')}</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">{t('nav.payroll','Payroll')}</h1>
           <p className="text-muted-foreground">{t('payroll.subtitle','Manage employee payroll and compensation')}</p>
         </div>
         <div className="animate-pulse">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             {[...Array(3)].map((_, i) => (
-              <div key={i} className="bg-white dark:bg-gray-900 rounded-lg shadow-sm p-6 border border-gray-200 dark:border-gray-800">
-                <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-                <div className="h-8 bg-gray-200 rounded w-1/2"></div>
+              <div key={i} className="rounded-lg border border-border bg-card p-6 shadow-sm">
+                <div className="mb-2 h-4 w-3/4 rounded bg-muted"></div>
+                <div className="h-8 w-1/2 rounded bg-muted"></div>
               </div>
             ))}
           </div>
@@ -453,7 +512,7 @@ export default function Payroll() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Payroll</h1>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">Payroll</h1>
         <p className="text-muted-foreground">Manage employee payroll and compensation</p>
         {!canGenerate && (
           <p className="text-sm text-muted-foreground mt-2">
@@ -472,8 +531,8 @@ export default function Payroll() {
                       </div>
                     </div>
                     <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-500">{t('payroll.total','Total Payroll')}</p>
-                      <p className="text-2xl font-semibold text-gray-900">
+                      <p className="text-sm font-medium text-muted-foreground">{t('payroll.total','Total Payroll')}</p>
+                      <p className="text-2xl font-semibold text-foreground">
                         {formatCurrency(totalPayroll)}
                       </p>
                     </div>
@@ -490,8 +549,8 @@ export default function Payroll() {
                       </div>
                     </div>
                     <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-500">{t('payroll.completedRuns','Completed Runs')}</p>
-                      <p className="text-2xl font-semibold text-gray-900">{completedRuns}</p>
+                      <p className="text-sm font-medium text-muted-foreground">{t('payroll.completedRuns','Completed Runs')}</p>
+                      <p className="text-2xl font-semibold text-foreground">{completedRuns}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -506,8 +565,8 @@ export default function Payroll() {
                       </div>
                     </div>
                     <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-500">{t('payroll.pendingRuns','Pending Runs')}</p>
-                      <p className="text-2xl font-semibold text-gray-900">{pendingRuns}</p>
+                      <p className="text-sm font-medium text-muted-foreground">{t('payroll.pendingRuns','Pending Runs')}</p>
+                      <p className="text-2xl font-semibold text-foreground">{pendingRuns}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -518,14 +577,11 @@ export default function Payroll() {
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg font-medium text-gray-900">{t('payroll.history','Payroll History')}</CardTitle>
+                  <CardTitle className="text-lg font-medium text-foreground">{t('payroll.history','Payroll History')}</CardTitle>
                   
                   <Dialog open={isGenerateDialogOpen} onOpenChange={setIsGenerateDialogOpen}>
                     <DialogTrigger asChild>
-                      <Button
-                        className="bg-success text-white hover:bg-green-700"
-                        disabled={!canGenerate}
-                      >
+                      <Button variant="success" disabled={!canGenerate}>
                         <Calculator className="mr-2" size={16} />
                         {t('payroll.generate','Generate Payroll')}
                       </Button>
@@ -548,17 +604,14 @@ export default function Payroll() {
               </CardHeader>
               <CardContent>
                 {!payrollRuns || payrollRuns.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Calculator className="mx-auto h-12 w-12 text-gray-300" />
-                    <h3 className="mt-2 text-sm font-medium text-gray-900">No payroll runs</h3>
-                    <p className="mt-1 text-sm text-gray-500">Get started by generating your first payroll.</p>
+                  <div className="py-12 text-center text-muted-foreground">
+                    <Calculator className="mx-auto h-12 w-12 text-muted-foreground/60" />
+                    <h3 className="mt-2 text-sm font-medium text-foreground">No payroll runs</h3>
+                    <p className="mt-1 text-sm">Get started by generating your first payroll.</p>
                     <div className="mt-6">
                       <Dialog open={isGenerateDialogOpen} onOpenChange={setIsGenerateDialogOpen}>
                         <DialogTrigger asChild>
-                          <Button
-                            className="bg-success text-white hover:bg-green-700"
-                            disabled={!canGenerate}
-                          >
+                          <Button variant="success" disabled={!canGenerate}>
                             <Calculator className="mr-2" size={16} />
                             Generate Payroll
                           </Button>
@@ -581,46 +634,46 @@ export default function Payroll() {
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
-                      <thead className="bg-gray-50 dark:bg-gray-900">
+                    <table className="min-w-full divide-y divide-border">
+                      <thead className="bg-muted/40">
                         <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                             Period
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                             Date Range
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                             Gross Amount
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                             Net Amount
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                             Status
                           </th>
-                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
                             Actions
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
+                      <tbody className="divide-y divide-border bg-card">
                         {payrollRuns.map((payroll) => (
-                          <tr key={payroll.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                          <tr key={payroll.id} className="hover:bg-accent/40">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
                               <div className="font-medium">{payroll.period}</div>
                               <div className="text-xs text-muted-foreground">
                                 {(payroll.cycleLabel ?? t('payroll.defaultCycle','Default cycle'))} ·{' '}
                                 {payroll.scenarioKey ?? 'baseline'}
                               </div>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
                               {formatDate(payroll.startDate)} - {formatDate(payroll.endDate)}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
                               {formatCurrency(payroll.grossAmount)}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
                               {formatCurrency(payroll.netAmount)}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
@@ -629,12 +682,59 @@ export default function Payroll() {
                               </Badge>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                              <div className="flex items-center justify-end space-x-2">
-                                {payroll.exportArtifacts && payroll.exportArtifacts.length > 0 && (
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <Button variant="outline" size="sm">
-                                        <Download className="mr-1" size={14} />
+                              <div className="flex flex-wrap items-center justify-end gap-2">
+                                {payroll.status === "draft" && (
+                                  <>
+                                    <Button
+                                      variant="success"
+                                      size="sm"
+                                      onClick={() => handleUpdatePayrollStatus(payroll.id, "completed")}
+                                      disabled={
+                                        updatePayrollStatusMutation.isPending &&
+                                        updatePayrollStatusMutation.variables?.id === payroll.id
+                                      }
+                                    >
+                                      <CheckCircle2 className="mr-1" size={14} />
+                                      {t('payroll.publish','Publish')}
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="text-destructive hover:text-destructive focus-visible:ring-destructive"
+                                      onClick={() => handleUpdatePayrollStatus(payroll.id, "cancelled")}
+                                      disabled={
+                                        updatePayrollStatusMutation.isPending &&
+                                        updatePayrollStatusMutation.variables?.id === payroll.id
+                                      }
+                                    >
+                                      <Ban className="mr-1" size={14} />
+                                      {t('payroll.cancelRun','Cancel')}
+                                    </Button>
+                              </>
+                            )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleGenerateReport(payroll.id)}
+                              disabled={reportLoadingId === payroll.id}
+                            >
+                              {reportLoadingId === payroll.id ? (
+                                <>
+                                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                                  <span>{t('payroll.reportGenerating','Generating report…')}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <FileText className="mr-1" size={14} />
+                                  <span>{t('payroll.reportShort','Report')}</span>
+                                </>
+                              )}
+                            </Button>
+                            {payroll.exportArtifacts && payroll.exportArtifacts.length > 0 && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="outline" size="sm">
+                                    <Download className="mr-1" size={14} />
                                         {t('payroll.exports','Exports')}
                                       </Button>
                                     </DropdownMenuTrigger>

@@ -1928,6 +1928,68 @@ export type InsertCompany = z.infer<typeof insertCompanySchema>;
 export type Employee = typeof employees.$inferSelect;
 export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
 
+export type EmployeeSummary = Pick<
+  Employee,
+  "id" | "employeeCode" | "firstName" | "lastName" | "position" | "departmentId"
+> & {
+  fullName: string | null;
+};
+
+export type AllowanceView = {
+  id: string;
+  employeeId: string;
+  employee: EmployeeSummary;
+  title: string;
+  description: string | null;
+  amount: number;
+  eventDate: string;
+  recurrenceType: "none" | "monthly";
+  recurrenceEndDate: string | null;
+  status: string;
+  affectsPayroll: boolean;
+  isRecurring: boolean;
+  createdAt: string | null;
+};
+
+export type AllowanceReportTotals = {
+  totalAmount: number;
+  recurringAmount: number;
+  oneTimeAmount: number;
+  allowanceCount: number;
+  employeeCount: number;
+};
+
+export type AllowanceReportPeriod = {
+  period: string;
+  totalAmount: number;
+  recurringAmount: number;
+  oneTimeAmount: number;
+  allowanceCount: number;
+};
+
+export type AllowanceReportTopEmployee = {
+  employeeId: string;
+  employeeName: string | null;
+  employeeCode: string | null;
+  totalAmount: number;
+  allowanceCount: number;
+};
+
+export type AllowanceReportTypeBreakdown = {
+  title: string;
+  totalAmount: number;
+  allowanceCount: number;
+  recurringCount: number;
+  oneTimeCount: number;
+};
+
+export type AllowanceReportResponse = {
+  totals: AllowanceReportTotals;
+  periods: AllowanceReportPeriod[];
+  topEmployees: AllowanceReportTopEmployee[];
+  allowanceTypes: AllowanceReportTypeBreakdown[];
+};
+
 export type EmployeeCustomField = typeof employeeCustomFields.$inferSelect;
 export type InsertEmployeeCustomField = z.infer<typeof insertEmployeeCustomFieldSchema>;
 

@@ -1211,14 +1211,14 @@ export default function Cars() {
                 validCars.map((car) => (
                   <Card key={car.id}>
                     <CardHeader className="pb-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex min-w-0 items-center gap-2">
                           <Car className="w-4 h-4" />
-                          <CardTitle className="text-lg">
+                          <CardTitle className="text-lg leading-tight break-words">
                             {car.year} {car.make} {car.model}
                           </CardTitle>
                         </div>
-                        <div className="flex items-center space-x-2">
+                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                           <Button size="sm" variant="ghost" onClick={() => handleEditCar(car)}>
                             <Edit className="w-3 h-3" />
                           </Button>
@@ -1260,21 +1260,25 @@ export default function Cars() {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-2">
-                        <div className="flex justify-between items-center">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
                           <span className="text-sm text-muted-foreground">{t('cars.status','Status')}</span>
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2 justify-end">
                             {getStatusBadge(car.status)}
                             <Badge variant="outline">{t('cars.spareTiresLabel','Spare Tires')}: {(car as any).spareTireCount ?? 0}</Badge>
                           </div>
                         </div>
-                        <div className="flex justify-between items-center">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
                           <span className="text-sm text-muted-foreground">{t('cars.mileage','Mileage')}</span>
-                          <span className="text-sm font-medium">{car.mileage?.toLocaleString()} {t('cars.miles','miles')}</span>
+                          <span className="text-sm font-medium text-right break-words">
+                            {car.mileage?.toLocaleString()} {t('cars.miles','miles')}
+                          </span>
                         </div>
                         {car.registrationOwner && (
-                          <div className="flex justify-between items-center">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
                             <span className="text-sm text-muted-foreground">{t('cars.owner','Owner')}</span>
-                            <span className="text-sm font-medium">{car.registrationOwner}</span>
+                            <span className="text-sm font-medium text-right break-words">
+                              {car.registrationOwner}
+                            </span>
                           </div>
                         )}
                         {(car as any).carImage && (
@@ -1297,15 +1301,17 @@ export default function Cars() {
                         )}
                         {car.currentAssignment && (
                           <div className="pt-2 border-t">
-                            <div className="flex justify-between items-center">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
                               <span className="text-sm text-muted-foreground">{t('cars.assignedTo','Assigned to')}</span>
-                              <span className="text-sm font-medium">
+                              <span className="text-sm font-medium text-right break-words">
                                 {car.currentAssignment.employee?.firstName} {car.currentAssignment.employee?.lastName}
                               </span>
                             </div>
-                            <div className="flex justify-between items-center mt-1">
+                            <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
                               <span className="text-sm text-muted-foreground">{t('cars.since','Since')}</span>
-                              <span className="text-sm">{format(new Date(car.currentAssignment.assignedDate), "MMM d, yyyy")}</span>
+                              <span className="text-sm text-right break-words">
+                                {format(new Date(car.currentAssignment.assignedDate), "MMM d, yyyy")}
+                              </span>
                             </div>
                           </div>
                         )}

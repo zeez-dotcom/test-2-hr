@@ -3535,10 +3535,11 @@ export class DatabaseStorage implements IStorage {
         }
       }
 
-      return {
-        ...rest,
-        allowances: normalizedAllowances,
-      };
+      const normalizedEntry = { ...rest } as PayrollEntry;
+      if (normalizedAllowances !== undefined) {
+        normalizedEntry.allowances = normalizedAllowances;
+      }
+      return normalizedEntry;
     });
 
 
@@ -8547,9 +8548,10 @@ export class DatabaseStorage implements IStorage {
         }
       }
 
-      const normalizedEntry: PayrollEntry = normalizedAllowances
-        ? { ...entryWithoutAllowances, allowances: normalizedAllowances }
-        : { ...entryWithoutAllowances, allowances: undefined };
+      const normalizedEntry = { ...entryWithoutAllowances } as PayrollEntry;
+      if (normalizedAllowances !== undefined) {
+        normalizedEntry.allowances = normalizedAllowances;
+      }
 
       ensure(period).payrollEntries.push(normalizedEntry);
     });
@@ -8840,13 +8842,10 @@ export class DatabaseStorage implements IStorage {
 
 
 
-      const normalizedEntry: PayrollEntry = normalizedAllowances
-
-        ? { ...entryWithoutAllowances, allowances: normalizedAllowances }
-
-        : { ...entryWithoutAllowances };
-
-
+      const normalizedEntry = { ...entryWithoutAllowances } as PayrollEntry;
+      if (normalizedAllowances !== undefined) {
+        normalizedEntry.allowances = normalizedAllowances;
+      }
 
       grouped[period].payrollEntries.push(normalizedEntry);
 

@@ -3,11 +3,12 @@ import { useLocation, useSearch } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Payroll from "@/pages/payroll";
 import Loans from "@/pages/loans";
+import Allowances from "@/pages/allowances";
 import { useTranslation } from "react-i18next";
 
 export default function Finance() {
   const { t } = useTranslation();
-  const allowed = ["payroll", "loans"] as const;
+  const allowed = ["payroll", "loans", "allowances"] as const;
   const defaultTab = "payroll" as const;
   const [location, navigate] = useLocation();
   const search = useSearch();
@@ -34,12 +35,16 @@ export default function Finance() {
         <TabsList>
           <TabsTrigger value="payroll">{t('nav.payroll','Payroll')}</TabsTrigger>
           <TabsTrigger value="loans">{t('nav.loans','Loans')}</TabsTrigger>
+          <TabsTrigger value="allowances">{t('nav.allowances','Allowances')}</TabsTrigger>
         </TabsList>
         <TabsContent value="payroll">
           <Payroll />
         </TabsContent>
         <TabsContent value="loans">
           <Loans />
+        </TabsContent>
+        <TabsContent value="allowances">
+          <Allowances />
         </TabsContent>
       </Tabs>
     </div>

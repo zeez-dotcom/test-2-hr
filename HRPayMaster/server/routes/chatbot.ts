@@ -290,7 +290,7 @@ const handleAcknowledgeDocument = async (
   }
 
   await storage.updateGenericDocument(document.id, {
-    signatureStatus: "acknowledged",
+    signatureStatus: "completed",
   });
 
   return {

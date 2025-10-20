@@ -5,7 +5,7 @@ import { errorHandler } from './errorHandler';
 import * as XLSX from 'xlsx';
 import sharp from 'sharp';
 import { mapHeader } from './utils/normalize';
-import { insertEmployeeSchema } from '@shared/schema';
+import { insertEmployeeSchema, defaultRolePermissions } from '@shared/schema';
 import { EMPLOYEE_IMPORT_TEMPLATE_HEADERS } from './routes/employees';
 import { loanRequestsTotal } from './metrics';
 
@@ -21,6 +21,7 @@ vi.mock('./storage', () => {
       createUser: vi.fn(),
       updateUser: vi.fn(),
       getEmployees: vi.fn(),
+      countEmployees: vi.fn(),
       createEmployee: vi.fn(),
       createEmployeesBulk: vi.fn(),
       updateEmployee: vi.fn(),
@@ -28,6 +29,7 @@ vi.mock('./storage', () => {
       getEmployeeCustomFields: vi.fn(),
       createEmployeeCustomField: vi.fn(),
       createEmployeeCustomValue: vi.fn(),
+      getEmployeeCustomValues: vi.fn(),
       getPayrollRuns: vi.fn(),
       getLoans: vi.fn(),
       getLoan: vi.fn(),
@@ -56,6 +58,9 @@ vi.mock('./storage', () => {
       getCarAssignment: vi.fn(),
       deleteCarAssignment: vi.fn(),
       createEmployeeEvent: vi.fn(),
+      getEmployeeEvent: vi.fn(),
+      updateEmployeeEvent: vi.fn(),
+      deleteEmployeeEvent: vi.fn(),
       getEmployeeEvents: vi.fn(),
       getEmployeeReport: vi.fn(),
       getCompanyPayrollSummary: vi.fn(),
@@ -109,7 +114,7 @@ function createApp() {
     // @ts-ignore
     req.isAuthenticated = () => true;
     // @ts-ignore
-    req.user = { role: 'admin' };
+    req.user = { role: 'admin', permissions: defaultRolePermissions.admin };
     next();
   });
   return app;
@@ -150,6 +155,10 @@ describe('employee routes', () => {
     app.use(errorHandler);
     vi.clearAllMocks();
     loanRequestsTotal.reset();
+    (storage.countEmployees as any).mockResolvedValue(0);
+    (storage.getEmployeeCustomValues as any).mockResolvedValue([]);
+    (storage.getEmployeeCustomFields as any).mockResolvedValue([]);
+    (storage.getEmployee as any).mockResolvedValue(null);
   });
 
   it('GET /api/employees returns employees list', async () => {
@@ -802,7 +811,7 @@ describe('employee routes', () => {
     const appWithUser = createApp();
     appWithUser.use((req, _res, next) => {
       // @ts-ignore
-      req.user = { employeeId: 'missing-id' };
+      req.user = { employeeId: 'missing-id', permissions: [] };
       next();
     });
     await registerRoutes(appWithUser);
@@ -1012,6 +1021,261 @@ describe('employee routes', () => {
     expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to fetch payroll runs:', error);
 
     consoleErrorSpy.mockRestore();
+  });
+
+  it('GET /api/allowances returns allowance list with employee details', async () => {
+    const createdAt = new Date('2024-01-05T00:00:00Z');
+    (storage.getEmployeeEvents as any).mockResolvedValue([
+      {
+        id: 'allow-1',
+        employeeId: 'emp-1',
+        eventType: 'allowance',
+        title: 'Housing',
+        description: 'Housing allowance',
+        amount: '150',
+        eventDate: '2024-01-01',
+        affectsPayroll: true,
+        status: 'active',
+        recurrenceType: 'monthly',
+        recurrenceEndDate: null,
+        createdAt,
+        employee: {
+          id: 'emp-1',
+          employeeCode: 'E001',
+          firstName: 'Jane',
+          lastName: 'Doe',
+          position: 'Analyst',
+          departmentId: 'dept-1',
+        },
+      },
+    ]);
+
+    const res = await request(app).get('/api/allowances');
+
+    expect(res.status).toBe(200);
+    expect(storage.getEmployeeEvents).toHaveBeenCalledWith(undefined, undefined, {
+      employeeId: undefined,
+      eventType: 'allowance',
+    });
+    expect(res.body).toEqual([
+      {
+        id: 'allow-1',
+        employeeId: 'emp-1',
+        employee: {
+          id: 'emp-1',
+          employeeCode: 'E001',
+          firstName: 'Jane',
+          lastName: 'Doe',
+          position: 'Analyst',
+          departmentId: 'dept-1',
+          fullName: 'Jane Doe',
+        },
+        title: 'Housing',
+        description: 'Housing allowance',
+        amount: 150,
+        eventDate: '2024-01-01',
+        recurrenceType: 'monthly',
+        recurrenceEndDate: null,
+        status: 'active',
+        affectsPayroll: true,
+        isRecurring: true,
+        createdAt: createdAt.toISOString(),
+      },
+    ]);
+  });
+
+  it('POST /api/allowances creates a new allowance event', async () => {
+    const payload = {
+      employeeId: 'emp-1',
+      title: 'Travel',
+      amount: 200,
+      eventDate: '2024-02-01',
+    };
+    const createdEvent = {
+      id: 'allow-2',
+      employeeId: 'emp-1',
+      eventType: 'allowance',
+      title: 'Travel',
+      description: 'Travel',
+      amount: '200',
+      eventDate: '2024-02-01',
+      affectsPayroll: true,
+      status: 'active',
+      recurrenceType: 'none',
+      recurrenceEndDate: null,
+    };
+    const employee = {
+      id: 'emp-1',
+      employeeCode: 'E001',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      position: 'Analyst',
+      departmentId: 'dept-1',
+    };
+    (storage.createEmployeeEvent as any).mockResolvedValue(createdEvent);
+    (storage.getEmployee as any).mockResolvedValue(employee);
+
+    const res = await request(app).post('/api/allowances').send(payload);
+
+    expect(res.status).toBe(201);
+    expect(storage.createEmployeeEvent).toHaveBeenCalledWith({
+      employeeId: 'emp-1',
+      eventType: 'allowance',
+      title: 'Travel',
+      description: 'Travel',
+      amount: '200',
+      eventDate: '2024-02-01',
+      affectsPayroll: true,
+      status: 'active',
+      recurrenceType: 'none',
+      recurrenceEndDate: null,
+    });
+    expect(res.body.title).toBe('Travel');
+    expect(res.body.amount).toBe(200);
+    expect(res.body.isRecurring).toBe(false);
+  });
+
+  it('PUT /api/allowances/:id updates an allowance', async () => {
+    const allowanceId = 'allow-3';
+    const existing = {
+      id: allowanceId,
+      employeeId: 'emp-1',
+      eventType: 'allowance',
+      title: 'Housing',
+      description: 'Allowance',
+      amount: '150',
+      eventDate: '2024-01-01',
+      affectsPayroll: true,
+      status: 'active',
+      recurrenceType: 'monthly',
+      recurrenceEndDate: '2024-12-01',
+    };
+    const updated = {
+      ...existing,
+      amount: '175',
+      recurrenceType: 'none',
+      recurrenceEndDate: null,
+    };
+    const employee = {
+      id: 'emp-1',
+      employeeCode: 'E001',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      position: 'Analyst',
+      departmentId: 'dept-1',
+    };
+    (storage.getEmployeeEvent as any).mockResolvedValue(existing);
+    (storage.updateEmployeeEvent as any).mockResolvedValue(updated);
+    (storage.getEmployee as any).mockResolvedValue(employee);
+
+    const res = await request(app)
+      .put(`/api/allowances/${allowanceId}`)
+      .send({ amount: 175, recurrenceType: 'none' });
+
+    expect(res.status).toBe(200);
+    expect(storage.updateEmployeeEvent).toHaveBeenCalledWith(
+      allowanceId,
+      expect.objectContaining({
+        amount: '175',
+        recurrenceType: 'none',
+        recurrenceEndDate: null,
+      }),
+    );
+    expect(res.body.amount).toBe(175);
+    expect(res.body.recurrenceType).toBe('none');
+    expect(res.body.isRecurring).toBe(false);
+  });
+
+  it('DELETE /api/allowances/:id removes an allowance', async () => {
+    const allowanceId = 'allow-4';
+    const existing = {
+      id: allowanceId,
+      eventType: 'allowance',
+      employeeId: 'emp-1',
+    };
+    (storage.getEmployeeEvent as any).mockResolvedValue(existing);
+    (storage.deleteEmployeeEvent as any).mockResolvedValue(true);
+
+    const res = await request(app).delete(`/api/allowances/${allowanceId}`);
+
+    expect(res.status).toBe(204);
+    expect(storage.deleteEmployeeEvent).toHaveBeenCalledWith(allowanceId);
+  });
+
+  it('GET /api/reports/allowances aggregates allowance totals', async () => {
+    (storage.getEmployeeEvents as any).mockResolvedValue([
+      {
+        id: 'allow-1',
+        employeeId: 'emp-1',
+        eventType: 'allowance',
+        title: 'Housing',
+        description: 'Housing allowance',
+        amount: '150',
+        eventDate: '2024-01-15',
+        affectsPayroll: true,
+        status: 'active',
+        recurrenceType: 'monthly',
+        recurrenceEndDate: null,
+        employee: {
+          id: 'emp-1',
+          employeeCode: 'E001',
+          firstName: 'Jane',
+          lastName: 'Doe',
+          position: 'Analyst',
+          departmentId: 'dept-1',
+        },
+      },
+      {
+        id: 'allow-2',
+        employeeId: 'emp-2',
+        eventType: 'allowance',
+        title: 'Travel',
+        description: 'Travel allowance',
+        amount: '100',
+        eventDate: '2024-01-20',
+        affectsPayroll: true,
+        status: 'active',
+        recurrenceType: 'none',
+        recurrenceEndDate: null,
+        employee: {
+          id: 'emp-2',
+          employeeCode: 'E002',
+          firstName: 'John',
+          lastName: 'Smith',
+          position: 'Engineer',
+          departmentId: 'dept-2',
+        },
+      },
+    ]);
+
+    const res = await request(app).get(
+      '/api/reports/allowances?startDate=2024-01-01&endDate=2024-01-31&groupBy=month',
+    );
+
+    expect(res.status).toBe(200);
+    expect(storage.getEmployeeEvents).toHaveBeenCalledWith(
+      new Date(Date.UTC(2024, 0, 1)),
+      new Date(Date.UTC(2024, 0, 31)),
+      { eventType: 'allowance' },
+    );
+    expect(res.body.totals).toEqual({
+      totalAmount: 250,
+      recurringAmount: 150,
+      oneTimeAmount: 100,
+      allowanceCount: 2,
+      employeeCount: 2,
+    });
+    expect(res.body.periods).toEqual([
+      {
+        period: '2024-01',
+        totalAmount: 250,
+        recurringAmount: 150,
+        oneTimeAmount: 100,
+        allowanceCount: 2,
+      },
+    ]);
+    expect(res.body.topEmployees[0].employeeId).toBe('emp-1');
+    expect(res.body.allowanceTypes).toHaveLength(2);
   });
 
   it('GET /api/loans returns loans list', async () => {

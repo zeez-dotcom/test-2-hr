@@ -15,8 +15,8 @@
     "db:push": "drizzle-kit push",
     "db:seed": "tsx scripts/seed.ts",
     "db:unseed": "tsx scripts/unseed.ts",
-    "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test": "cross-env NODE_OPTIONS=--require=./vitest.preload.cjs vitest run",
+    "test:coverage": "cross-env NODE_OPTIONS=--require=./vitest.preload.cjs vitest run --coverage"
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.8",

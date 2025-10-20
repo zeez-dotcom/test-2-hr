@@ -1352,7 +1352,9 @@ export function Chatbot() {
         )}
         {proactivePrompts.length > 0 && (
           <div className="space-y-2">
-            {proactivePrompts.map((prompt) => (
+            {proactivePrompts.map(prompt => {
+              const action = prompt.action;
+              return (
               <Card key={prompt.id} className="border-l-4 border-amber-400 bg-amber-50">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-semibold text-amber-900">{prompt.title}</CardTitle>
@@ -1363,17 +1365,17 @@ export function Chatbot() {
                 <CardContent className="space-y-2 text-sm">
                   <p className="text-amber-900/80">{prompt.message}</p>
                   <div className="flex flex-wrap gap-2">
-                    {prompt.action && (
+                    {action ? (
                       <Button
                         size="sm"
                         onClick={() =>
-                          submitServerIntent(prompt.action.intent, prompt.action.payload ?? {}, false)
+                          submitServerIntent(action.intent, action.payload ?? {}, false)
                         }
                         disabled={serverActionLoading}
                       >
                         Acknowledge
                       </Button>
-                    )}
+                    ) : null}
                     <Button
                       size="sm"
                       variant="outline"
@@ -1389,7 +1391,7 @@ export function Chatbot() {
                   </div>
                 </CardContent>
               </Card>
-            ))}
+            )})}
           </div>
         )}
         {serverConfirmation && (

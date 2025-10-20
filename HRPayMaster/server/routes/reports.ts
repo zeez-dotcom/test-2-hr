@@ -3,16 +3,22 @@ import { HttpError } from "../errorHandler";
 import { storage } from "../storage";
 import { z } from "zod";
 import type {
+  AllowanceReportResponse,
+  Employee,
+  EmployeeEvent,
   InsertReportSchedule,
   NotificationChannel,
   ReportSchedule,
 } from "@shared/schema";
+import { normalizeAllowanceTitle } from "../utils/payroll";
 import { requirePermission } from "./auth";
 
 export const reportsRouter = Router();
 
-const defaultStartDate = () =>
-  new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
+const defaultStartDate = () => {
+  const today = new Date();
+  return new Date(Date.UTC(today.getUTCFullYear(), 0, 1)).toISOString().split("T")[0];
+};
 const defaultEndDate = () => new Date().toISOString().split("T")[0];
 
 const reportQueryBaseSchema = z.object({
@@ -168,6 +174,185 @@ const resolveUpdateSchedulePayload = (
   return payload;
 };
 
+const toUtcDate = (isoDate: string) => {
+  const [yearStr, monthStr, dayStr] = isoDate.split("-");
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+  return new Date(Date.UTC(year, month - 1, day));
+};
+
+const allowanceAmount = (value: unknown): number => {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return 0;
+    }
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+};
+
+const buildEmployeeName = (employee?: Employee | null): string | null => {
+  if (!employee) return null;
+  const parts = [employee.firstName, employee.lastName].filter(
+    (part): part is string => Boolean(part && part.trim().length > 0),
+  );
+  if (parts.length > 0) {
+    return parts.join(" ");
+  }
+  return employee.firstName ?? employee.lastName ?? null;
+};
+
+type AllowanceEventWithEmployee = EmployeeEvent & { employee: Employee };
+
+const buildAllowanceReport = (
+  events: AllowanceEventWithEmployee[],
+  groupBy: "month" | "year",
+): AllowanceReportResponse => {
+  const totals: AllowanceReportResponse["totals"] = {
+    totalAmount: 0,
+    recurringAmount: 0,
+    oneTimeAmount: 0,
+    allowanceCount: 0,
+    employeeCount: 0,
+  };
+
+  const periodMap = new Map<
+    string,
+    {
+      totalAmount: number;
+      recurringAmount: number;
+      oneTimeAmount: number;
+      allowanceCount: number;
+    }
+  >();
+  const employeeMap = new Map<
+    string,
+    {
+      employeeId: string;
+      employeeName: string | null;
+      employeeCode: string | null;
+      totalAmount: number;
+      allowanceCount: number;
+    }
+  >();
+  const typeMap = new Map<
+    string,
+    {
+      title: string;
+      totalAmount: number;
+      allowanceCount: number;
+      recurringCount: number;
+      oneTimeCount: number;
+    }
+  >();
+  const uniqueEmployees = new Set<string>();
+
+  for (const event of events) {
+    const amount = allowanceAmount(event.amount);
+    const recurrenceType = event.recurrenceType === "monthly" ? "monthly" : "none";
+    totals.totalAmount += amount;
+    totals.allowanceCount += 1;
+    if (recurrenceType === "monthly") {
+      totals.recurringAmount += amount;
+    } else {
+      totals.oneTimeAmount += amount;
+    }
+    uniqueEmployees.add(event.employeeId);
+
+    const periodKey =
+      groupBy === "year" ? event.eventDate.slice(0, 4) : event.eventDate.slice(0, 7);
+    const periodEntry =
+      periodMap.get(periodKey) ??
+      {
+        totalAmount: 0,
+        recurringAmount: 0,
+        oneTimeAmount: 0,
+        allowanceCount: 0,
+      };
+    periodEntry.totalAmount += amount;
+    periodEntry.allowanceCount += 1;
+    if (recurrenceType === "monthly") {
+      periodEntry.recurringAmount += amount;
+    } else {
+      periodEntry.oneTimeAmount += amount;
+    }
+    periodMap.set(periodKey, periodEntry);
+
+    const employeeEntry =
+      employeeMap.get(event.employeeId) ??
+      {
+        employeeId: event.employeeId,
+        employeeName: buildEmployeeName(event.employee),
+        employeeCode: event.employee?.employeeCode ?? null,
+        totalAmount: 0,
+        allowanceCount: 0,
+      };
+    employeeEntry.totalAmount += amount;
+    employeeEntry.allowanceCount += 1;
+    employeeMap.set(event.employeeId, employeeEntry);
+
+    const normalizedTitle = normalizeAllowanceTitle(event.title);
+    const typeEntry =
+      typeMap.get(normalizedTitle) ??
+      {
+        title: event.title ?? "Allowance",
+        totalAmount: 0,
+        allowanceCount: 0,
+        recurringCount: 0,
+        oneTimeCount: 0,
+      };
+    typeEntry.totalAmount += amount;
+    typeEntry.allowanceCount += 1;
+    if (recurrenceType === "monthly") {
+      typeEntry.recurringCount += 1;
+    } else {
+      typeEntry.oneTimeCount += 1;
+    }
+    if (!typeEntry.title && event.title) {
+      typeEntry.title = event.title;
+    }
+    typeMap.set(normalizedTitle, typeEntry);
+  }
+
+  totals.employeeCount = uniqueEmployees.size;
+
+  const periods = Array.from(periodMap.entries())
+    .sort(([a], [b]) => (a > b ? 1 : a < b ? -1 : 0))
+    .map(([period, data]) => ({
+      period,
+      ...data,
+    }));
+
+  const topEmployees = Array.from(employeeMap.values()).sort((a, b) => {
+    if (b.totalAmount !== a.totalAmount) {
+      return b.totalAmount - a.totalAmount;
+    }
+    const aName = a.employeeName ?? "";
+    const bName = b.employeeName ?? "";
+    return aName.localeCompare(bName);
+  });
+
+  const allowanceTypes = Array.from(typeMap.values()).sort((a, b) => {
+    if (b.totalAmount !== a.totalAmount) {
+      return b.totalAmount - a.totalAmount;
+    }
+    return a.title.localeCompare(b.title);
+  });
+
+  return {
+    totals,
+    periods,
+    topEmployees,
+    allowanceTypes,
+  };
+};
+
 // Employee and company report routes
 
 // Employee report route
@@ -271,7 +456,7 @@ reportsRouter.get(
             ? (entry.allowances as Record<string, unknown>)
             : {};
 
-        const allowanceTotal = Object.values(rawAllowances).reduce((allowanceSum, value) => {
+        const allowanceTotal = Object.values(rawAllowances).reduce<number>((allowanceSum, value) => {
           if (typeof value === "number") {
             return Number.isFinite(value) ? allowanceSum + value : allowanceSum;
           }
@@ -329,6 +514,32 @@ reportsRouter.get(
       return next(new HttpError(400, "Invalid query parameters", error.errors));
     }
     next(new HttpError(500, "Failed to fetch payroll summary", error));
+  }
+  },
+);
+
+reportsRouter.get(
+  "/api/reports/allowances",
+  requirePermission("reports:finance"),
+  async (req, res, next) => {
+  try {
+    const { startDate, endDate, groupBy } = reportQuerySchema.parse(req.query);
+    const events = await storage.getEmployeeEvents(
+      toUtcDate(startDate),
+      toUtcDate(endDate),
+      { eventType: "allowance" },
+    );
+    const report = buildAllowanceReport(events as AllowanceEventWithEmployee[], groupBy);
+    res.json(report);
+  } catch (error) {
+    console.error(error);
+    if (error instanceof z.ZodError) {
+      return next(new HttpError(400, "Invalid query parameters", error.errors));
+    }
+    if (error instanceof HttpError) {
+      return next(error);
+    }
+    next(new HttpError(500, "Failed to fetch allowance summary", error));
   }
   },
 );

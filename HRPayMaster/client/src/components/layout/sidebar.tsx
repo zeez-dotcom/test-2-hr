@@ -111,13 +111,13 @@ export default function Sidebar({ user }: SidebarProps) {
   const navItems = useMemo(() => getNavigationItemsForUser(user), [user]);
 
   return (
-    <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900 lg:block">
-      <div className="flex items-center border-b border-gray-200 px-6 py-4 dark:border-gray-800">
+    <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-border bg-card text-foreground shadow-sm lg:block">
+      <div className="flex items-center border-b border-border px-6 py-4">
         <div className="flex items-center">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
             <Users className="text-white" size={16} />
           </div>
-          <span className="ml-3 text-xl font-semibold text-gray-900 dark:text-gray-100">HR Pro</span>
+          <span className="ml-3 text-xl font-semibold text-foreground">HR Pro</span>
         </div>
       </div>
 
@@ -135,8 +135,8 @@ export default function Sidebar({ user }: SidebarProps) {
                     className={cn(
                       "group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors",
                       isActive
-                        ? "bg-primary text-white"
-                        : "text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800",
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                     )}
                   >
                     <Icon className="mr-3" size={16} />
@@ -149,7 +149,7 @@ export default function Sidebar({ user }: SidebarProps) {
         </div>
       </nav>
 
-      <div className="absolute bottom-0 left-0 right-0 border-t border-gray-200 p-3 dark:border-gray-800">
+      <div className="absolute bottom-0 left-0 right-0 border-t border-border p-3">
         <div className="flex items-center justify-between">
           <button
             title="Toggle language"
@@ -160,7 +160,7 @@ export default function Sidebar({ user }: SidebarProps) {
                 localStorage.setItem("language", next);
               } catch {}
             }}
-            className="flex items-center gap-2 text-xs text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
+            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground"
           >
             <Globe size={14} /> {i18n.language?.toUpperCase() || "EN"}
           </button>
@@ -173,7 +173,7 @@ export default function Sidebar({ user }: SidebarProps) {
                 localStorage.setItem("theme", isDark ? "dark" : "light");
               } catch {}
             }}
-            className="flex items-center gap-2 text-xs text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
+            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground"
           >
             <Moon size={14} className="hidden dark:block" />
             <Sun size={14} className="dark:hidden" />

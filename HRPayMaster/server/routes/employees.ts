@@ -487,7 +487,7 @@ async function syncEmployeeCustomValues(
   incoming?: Record<string, unknown>,
 ): Promise<EmployeeCustomValueMap> {
   if (!incoming || Object.keys(incoming).length === 0) {
-    const existing = await storage.getEmployeeCustomValues(employeeId);
+    const existing = await storage.getEmployeeCustomValues(employeeId) ?? [];
     return mapCustomValuesToRecord(existing);
   }
 
@@ -497,7 +497,7 @@ async function syncEmployeeCustomValues(
   }
   const validFieldIds = new Set(fields.map(field => field.id));
 
-  const existing = await storage.getEmployeeCustomValues(employeeId);
+  const existing = (await storage.getEmployeeCustomValues(employeeId)) ?? [];
   const existingByField = new Map(existing.map(value => [value.fieldId, value]));
 
   for (const [fieldId, raw] of Object.entries(incoming)) {
