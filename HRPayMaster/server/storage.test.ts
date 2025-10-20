@@ -42,7 +42,15 @@ vi.mock('./db', () => ({
 }));
 
 import { storage } from './storage';
-import { loanPayments, sickLeaveTracking, loanAmortizationSchedules, employees } from '@shared/schema';
+import {
+  loanPayments,
+  sickLeaveTracking,
+  loanAmortizationSchedules,
+  employees,
+  loans,
+  loanApprovalStages,
+  loanDocuments,
+} from '@shared/schema';
 
 describe('getMonthlyEmployeeSummary', () => {
   beforeEach(() => {
@@ -429,6 +437,65 @@ describe('replaceLoanAmortizationSchedule', () => {
         expect.objectContaining({ installmentNumber: 3, status: 'pending' }),
       ]),
     );
+  });
+});
+
+
+
+describe('deleteLoan', () => {
+  beforeEach(() => {
+    transactionMock.mockReset();
+    deleteMock.mockReset();
+  });
+
+  it('deletes dependent loan records inside a transaction', async () => {
+    const loanApprovalWhere = vi.fn().mockResolvedValue({ rowCount: 1 });
+    const loanDocumentWhere = vi.fn().mockResolvedValue({ rowCount: 2 });
+    const scheduleWhere = vi.fn().mockResolvedValue({ rowCount: 3 });
+    const paymentWhere = vi.fn().mockResolvedValue({ rowCount: 4 });
+    const loanWhere = vi.fn().mockResolvedValue({ rowCount: 1 });
+
+    const txDeleteMock = vi.fn((table: unknown) => {
+      if (table === loanApprovalStages) {
+        return { where: loanApprovalWhere };
+      }
+      if (table === loanDocuments) {
+        return { where: loanDocumentWhere };
+      }
+      if (table === loanAmortizationSchedules) {
+        return { where: scheduleWhere };
+      }
+      if (table === loanPayments) {
+        return { where: paymentWhere };
+      }
+      if (table === loans) {
+        return { where: loanWhere };
+      }
+      throw new Error('Unexpected table delete');
+    });
+
+    transactionMock.mockImplementation(async (cb) =>
+      cb({
+        delete: txDeleteMock,
+      }),
+    );
+
+    const result = await storage.deleteLoan('loan-1');
+
+    expect(result).toBe(true);
+    expect(transactionMock).toHaveBeenCalledTimes(1);
+    expect(txDeleteMock.mock.calls.map(call => call[0])).toEqual([
+      loanApprovalStages,
+      loanDocuments,
+      loanAmortizationSchedules,
+      loanPayments,
+      loans,
+    ]);
+    expect(loanApprovalWhere).toHaveBeenCalledTimes(1);
+    expect(loanDocumentWhere).toHaveBeenCalledTimes(1);
+    expect(scheduleWhere).toHaveBeenCalledTimes(1);
+    expect(paymentWhere).toHaveBeenCalledTimes(1);
+    expect(loanWhere).toHaveBeenCalledWith(expect.anything());
   });
 });
 
