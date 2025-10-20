@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
+import ImageUpload from "@/components/ui/image-upload";
 
 import { insertLoanSchema, type LoanStatement, type LoanWithEmployee } from "@shared/schema";
 import { queryClient } from "@/lib/queryClient";
@@ -62,6 +63,63 @@ const getStageStatusLabel = (status: string) =>
 const getStageStatusClass = (status: string) =>
   stageStatusClasses[(status?.toLowerCase?.() ?? "pending") as StageStatus] ??
   "bg-slate-200 text-slate-800";
+
+const createTempId = () => Math.random().toString(36).slice(2, 10);
+
+type LoanDocumentDraft = {
+  tempId: string;
+  title: string;
+  fileUrl?: string;
+};
+
+type LoanDocumentStateEntry = {
+  newDocuments: LoanDocumentDraft[];
+  removedDocumentIds: string[];
+};
+
+const buildLoanDocumentPayload = (
+  loan: LoanWithEmployee,
+  state?: LoanDocumentStateEntry,
+) => {
+  if (!state) return [];
+  const existingDocs = loan.documents ?? [];
+  const additions = state.newDocuments
+    .filter((doc) => doc.title.trim() && doc.fileUrl)
+    .map((doc) => ({
+      title: doc.title.trim(),
+      fileUrl: doc.fileUrl!,
+    }));
+  const removals = state.removedDocumentIds
+    .map((id) => {
+      const doc = existingDocs.find((existing) => existing.id === id);
+      if (!doc) return null;
+      return {
+        id,
+        title: doc.title || doc.documentType || "Supporting document",
+        fileUrl: doc.fileUrl,
+        remove: true as const,
+      };
+    })
+    .filter((value): value is { id: string; title: string; fileUrl: string; remove: true } => Boolean(value));
+  return [...additions, ...removals];
+};
+
+const countLoanDocumentsAfterChanges = (
+  loan: LoanWithEmployee,
+  state?: LoanDocumentStateEntry,
+) => {
+  const existingDocs = loan.documents ?? [];
+  if (!state) {
+    return existingDocs.length;
+  }
+  const removed = new Set(state.removedDocumentIds);
+  const remainingExisting = existingDocs.filter((doc) => {
+    const id = doc.id ?? "";
+    return !removed.has(id);
+  }).length;
+  const newDocs = state.newDocuments.filter((doc) => doc.title.trim() && doc.fileUrl).length;
+  return remainingExisting + newDocs;
+};
 
 export default function Loans() {
   const { t } = useTranslation();
@@ -123,6 +181,7 @@ export default function Loans() {
         queryClient.invalidateQueries({ queryKey: ["/api/loans", loanId] });
       }
       setIsCreateDialogOpen(false);
+      setCreateDocuments([]);
       const warningText = data?.policy?.warnings?.join?.(" \u2022 ");
       toast({
         title: "Loan created successfully",
@@ -192,6 +251,8 @@ export default function Loans() {
   // Edit dialog state + form
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingLoan, setEditingLoan] = useState<LoanWithEmployee | null>(null);
+  const [createDocuments, setCreateDocuments] = useState<LoanDocumentDraft[]>([]);
+  const [loanDocumentState, setLoanDocumentState] = useState<Record<string, LoanDocumentStateEntry>>({});
   const editForm = useForm<any>({
     defaultValues: {
       amount: undefined,
@@ -207,19 +268,128 @@ export default function Loans() {
   });
   const onEditSubmit = (data: any) => {
     if (!editingLoan) return;
-    updateMutation.mutate({ id: editingLoan.id, data });
+    const docState = loanDocumentState[editingLoan.id];
+    const documentsPayload = buildLoanDocumentPayload(editingLoan, docState);
+    const payload = documentsPayload.length > 0 ? { ...data, documents: documentsPayload } : data;
+    updateMutation.mutate({ id: editingLoan.id, data: payload });
     setIsEditDialogOpen(false);
+  };
+
+  useEffect(() => {
+    if (isCreateDialogOpen) {
+      setCreateDocuments((prev) => (prev.length > 0 ? prev : [{ tempId: createTempId(), title: "", fileUrl: undefined }]));
+    } else {
+      setCreateDocuments([]);
+    }
+  }, [isCreateDialogOpen]);
+
+  const addCreateDocument = () => {
+    setCreateDocuments((prev) => [...prev, { tempId: createTempId(), title: "", fileUrl: undefined }]);
+  };
+
+  const updateCreateDocument = (tempId: string, patch: Partial<LoanDocumentDraft>) => {
+    setCreateDocuments((prev) => prev.map((doc) => (doc.tempId === tempId ? { ...doc, ...patch } : doc)));
+  };
+
+  const removeCreateDocument = (tempId: string) => {
+    setCreateDocuments((prev) => prev.filter((doc) => doc.tempId !== tempId));
+  };
+
+  const updateLoanDocState = (
+    loanId: string,
+    updater: (state: LoanDocumentStateEntry) => LoanDocumentStateEntry,
+  ) => {
+    setLoanDocumentState((prev) => {
+      const current = prev[loanId] ?? { newDocuments: [], removedDocumentIds: [] };
+      return { ...prev, [loanId]: updater(current) };
+    });
+  };
+
+  const handleAddLoanDocument = (loanId: string) => {
+    updateLoanDocState(loanId, (state) => ({
+      ...state,
+      newDocuments: [...state.newDocuments, { tempId: createTempId(), title: "", fileUrl: undefined }],
+    }));
+  };
+
+  const handleRemoveNewLoanDocument = (loanId: string, tempId: string) => {
+    updateLoanDocState(loanId, (state) => ({
+      ...state,
+      newDocuments: state.newDocuments.filter((doc) => doc.tempId !== tempId),
+    }));
+  };
+
+  const handleUpdateNewLoanDocument = (
+    loanId: string,
+    tempId: string,
+    patch: Partial<LoanDocumentDraft>,
+  ) => {
+    updateLoanDocState(loanId, (state) => ({
+      ...state,
+      newDocuments: state.newDocuments.map((doc) =>
+        doc.tempId === tempId ? { ...doc, ...patch } : doc,
+      ),
+    }));
+  };
+
+  const handleToggleLoanDocumentRemoval = (loanId: string, documentId: string) => {
+    updateLoanDocState(loanId, (state) => {
+      const removed = new Set(state.removedDocumentIds);
+      if (removed.has(documentId)) {
+        removed.delete(documentId);
+      } else {
+        removed.add(documentId);
+      }
+      return { ...state, removedDocumentIds: Array.from(removed) };
+    });
   };
 
   if (loansError || employeesError) {
     return <div>Error loading loans</div>;
   }
 
+  const validCreateDocuments = createDocuments.filter((doc) => doc.title.trim() && doc.fileUrl);
+  const editingDocState = editingLoan ? loanDocumentState[editingLoan.id] : undefined;
+  const editingRemovedIds = editingDocState ? new Set(editingDocState.removedDocumentIds) : new Set<string>();
+  const editingExistingDocs = editingLoan
+    ? (editingLoan.documents ?? []).filter(
+        (doc): doc is NonNullable<(typeof editingLoan.documents)[number]> & { id: string } =>
+          Boolean(doc?.id),
+      )
+    : [];
+  const editingVisibleDocs = editingExistingDocs.filter((doc) => !editingRemovedIds.has(doc.id));
+  const editingRemovedDocs = editingExistingDocs.filter((doc) => editingRemovedIds.has(doc.id));
+  const editingNewDocs = editingDocState?.newDocuments ?? [];
+
   const onSubmit = (data: any) => {
-    createMutation.mutate(data);
+    const documentsPayload = createDocuments
+      .filter((doc) => doc.title.trim() && doc.fileUrl)
+      .map((doc) => ({
+        title: doc.title.trim(),
+        fileUrl: doc.fileUrl!,
+      }));
+    if (documentsPayload.length === 0) {
+      toast({
+        title: "Supporting documents required",
+        description: "Upload at least one document before creating a loan.",
+        variant: "destructive",
+      });
+      return;
+    }
+    createMutation.mutate({ ...data, documents: documentsPayload });
   };
 
   const handleApprove = (loan: LoanWithEmployee) => {
+    const docState = loanDocumentState[loan.id];
+    if (countLoanDocumentsAfterChanges(loan, docState) === 0) {
+      toast({
+        title: "Supporting documents required",
+        description: "Upload at least one document before approving this loan.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const documentsPayload = buildLoanDocumentPayload(loan, docState);
     const stageUpdates = (loan.approvalStages ?? [])
       .filter((stage) => stage?.id && stage.status?.toLowerCase?.() !== "approved")
       .map((stage) => ({
@@ -229,9 +399,13 @@ export default function Loans() {
       }));
 
     // Use "active" to align with server-side payroll deduction logic
+    const updateData: any = { status: "active", stageUpdates };
+    if (documentsPayload.length > 0) {
+      updateData.documents = documentsPayload;
+    }
     updateMutation.mutate({
       id: loan.id,
-      data: { status: "active", stageUpdates }
+      data: updateData
     });
   };
 
@@ -460,8 +634,58 @@ export default function Loans() {
                   )}
                 />
 
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Supporting documents</span>
+                    <Button type="button" variant="outline" size="sm" onClick={addCreateDocument}>
+                      Add document
+                    </Button>
+                  </div>
+                  {createDocuments.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No documents added yet.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {createDocuments.map((doc) => (
+                        <div key={doc.tempId} className="space-y-2 rounded-md border p-3">
+                          <Input
+                            placeholder="Document title"
+                            value={doc.title}
+                            onChange={(event) => updateCreateDocument(doc.tempId, { title: event.target.value })}
+                          />
+                          <ImageUpload
+                            label="Upload supporting document"
+                            value={doc.fileUrl}
+                            onChange={(value) => updateCreateDocument(doc.tempId, { fileUrl: value })}
+                          />
+                          <div className="flex justify-end">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeCreateDocument(doc.tempId)}
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Upload at least one supporting document before submitting the loan request.
+                  </p>
+                </div>
+
                 <DialogFooter>
-                  <Button type="submit" disabled={createMutation.isPending || !form.formState.isValid}>
+                  <Button
+                    type="submit"
+                    disabled={
+                      createMutation.isPending ||
+                      !form.formState.isValid ||
+                      validCreateDocuments.length === 0
+                    }
+                  >
                     {createMutation.isPending ? t('loansPage.creating','Creating...') : t('loansPage.newLoan','Create Loan')}
                   </Button>
                 </DialogFooter>
@@ -570,6 +794,15 @@ export default function Loans() {
                 }
                 return null;
               })();
+              const docState = loanDocumentState[loan.id];
+              const removedIds = new Set(docState?.removedDocumentIds ?? []);
+              const allExistingDocs = (loan.documents ?? []).filter(
+                (doc): doc is NonNullable<(typeof loan.documents)[number]> & { id: string } =>
+                  Boolean(doc?.id),
+              );
+              const visibleExistingDocs = allExistingDocs.filter((doc) => !removedIds.has(doc.id));
+              const removedDocs = allExistingDocs.filter((doc) => removedIds.has(doc.id));
+              const newDocs = docState?.newDocuments ?? [];
               return (
                 <Card key={loan.id}>
                   <CardHeader className="pb-4">
@@ -634,7 +867,10 @@ export default function Loans() {
                               size="sm"
                               variant="outline"
                               onClick={() => handleApprove(loan)}
-                              disabled={updateMutation.isPending}
+                              disabled={
+                                updateMutation.isPending ||
+                                countLoanDocumentsAfterChanges(loan, loanDocumentState[loan.id]) === 0
+                              }
                             >
                               <CheckCircle className="w-3 h-3 mr-1" />
                               {t('common.approve', 'Approve')}
@@ -734,6 +970,100 @@ export default function Loans() {
                         <p className="text-sm mt-1">{loan.reason}</p>
                       </div>
                     )}
+                    <div className="mt-4 pt-4 border-t space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-medium">{t('loansPage.documents', 'Documents')}</h4>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleAddLoanDocument(loan.id)}
+                        >
+                          {t('loansPage.addDocument', 'Add document')}
+                        </Button>
+                      </div>
+                      {visibleExistingDocs.length === 0 && newDocs.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          {t('loansPage.noDocuments', 'No documents uploaded yet.')}
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          {visibleExistingDocs.map((doc) => (
+                            <div
+                              key={doc.id}
+                              className="flex items-center justify-between rounded-md border bg-muted/40 px-3 py-2 text-sm"
+                            >
+                              <div className="flex-1 pr-2">
+                                <p className="font-medium">
+                                  {doc.title || doc.documentType || t('loansPage.supportingDocument', 'Supporting document')}
+                                </p>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleToggleLoanDocumentRemoval(loan.id, doc.id)}
+                                className="text-red-600 hover:text-red-700"
+                              >
+                                {t('common.remove', 'Remove')}
+                              </Button>
+                            </div>
+                          ))}
+                          {newDocs.map((doc) => (
+                            <div key={doc.tempId} className="space-y-2 rounded-md border p-3">
+                              <Input
+                                placeholder="Document title"
+                                value={doc.title}
+                                onChange={(event) =>
+                                  handleUpdateNewLoanDocument(loan.id, doc.tempId, { title: event.target.value })
+                                }
+                              />
+                              <ImageUpload
+                                label="Upload supporting document"
+                                value={doc.fileUrl}
+                                onChange={(value) =>
+                                  handleUpdateNewLoanDocument(loan.id, doc.tempId, { fileUrl: value })
+                                }
+                              />
+                              <div className="flex justify-end">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleRemoveNewLoanDocument(loan.id, doc.tempId)}
+                                  className="text-red-600 hover:text-red-700"
+                                >
+                                  {t('common.remove', 'Remove')}
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {removedDocs.length > 0 && (
+                        <div className="space-y-1 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+                          {removedDocs.map((doc) => (
+                            <div key={doc.id} className="flex items-center justify-between gap-2">
+                              <span>
+                                {doc.title || doc.documentType || t('loansPage.supportingDocument', 'Supporting document')}{' '}
+                                • {t('loansPage.markedForRemoval', 'Marked for removal')}
+                              </span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleToggleLoanDocumentRemoval(loan.id, doc.id)}
+                              >
+                                {t('common.undo', 'Undo')}
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        {t('loansPage.documentsRequirement', 'Upload at least one document before approving the loan.')}
+                      </p>
+                    </div>
                     {(violations.length > 0 || warnings.length > 0) && (
                       <div className={`${loan.reason ? 'pt-4 border-t mt-4' : 'mt-4'} space-y-3`}>
                         {violations.length > 0 && (
@@ -877,6 +1207,102 @@ export default function Loans() {
                 <FormMessage />
               </FormItem>
             )} />
+            {editingLoan && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Supporting documents</span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleAddLoanDocument(editingLoan.id)}
+                  >
+                    {t('loansPage.addDocument', 'Add document')}
+                  </Button>
+                </div>
+                {editingVisibleDocs.length === 0 && editingNewDocs.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    {t('loansPage.noDocuments', 'No documents uploaded yet.')}
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {editingVisibleDocs.map((doc) => (
+                      <div
+                        key={doc.id}
+                        className="flex items-center justify-between rounded-md border bg-muted/40 px-3 py-2 text-sm"
+                      >
+                        <div className="flex-1 pr-2">
+                          <p className="font-medium">
+                            {doc.title || doc.documentType || t('loansPage.supportingDocument', 'Supporting document')}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleToggleLoanDocumentRemoval(editingLoan.id, doc.id)}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          {t('common.remove', 'Remove')}
+                        </Button>
+                      </div>
+                    ))}
+                    {editingNewDocs.map((doc) => (
+                      <div key={doc.tempId} className="space-y-2 rounded-md border p-3">
+                        <Input
+                          placeholder="Document title"
+                          value={doc.title}
+                          onChange={(event) =>
+                            handleUpdateNewLoanDocument(editingLoan.id, doc.tempId, { title: event.target.value })
+                          }
+                        />
+                        <ImageUpload
+                          label="Upload supporting document"
+                          value={doc.fileUrl}
+                          onChange={(value) =>
+                            handleUpdateNewLoanDocument(editingLoan.id, doc.tempId, { fileUrl: value })
+                          }
+                        />
+                        <div className="flex justify-end">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveNewLoanDocument(editingLoan.id, doc.tempId)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            {t('common.remove', 'Remove')}
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {editingRemovedDocs.length > 0 && (
+                  <div className="space-y-1 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+                    {editingRemovedDocs.map((doc) => (
+                      <div key={doc.id} className="flex items-center justify-between gap-2">
+                        <span>
+                          {doc.title || doc.documentType || t('loansPage.supportingDocument', 'Supporting document')} •{' '}
+                          {t('loansPage.markedForRemoval', 'Marked for removal')}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleToggleLoanDocumentRemoval(editingLoan.id, doc.id)}
+                        >
+                          {t('common.undo', 'Undo')}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {t('loansPage.documentsRequirement', 'Upload at least one document before approving the loan.')}
+                </p>
+              </div>
+            )}
             <div className="flex justify-end gap-2">
               <Button variant="outline" type="button" onClick={()=> setIsEditDialogOpen(false)}>Cancel</Button>
               <Button type="submit" disabled={updateMutation.isPending || !editForm.formState.isValid}>Save</Button>

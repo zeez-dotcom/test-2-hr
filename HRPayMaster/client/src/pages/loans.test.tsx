@@ -119,6 +119,18 @@ vi.mock('@/components/ui/badge', () => ({
   Badge: ({ children }: any) => <span>{children}</span>,
 }));
 
+vi.mock('@/components/ui/image-upload', () => ({
+  __esModule: true,
+  default: ({ label, onChange }: any) => (
+    <div>
+      <span>{label}</span>
+      <button type="button" onClick={() => onChange('data:text/plain;base64,ZGF0YQ==')}>
+        Upload file
+      </button>
+    </div>
+  ),
+}));
+
 beforeEach(() => {
   queryClient.clear();
   toast.mockReset();
@@ -223,6 +235,9 @@ describe('Loans page', () => {
           { id: 'stage-3', status: 'delegated' },
           { status: 'pending' },
         ],
+        documents: [
+          { id: 'doc-1', title: 'Existing document', fileUrl: 'https://example.com/doc.pdf' },
+        ],
       },
     ];
 
@@ -252,6 +267,68 @@ describe('Loans page', () => {
       expect.objectContaining({ id: 'stage-3', status: 'approved', actedAt: expect.any(String) }),
     ]);
     expect(stageUpdates.every((update: any) => !Number.isNaN(Date.parse(update.actedAt)))).toBe(true);
+  });
+
+  it('blocks approval until a document is uploaded and sends the metadata', async () => {
+    const user = userEvent.setup();
+    const loans = [
+      {
+        id: 'loan-1',
+        employee: { firstName: 'Bob', lastName: 'Jones' },
+        employeeId: 'emp-2',
+        amount: '500',
+        monthlyDeduction: '50',
+        remainingAmount: '500',
+        startDate: '2024-01-01',
+        status: 'pending',
+        interestRate: '0',
+        reason: '',
+        policyMetadata: { warnings: [], violations: [] },
+        scheduleDueThisPeriod: [],
+        approvalStages: [],
+        documents: [],
+      },
+    ];
+
+    queryClient.setQueryData(['/api/loans'], loans);
+    queryClient.setQueryData(['/api/employees'], []);
+    queryClient.setQueryData(['/api/vacations'], []);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Loans />
+      </QueryClientProvider>
+    );
+
+    let approveButton = await screen.findByRole('button', { name: /approve/i });
+    expect(approveButton).toBeDisabled();
+
+    expect(getLastCalledMutationMock(1)?.lastVars).toBeUndefined();
+
+    const addButtons = screen.getAllByRole('button', { name: /add document/i });
+    await user.click(addButtons[addButtons.length - 1]);
+
+    const titleInput = screen.getByPlaceholderText('Document title');
+    await user.type(titleInput, 'Signed agreement');
+
+    await user.click(screen.getByRole('button', { name: /upload file/i }));
+
+    approveButton = await screen.findByRole('button', { name: /approve/i });
+    expect(approveButton).toBeEnabled();
+
+    await user.click(approveButton);
+
+    const updateMutationMock = getLastCalledMutationMock(1);
+    expect(updateMutationMock).toBeDefined();
+    const payload = updateMutationMock!.lastVars;
+    expect(payload.id).toBe('loan-1');
+    expect(payload.data.status).toBe('active');
+    expect(payload.data.documents).toEqual([
+      expect.objectContaining({
+        title: 'Signed agreement',
+        fileUrl: 'data:text/plain;base64,ZGF0YQ==',
+      }),
+    ]);
   });
 });
 
