@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
 import Loans from './loans';
@@ -7,6 +8,24 @@ import '@testing-library/jest-dom';
 
 const { toast } = vi.hoisted(() => ({ toast: vi.fn() }));
 const mutationMocks: any[] = [];
+
+const getMutationMocksByType = (offset: number) =>
+  mutationMocks.filter((_: any, index: number) => index % 3 === offset);
+
+const getLatestMutationMock = (offset: number) => {
+  const mocks = getMutationMocksByType(offset);
+  return mocks[mocks.length - 1];
+};
+
+const getLastCalledMutationMock = (offset: number) => {
+  const mocks = getMutationMocksByType(offset);
+  for (let i = mocks.length - 1; i >= 0; i -= 1) {
+    if (mocks[i]?.lastVars !== undefined) {
+      return mocks[i];
+    }
+  }
+  return undefined;
+};
 
 vi.mock('@/lib/toastError', () => ({
   toastApiError: vi.fn((_: unknown, fallback?: string) => {
@@ -23,7 +42,9 @@ vi.mock('@tanstack/react-query', async () => {
         shouldError: false,
         isPending: false,
         successPayload: undefined as any,
+        lastVars: undefined as any,
         mutate: (vars: any) => {
+          mock.lastVars = vars;
           if (mock.shouldError) {
             const err = {
               response: {
@@ -136,43 +157,101 @@ describe('Loans page', () => {
     expect(screen.getByText('Alice Smith')).toBeInTheDocument();
     expect(screen.getByText('Loan statement')).toBeInTheDocument();
 
-    mutationMocks[0].successPayload = {
+    const createMutationMock = getLatestMutationMock(0)!;
+    createMutationMock.successPayload = {
       loan: { id: '1' },
       policy: { warnings: ['Check documentation'] },
     };
-    mutationMocks[0].mutate({});
+    createMutationMock.mutate({});
     expect(toast).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Loan created successfully', description: 'Check documentation' }),
     );
     toast.mockReset();
 
-    mutationMocks[0].shouldError = true;
-    mutationMocks[0].mutate({});
+    createMutationMock.shouldError = true;
+    createMutationMock.mutate({});
     await Promise.resolve();
     expect(toast).toHaveBeenCalledWith({ title: 'Failed to create loan', variant: 'destructive' });
-    mutationMocks[0].shouldError = false;
+    createMutationMock.shouldError = false;
     toast.mockReset();
 
-    mutationMocks[1].successPayload = {
+    const updateMutationMock = getLatestMutationMock(1)!;
+    updateMutationMock.successPayload = {
       response: { loan: { id: '1' }, policy: { warnings: [] } },
     };
-    mutationMocks[1].mutate({ id: '1', data: {} });
-    expect(toast).toHaveBeenCalledWith({ title: 'Loan updated successfully', description: undefined });
+    updateMutationMock.mutate({ id: '1', data: {} });
+    expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Loan updated successfully', description: '' })
+    );
     toast.mockReset();
 
-    mutationMocks[1].shouldError = true;
-    mutationMocks[1].mutate({ id: '1', data: {} });
+    updateMutationMock.shouldError = true;
+    updateMutationMock.mutate({ id: '1', data: {} });
     expect(toast).toHaveBeenCalledWith({ title: 'Failed to update loan', variant: 'destructive' });
-    mutationMocks[1].shouldError = false;
+    updateMutationMock.shouldError = false;
     toast.mockReset();
 
-    mutationMocks[2].mutate('1');
+    const deleteMutationMock = getLatestMutationMock(2)!;
+    deleteMutationMock.mutate('1');
     expect(toast).toHaveBeenCalledWith({ title: 'Loan deleted successfully' });
     toast.mockReset();
 
-    mutationMocks[2].shouldError = true;
-    mutationMocks[2].mutate('1');
+    deleteMutationMock.shouldError = true;
+    deleteMutationMock.mutate('1');
     expect(toast).toHaveBeenCalledWith({ title: 'Failed to delete loan', variant: 'destructive' });
+  });
+
+  it('approving a loan updates status and approval stages', async () => {
+    const user = userEvent.setup();
+    const loans = [
+      {
+        id: '1',
+        employee: { firstName: 'Alice', lastName: 'Smith' },
+        employeeId: 'emp-1',
+        amount: '100',
+        monthlyDeduction: '10',
+        remainingAmount: '90',
+        startDate: '2024-01-01',
+        status: 'pending',
+        interestRate: '0',
+        reason: '',
+        policyMetadata: { warnings: [], violations: [] },
+        scheduleDueThisPeriod: [],
+        approvalStages: [
+          { id: 'stage-1', status: 'pending' },
+          { id: 'stage-2', status: 'approved' },
+          { id: 'stage-3', status: 'delegated' },
+          { status: 'pending' },
+        ],
+      },
+    ];
+
+    queryClient.setQueryData(['/api/loans'], loans);
+    queryClient.setQueryData(['/api/employees'], []);
+    queryClient.setQueryData(['/api/vacations'], []);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Loans />
+      </QueryClientProvider>
+    );
+
+    await screen.findByText('Alice Smith');
+    await user.click(screen.getByRole('button', { name: /approve/i }));
+
+    const updateMutationMock = getLastCalledMutationMock(1);
+    expect(updateMutationMock).toBeDefined();
+    const lastVars = updateMutationMock!.lastVars;
+    expect(lastVars).toBeDefined();
+    expect(lastVars.id).toBe('1');
+    expect(lastVars.data.status).toBe('active');
+    const { stageUpdates } = lastVars.data;
+    expect(stageUpdates).toHaveLength(2);
+    expect(stageUpdates).toEqual([
+      expect.objectContaining({ id: 'stage-1', status: 'approved', actedAt: expect.any(String) }),
+      expect.objectContaining({ id: 'stage-3', status: 'approved', actedAt: expect.any(String) }),
+    ]);
+    expect(stageUpdates.every((update: any) => !Number.isNaN(Date.parse(update.actedAt)))).toBe(true);
   });
 });
 

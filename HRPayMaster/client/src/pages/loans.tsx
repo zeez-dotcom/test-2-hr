@@ -219,11 +219,19 @@ export default function Loans() {
     createMutation.mutate(data);
   };
 
-  const handleApprove = (id: string) => {
+  const handleApprove = (loan: LoanWithEmployee) => {
+    const stageUpdates = (loan.approvalStages ?? [])
+      .filter((stage) => stage?.id && stage.status?.toLowerCase?.() !== "approved")
+      .map((stage) => ({
+        id: stage.id,
+        status: "approved" as const,
+        actedAt: new Date().toISOString(),
+      }));
+
     // Use "active" to align with server-side payroll deduction logic
-    updateMutation.mutate({ 
-      id, 
-      data: { status: "active" }
+    updateMutation.mutate({
+      id: loan.id,
+      data: { status: "active", stageUpdates }
     });
   };
 
@@ -625,7 +633,7 @@ export default function Loans() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => handleApprove(loan.id)}
+                              onClick={() => handleApprove(loan)}
                               disabled={updateMutation.isPending}
                             >
                               <CheckCircle className="w-3 h-3 mr-1" />
