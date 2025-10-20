@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
@@ -130,6 +130,42 @@ vi.mock('@/components/ui/image-upload', () => ({
     </div>
   ),
 }));
+
+vi.mock('react-hook-form', async () => {
+  const actual: any = await vi.importActual('react-hook-form');
+  return {
+    ...actual,
+    useForm: (options: any = {}) => {
+      const values: Record<string, any> = { ...(options?.defaultValues ?? {}) };
+      const formState = { isValid: true };
+      const form: any = {
+        register: (name: string) => ({
+          name,
+          get value() {
+            const current = values[name];
+            return current === undefined ? '' : current;
+          },
+          onChange: (event: any) => {
+            const value = event?.target ? event.target.value : event;
+            values[name] = value;
+            formState.isValid = true;
+          },
+        }),
+        control: {},
+        formState,
+        handleSubmit: (callback: any) => (event?: any) => {
+          event?.preventDefault?.();
+          callback({ ...values });
+        },
+        reset: (nextValues: any = {}) => {
+          Object.keys(values).forEach((key) => delete values[key]);
+          Object.assign(values, nextValues);
+        },
+      };
+      return form;
+    },
+  };
+});
 
 beforeEach(() => {
   queryClient.clear();
@@ -329,6 +365,33 @@ describe('Loans page', () => {
         fileUrl: 'data:text/plain;base64,ZGF0YQ==',
       }),
     ]);
+  });
+
+  it('creates a loan without documents and omits the documents payload', async () => {
+    const user = userEvent.setup();
+    queryClient.setQueryData(['/api/loans'], []);
+    queryClient.setQueryData(['/api/employees'], []);
+    queryClient.setQueryData(['/api/vacations'], []);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Loans />
+      </QueryClientProvider>
+    );
+
+    const createButton = screen.getByRole('button', { name: /create loan/i });
+    expect(createButton).toBeEnabled();
+
+    const formElement = createButton.closest('form');
+    expect(formElement).toBeTruthy();
+
+    const createMutationMock = getLatestMutationMock(0)!;
+    createMutationMock.lastVars = undefined;
+
+    fireEvent.submit(formElement!);
+
+    expect(createMutationMock.lastVars).toBeDefined();
+    expect(createMutationMock.lastVars.documents).toBeUndefined();
   });
 });
 
