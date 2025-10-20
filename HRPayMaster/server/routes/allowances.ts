@@ -99,12 +99,16 @@ const toEmployeeSummary = (employee: Employee | undefined, fallbackId: string): 
     (part): part is string => Boolean(part && part.trim().length > 0),
   );
   const fullName = parts.length > 0 ? parts.join(" ") : null;
+  const employeeCode = employee?.employeeCode?.trim() ?? fallbackId;
+  const firstName = employee?.firstName?.trim() ?? employeeCode;
+  const position = employee?.position?.trim() ?? "Employee";
+
   return {
     id: employee?.id ?? fallbackId,
-    employeeCode: employee?.employeeCode ?? null,
-    firstName: employee?.firstName ?? null,
+    employeeCode,
+    firstName,
     lastName: employee?.lastName ?? null,
-    position: employee?.position ?? null,
+    position,
     departmentId: employee?.departmentId ?? null,
     fullName,
   };

@@ -4092,55 +4092,48 @@ export class DatabaseStorage implements IStorage {
   // Payroll entry methods
 
   async getPayrollEntries(payrollRunId: string): Promise<PayrollEntry[]> {
+    const rows = await db
+      .select()
+      .from(payrollEntries)
+      .where(eq(payrollEntries.payrollRunId, payrollRunId));
 
-    return await db.select().from(payrollEntries).where(eq(payrollEntries.payrollRunId, payrollRunId));
-
+    return rows.map(entry => this.mapPayrollEntry(entry));
   }
-
-
 
   async createPayrollEntry(payrollEntry: InsertPayrollEntry): Promise<PayrollEntry> {
-
     const [newPayrollEntry] = await db
-
       .insert(payrollEntries)
-
       .values({
-
         ...payrollEntry,
-
         taxDeduction: payrollEntry.taxDeduction || "0",
-
         socialSecurityDeduction: payrollEntry.socialSecurityDeduction || "0",
-
         healthInsuranceDeduction: payrollEntry.healthInsuranceDeduction || "0",
-
         otherDeductions: payrollEntry.otherDeductions || "0",
-
       })
-
       .returning();
 
-    return newPayrollEntry;
-
+    return this.mapPayrollEntry(newPayrollEntry);
   }
 
-
-
   async updatePayrollEntry(id: string, payrollEntry: Partial<InsertPayrollEntry>): Promise<PayrollEntry | undefined> {
-
     const [updated] = await db
-
       .update(payrollEntries)
-
       .set(payrollEntry)
-
       .where(eq(payrollEntries.id, id))
-
       .returning();
 
-    return updated || undefined;
+    return updated ? this.mapPayrollEntry(updated) : undefined;
+  }
 
+  private mapPayrollEntry(entry: typeof payrollEntries.$inferSelect): PayrollEntry {
+    const { allowances: rawAllowances, ...rest } = entry;
+    const normalizedAllowances =
+      rawAllowances == null ? undefined : this.sanitizeAllowanceBreakdown(rawAllowances);
+    const normalizedEntry = { ...rest } as PayrollEntry;
+    if (normalizedAllowances !== undefined) {
+      normalizedEntry.allowances = normalizedAllowances;
+    }
+    return normalizedEntry;
   }
 
 
@@ -8265,13 +8258,9 @@ export class DatabaseStorage implements IStorage {
       );
 
       return {
-
-        payroll: payrollRows.map((r) => r.entry),
-
+        payroll: payrollRows.map(({ entry }) => this.mapPayrollEntry(entry)),
         loans: loansRows,
-
         events: expandedEvents,
-
       };
 
     });
@@ -8483,14 +8472,15 @@ export class DatabaseStorage implements IStorage {
       if (!runId) {
         return;
       }
+      const normalizedEntry = this.mapPayrollEntry(entry);
       const existing = entriesByRun.get(runId);
       if (existing) {
-        existing.entries.push(entry);
+        existing.entries.push(normalizedEntry);
       } else {
         entriesByRun.set(runId, {
           start: runStart,
           end: runEnd,
-          entries: [entry],
+          entries: [normalizedEntry],
         });
       }
     });
@@ -8694,11 +8684,12 @@ export class DatabaseStorage implements IStorage {
 
       }
 
+      const normalizedEntry = this.mapPayrollEntry(entry);
       const existing = entriesByRun.get(runId);
 
       if (existing) {
 
-        existing.entries.push(entry);
+        existing.entries.push(normalizedEntry);
 
       } else {
 
@@ -8710,7 +8701,7 @@ export class DatabaseStorage implements IStorage {
 
           scenarioToggles,
 
-          entries: [entry],
+          entries: [normalizedEntry],
 
         });
 

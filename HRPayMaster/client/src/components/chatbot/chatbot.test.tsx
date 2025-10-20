@@ -105,6 +105,8 @@ vi.mock("@/hooks/use-toast", () => ({
 vi.mock("lucide-react", () => ({
   Loader2: () => null,
   Plus: () => null,
+  Sparkles: () => null,
+  AlertCircle: () => null,
 }));
 const apiGet = vi.spyOn(http, "apiGet");
 
