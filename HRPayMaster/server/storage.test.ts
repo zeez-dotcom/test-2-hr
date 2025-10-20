@@ -6,6 +6,7 @@ const {
   insertMock,
   updateMock,
   deleteMock,
+  loansFindFirstMock,
   loanPaymentsFindManyMock,
   carAssignmentsFindManyMock,
   employeeEventsFindManyMock,
@@ -17,6 +18,7 @@ const {
   insertMock: vi.fn(),
   updateMock: vi.fn(),
   deleteMock: vi.fn(),
+  loansFindFirstMock: vi.fn(),
   loanPaymentsFindManyMock: vi.fn(),
   carAssignmentsFindManyMock: vi.fn(),
   employeeEventsFindManyMock: vi.fn(),
@@ -32,6 +34,7 @@ vi.mock('./db', () => ({
     update: updateMock,
     delete: deleteMock,
     query: {
+      loans: { findFirst: loansFindFirstMock },
       loanPayments: { findMany: loanPaymentsFindManyMock },
       carAssignments: { findMany: carAssignmentsFindManyMock },
       employeeEvents: { findMany: employeeEventsFindManyMock },
@@ -356,6 +359,93 @@ describe('loan payment helpers', () => {
       expect.objectContaining({ where: expect.anything(), orderBy: expect.anything() }),
     );
     expect(byRun).toEqual([{ id: 'lp2' }]);
+  });
+});
+
+describe('loan persistence', () => {
+  beforeEach(() => {
+    insertMock.mockReset();
+    updateMock.mockReset();
+    loansFindFirstMock.mockReset();
+  });
+
+  it('normalizes values and defaults remaining amount when creating loans', async () => {
+    const inserted: any[] = [];
+    insertMock.mockImplementationOnce((table) => {
+      expect(table).toBe(loans);
+      return {
+        values: (vals: any) => {
+          inserted.push(vals);
+          return {
+            returning: vi.fn().mockResolvedValue([{ id: 'loan-1', ...vals }]),
+          };
+        },
+      };
+    });
+
+    const result = await storage.createLoan({
+      employeeId: 'emp-1',
+      amount: 1000,
+      monthlyDeduction: 100,
+      startDate: '2024-01-01',
+      status: undefined,
+      approvalState: undefined,
+      interestRate: undefined,
+    } as any);
+
+    expect(inserted).toHaveLength(1);
+    expect(inserted[0]).toMatchObject({
+      employeeId: 'emp-1',
+      amount: '1000',
+      monthlyDeduction: '100',
+      remainingAmount: '1000',
+      interestRate: '0',
+      status: 'pending',
+    });
+    expect(result).toMatchObject({ id: 'loan-1' });
+  });
+
+  it('returns existing loan when no update payload is provided', async () => {
+    loansFindFirstMock.mockResolvedValueOnce({ id: 'loan-1', amount: '900' });
+
+    const result = await storage.updateLoan('loan-1', {});
+
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(loansFindFirstMock).toHaveBeenCalledOnce();
+    expect(result).toEqual({ id: 'loan-1', amount: '900' });
+  });
+
+  it('normalizes numeric fields when updating loans', async () => {
+    updateMock.mockImplementationOnce((table) => {
+      expect(table).toBe(loans);
+      return {
+        set: (vals: any) => {
+          expect(vals).toMatchObject({
+            amount: '1200',
+            monthlyDeduction: '150',
+            remainingAmount: '800',
+            interestRate: '5',
+            status: 'active',
+          });
+          return {
+            where: vi.fn().mockReturnValue({
+              returning: vi.fn().mockResolvedValue([{ id: 'loan-1', amount: '1200' }]),
+            }),
+          };
+        },
+      };
+    });
+
+    const updated = await storage.updateLoan('loan-1', {
+      amount: 1200,
+      monthlyDeduction: 150,
+      remainingAmount: 800,
+      interestRate: 5,
+      status: 'active',
+    } as any);
+
+    expect(updated).toEqual({ id: 'loan-1', amount: '1200' });
+    expect(loansFindFirstMock).not.toHaveBeenCalled();
   });
 });
 

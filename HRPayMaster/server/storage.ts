@@ -4979,64 +4979,70 @@ export class DatabaseStorage implements IStorage {
 
   }
 
-
-
   async createLoan(loan: InsertLoan): Promise<Loan> {
+    const amountValue = loan.amount.toString();
+    const monthlyDeductionValue = loan.monthlyDeduction.toString();
+    const explicitRemaining = (loan as any).remainingAmount;
+    const remainingValue =
+      explicitRemaining !== undefined && explicitRemaining !== null
+        ? Number(explicitRemaining).toString()
+        : amountValue;
+    const explicitRate = (loan as any).interestRate;
+    const rateValue =
+      explicitRate !== undefined && explicitRate !== null
+        ? Number(explicitRate).toString()
+        : "0";
+
+    const values = removeUndefined({
+      ...loan,
+      amount: amountValue,
+      monthlyDeduction: monthlyDeductionValue,
+      remainingAmount: remainingValue,
+      interestRate: rateValue,
+      status: loan.status || "pending",
+    });
 
     const [newLoan] = await db
-
       .insert(loans)
-
-      .values({
-
-        ...loan,
-
-        amount: loan.amount.toString(),
-
-        monthlyDeduction: loan.monthlyDeduction.toString(),
-
-        remainingAmount: (loan as any).remainingAmount !== undefined ? (loan as any).remainingAmount!.toString() : undefined,
-
-        interestRate: (loan as any).interestRate !== undefined ? (loan as any).interestRate!.toString() : "0",
-
-        status: loan.status || "pending",
-
-      })
-
+      .values(values as typeof loans.$inferInsert)
       .returning();
 
     return newLoan;
-
   }
 
-
-
   async updateLoan(id: string, loan: Partial<InsertLoan>): Promise<Loan | undefined> {
+    const normalized = removeUndefined({
+      ...loan,
+      amount:
+        loan.amount !== undefined && loan.amount !== null
+          ? Number(loan.amount).toString()
+          : undefined,
+      monthlyDeduction:
+        loan.monthlyDeduction !== undefined && loan.monthlyDeduction !== null
+          ? Number(loan.monthlyDeduction).toString()
+          : undefined,
+      remainingAmount:
+        (loan as any).remainingAmount !== undefined && (loan as any).remainingAmount !== null
+          ? Number((loan as any).remainingAmount).toString()
+          : undefined,
+      interestRate:
+        (loan as any).interestRate !== undefined && (loan as any).interestRate !== null
+          ? Number((loan as any).interestRate).toString()
+          : undefined,
+    });
+
+    if (Object.keys(normalized).length === 0) {
+      const existing = await db.query.loans.findFirst({ where: eq(loans.id, id) });
+      return existing || undefined;
+    }
 
     const [updated] = await db
-
       .update(loans)
-
-      .set({
-
-        ...loan,
-
-        amount: loan.amount !== undefined ? loan.amount.toString() : undefined as any,
-
-        monthlyDeduction: loan.monthlyDeduction !== undefined ? loan.monthlyDeduction.toString() : undefined as any,
-
-        remainingAmount: (loan as any).remainingAmount !== undefined ? (loan as any).remainingAmount!.toString() : undefined as any,
-
-        interestRate: (loan as any).interestRate !== undefined ? (loan as any).interestRate!.toString() : undefined as any,
-
-      })
-
+      .set(normalized as Partial<typeof loans.$inferInsert>)
       .where(eq(loans.id, id))
-
       .returning();
 
     return updated || undefined;
-
   }
 
 

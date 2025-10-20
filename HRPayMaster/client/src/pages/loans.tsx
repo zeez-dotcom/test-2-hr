@@ -34,7 +34,7 @@ const schema = insertLoanSchema
   })
   .refine((d) => d.monthlyDeduction <= d.amount, {
     path: ["monthlyDeduction"],
-    message: "Monthly deduction must be ≤ amount",
+    message: "Monthly deduction must be <= amount",
   });
 
 const formatMoney = (value: number) => formatCurrency(value);
@@ -182,7 +182,7 @@ export default function Loans() {
       }
       setIsCreateDialogOpen(false);
       setCreateDocuments([]);
-      const warningText = data?.policy?.warnings?.join?.(" \u2022 ");
+      const warningText = data?.policy?.warnings?.join?.(" | ");
       toast({
         title: "Loan created successfully",
         description: warningText,
@@ -204,7 +204,7 @@ export default function Loans() {
       queryClient.invalidateQueries({ queryKey: ["/api/loans"] });
       const loanId = data?.loan?.id ?? id;
       queryClient.invalidateQueries({ queryKey: ["/api/loans", loanId] });
-      const warningText = data?.policy?.warnings?.join?.(" \u2022 ");
+      const warningText = data?.policy?.warnings?.join?.(" | ");
       toast({ title: "Loan updated successfully", description: warningText });
     },
     onError: () => {
@@ -736,7 +736,7 @@ export default function Loans() {
                   `${pausedCount} ${pausedCount === 1 ? "installment paused" : "installments paused"}`,
                 );
               }
-              const dueSummary = dueSummaryParts.join(" • ");
+              const dueSummary = dueSummaryParts.join(" | ");
               const warnings = Array.isArray((loan as any)?.policyMetadata?.warnings)
                 ? ((loan as any).policyMetadata.warnings as string[]).filter(Boolean)
                 : [];
@@ -778,7 +778,7 @@ export default function Loans() {
               const forecastMeta = loanForecastMeta(loan);
               const dueDetails = (() => {
                 if (nextDueDateLabel && dueSummary) {
-                  return `${t('loansPage.nextDue', 'Next due')}: ${nextDueDateLabel} • ${dueSummary}`;
+                  return `${t('loansPage.nextDue', 'Next due')}: ${nextDueDateLabel} | ${dueSummary}`;
                 }
                 if (nextDueDateLabel) {
                   return `${t('loansPage.nextDue', 'Next due')}: ${nextDueDateLabel}`;
@@ -808,7 +808,7 @@ export default function Loans() {
                             {loan.employee?.firstName} {loan.employee?.lastName}
                           </CardTitle>
                           <CardDescription>
-                          {formatMoney(amountValue)} • {formatMoney(monthlyDeductionValue)} /{t('loansPage.perMonth', 'month')}
+                          {formatMoney(amountValue)} | {formatMoney(monthlyDeductionValue)} /{t('loansPage.perMonth', 'month')}
                           </CardDescription>
                         </div>
                       </div>
@@ -909,7 +909,7 @@ export default function Loans() {
                       </div>
                       <div>
                         <span className="text-muted-foreground">{t('loansPage.startDate', 'Start Date')}</span>
-                        <p className="font-medium">{startDateLabel ?? '—'}</p>
+                        <p className="font-medium">{startDateLabel ?? 'N/A'}</p>
                       </div>
                       <div>
                         <span className="text-muted-foreground">{t('loansPage.interestRate', 'Interest Rate')}</span>
@@ -1040,7 +1040,7 @@ export default function Loans() {
                             <div key={doc.id} className="flex items-center justify-between gap-2">
                               <span>
                                 {doc.title || doc.documentType || t('loansPage.supportingDocument', 'Supporting document')}{' '}
-                                • {t('loansPage.markedForRemoval', 'Marked for removal')}
+                                | {t('loansPage.markedForRemoval', 'Marked for removal')}
                               </span>
                               <Button
                                 type="button"
@@ -1277,7 +1277,7 @@ export default function Loans() {
                     {editingRemovedDocs.map((doc) => (
                       <div key={doc.id} className="flex items-center justify-between gap-2">
                         <span>
-                          {doc.title || doc.documentType || t('loansPage.supportingDocument', 'Supporting document')} •{' '}
+                          {doc.title || doc.documentType || t('loansPage.supportingDocument', 'Supporting document')} |{' '}
                           {t('loansPage.markedForRemoval', 'Marked for removal')}
                         </span>
                         <Button
