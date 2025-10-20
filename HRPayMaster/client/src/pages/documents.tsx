@@ -40,7 +40,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import ImageUpload from "@/components/ui/image-upload";
 import { useToast } from "@/hooks/use-toast";
 import { toastApiError } from "@/lib/toastError";
-import { apiGet, apiPost, apiDelete } from "@/lib/http";
+import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/http";
 import { queryClient } from "@/lib/queryClient";
 import { defaultTemplates, type TemplateKey } from "@/lib/default-templates";
 import { buildAndEncodePdf, controllerNumber } from "@/lib/pdf";
@@ -52,6 +52,7 @@ import {
   FileText,
   CreditCard,
   BookOpen,
+  Building,
   Mail,
   Clock,
   RefreshCw,
@@ -101,6 +102,14 @@ const signatureBadgeStyles: Record<string, string> = {
 
 const splitTags = (value?: string | null): string[] =>
   value ? value.split(",").map(tag => tag.trim()).filter(Boolean) : [];
+
+const trackedReplacementCategories = new Set([
+  "visa",
+  "civil_id",
+  "passport",
+  "driving_license",
+  "company_license",
+]);
 
 const formatStatus = (status?: string | null) =>
   (status ?? "not_requested")
@@ -275,11 +284,35 @@ const invalidateDocuments = () =>
     predicate: (query) =>
       Array.isArray(query.queryKey) && query.queryKey[0] === "/api/documents",
   });
-export default function DocumentsPage() {
+
+type DocumentsPageProps = {
+  initialTab?: "library" | "expiry";
+  showExpiryOnly?: boolean;
+  expiredOnly?: boolean;
+};
+
+type ReplacementContext = {
+  employeeId: string | null;
+  employeeName: string;
+  companyId: string | null;
+  cardType: string;
+  cardTitle: string;
+  number?: string | null;
+  expiryDate?: string;
+  alertDays?: number;
+};
+
+const NEW_DOCUMENT_VALUE = "__new_replacement__";
+
+export default function DocumentsPage({
+  initialTab = "library",
+  showExpiryOnly = false,
+  expiredOnly = false,
+}: DocumentsPageProps) {
   const { t } = useTranslation();
   const { toast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<string>("library");
+  const [activeTab, setActiveTab] = useState<string>(initialTab);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL_CATEGORIES_VALUE);
   const [tagFilter, setTagFilter] = useState<string>(ALL_TAGS_VALUE);
@@ -315,6 +348,14 @@ export default function DocumentsPage() {
   const [uploadMetadata, setUploadMetadata] = useState("");
   const [uploadDataUrl, setUploadDataUrl] = useState<string | undefined>();
 
+  const [replacementContext, setReplacementContext] = useState<ReplacementContext | null>(null);
+  const [replacementTitle, setReplacementTitle] = useState("");
+  const [replacementDescription, setReplacementDescription] = useState("");
+  const [replacementExpiryDate, setReplacementExpiryDate] = useState("");
+  const [replacementAlertDays, setReplacementAlertDays] = useState("");
+  const [replacementDocumentId, setReplacementDocumentId] = useState<string>(NEW_DOCUMENT_VALUE);
+  const [replacementDataUrl, setReplacementDataUrl] = useState<string | undefined>();
+
   const [templateKey, setTemplateKey] = useState<TemplateKey>("noc");
   const [templateEmployeeId, setTemplateEmployeeId] = useState("");
   const [templatePurpose, setTemplatePurpose] = useState("");
@@ -342,6 +383,10 @@ export default function DocumentsPage() {
   const [signatureMetadata, setSignatureMetadata] = useState("");
 
   const { data: employees = [] } = useQuery<any[]>({ queryKey: ["/api/employees"] });
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   useEffect(() => {
     if (!templateEmployeeId) return;
@@ -561,6 +606,46 @@ export default function DocumentsPage() {
     return new Map(entries as [string, any][]);
   }, [employees]);
 
+  const documentsByEmployee = useMemo(() => {
+    const map = new Map<string, GenericDocument[]>();
+    for (const doc of documents) {
+      if (!doc.employeeId) continue;
+      const list = map.get(doc.employeeId) ?? [];
+      list.push(doc);
+      map.set(doc.employeeId, list);
+    }
+    return map;
+  }, [documents]);
+
+  const findMatchingDocument = (
+    ownerId: string | null | undefined,
+    card: { type: string; number?: string | null; title: string },
+  ): GenericDocument | undefined => {
+    const normalizedTitle = card.title.toLowerCase();
+
+    if (card.type === "company_license") {
+      return documents.find((doc) => {
+        const matchesNumber = card.number
+          ? doc.referenceNumber === card.number || doc.controllerNumber === card.number
+          : false;
+        const matchesCategory = (doc.category ?? "").toLowerCase() === card.type;
+        const matchesTitle = doc.title.toLowerCase().includes(normalizedTitle);
+        return matchesNumber || matchesCategory || matchesTitle;
+      });
+    }
+
+    if (!ownerId) return undefined;
+    const docs = documentsByEmployee.get(ownerId) ?? [];
+    return docs.find((doc) => {
+      const matchesNumber = card.number
+        ? doc.referenceNumber === card.number || doc.controllerNumber === card.number
+        : false;
+      const matchesCategory = (doc.category ?? "").toLowerCase() === card.type;
+      const matchesTitle = doc.title.toLowerCase().includes(normalizedTitle);
+      return matchesNumber || matchesCategory || matchesTitle;
+    });
+  };
+
   const uniqueCategories = useMemo(() => {
     const set = new Set<string>();
     for (const doc of documents) {
@@ -752,8 +837,20 @@ export default function DocumentsPage() {
   const renderDocumentCard = (doc: GenericDocument) => {
     const tags = splitTags(doc.tags);
     const employee = doc.employeeId ? employeeMap.get(doc.employeeId) : undefined;
+    const employeeName = employee
+      ? `${employee.firstName ?? ""} ${employee.lastName ?? ""}`.trim() ||
+        employee.name ||
+        employee.employeeCode ||
+        employee.id ||
+        ""
+      : "";
     const signatureStyle = signatureBadgeStyles[doc.signatureStatus ?? ""] ??
       signatureBadgeStyles.not_requested;
+    const isTrackedReplacementCandidate = Boolean(
+      doc.employeeId &&
+      doc.category &&
+      trackedReplacementCategories.has(doc.category),
+    );
 
     return (
       <Card key={doc.id} className="border border-slate-200 dark:border-slate-800">
@@ -808,6 +905,37 @@ export default function DocumentsPage() {
               <FileSignature className="mr-1 h-4 w-4" />
               {t("documents.signature", "Signature")}
             </Button>
+            {isTrackedReplacementCandidate && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setReplacementContext({
+                    employeeId: doc.employeeId ?? null,
+                    employeeName,
+                    companyId: employee?.companyId ?? null,
+                    cardType: doc.category as string,
+                    cardTitle: doc.title,
+                    number: doc.referenceNumber,
+                    expiryDate: doc.expiryDate ?? undefined,
+                    alertDays: doc.alertDays ?? undefined,
+                  });
+                  setReplacementDocumentId(doc.id);
+                  setReplacementTitle(doc.title ?? "");
+                  setReplacementDescription(doc.description ?? "");
+                  setReplacementExpiryDate(doc.expiryDate ?? "");
+                  setReplacementAlertDays(
+                    doc.alertDays !== null && doc.alertDays !== undefined
+                      ? String(doc.alertDays)
+                      : "",
+                  );
+                  setReplacementDataUrl(undefined);
+                }}
+              >
+                <UploadCloud className="mr-1 h-4 w-4" />
+                {t("documents.uploadReplacement", "Upload replacement")}
+              </Button>
+            )}
             <Button
               variant="destructive"
               size="sm"
@@ -886,6 +1014,8 @@ export default function DocumentsPage() {
           return <BookOpen className="w-5 h-5 text-purple-600" />;
         case "driving_license":
           return <AlertTriangle className="w-5 h-5 text-amber-600" />;
+        case "company_license":
+          return <Building className="w-5 h-5 text-slate-600" />;
         default:
           return <FileText className="w-5 h-5 text-gray-600" />;
       }
@@ -928,6 +1058,7 @@ export default function DocumentsPage() {
         expiryDate: string;
         daysUntilExpiry: number;
         alertDays: number;
+        ownerId: string | null;
       }[] = [];
 
       if (check.visa) {
@@ -938,6 +1069,7 @@ export default function DocumentsPage() {
           expiryDate: check.visa.expiryDate,
           daysUntilExpiry: check.visa.daysUntilExpiry,
           alertDays: check.visa.alertDays,
+          ownerId: check.employeeId,
         });
       }
       if (check.civilId) {
@@ -948,6 +1080,7 @@ export default function DocumentsPage() {
           expiryDate: check.civilId.expiryDate,
           daysUntilExpiry: check.civilId.daysUntilExpiry,
           alertDays: check.civilId.alertDays,
+          ownerId: check.employeeId,
         });
       }
       if (check.passport) {
@@ -958,22 +1091,35 @@ export default function DocumentsPage() {
           expiryDate: check.passport.expiryDate,
           daysUntilExpiry: check.passport.daysUntilExpiry,
           alertDays: check.passport.alertDays,
+          ownerId: check.employeeId,
         });
       }
-      const driving = (check as {
-        drivingLicense?: NonNullable<typeof check.visa> | null;
-      }).drivingLicense;
-      if (driving) {
+      if (check.drivingLicense) {
         cards.push({
           type: "driving_license",
           title: "Driving License",
-          number: driving.number,
-          expiryDate: driving.expiryDate,
-          daysUntilExpiry: driving.daysUntilExpiry,
-          alertDays: driving.alertDays,
+          number: check.drivingLicense.number,
+          expiryDate: check.drivingLicense.expiryDate,
+          daysUntilExpiry: check.drivingLicense.daysUntilExpiry,
+          alertDays: check.drivingLicense.alertDays,
+          ownerId: check.employeeId,
         });
       }
-      return cards;
+      if (check.companyLicense) {
+        cards.push({
+          type: "company_license",
+          title: check.companyName ? `${check.companyName} License` : "Company License",
+          number: check.companyLicense.number,
+          expiryDate: check.companyLicense.expiryDate,
+          daysUntilExpiry: check.companyLicense.daysUntilExpiry,
+          alertDays: check.companyLicense.alertDays,
+          ownerId: null,
+        });
+      }
+      return cards.filter(card => {
+        const alertWindow = Math.max(card.alertDays ?? 0, 0);
+        return card.daysUntilExpiry <= alertWindow;
+      });
     };
 
     const criticalExpiries = expiryChecks.filter(
@@ -981,8 +1127,8 @@ export default function DocumentsPage() {
         (check.visa && check.visa.daysUntilExpiry <= 7) ||
         (check.civilId && check.civilId.daysUntilExpiry <= 7) ||
         (check.passport && check.passport.daysUntilExpiry <= 7) ||
-        ((check as any).drivingLicense &&
-          (check as any).drivingLicense.daysUntilExpiry <= 7),
+        (check.drivingLicense && check.drivingLicense.daysUntilExpiry <= 7) ||
+        (check.companyLicense && check.companyLicense.daysUntilExpiry <= 7),
     );
 
     const upcomingExpiries = expiryChecks.filter(
@@ -990,9 +1136,18 @@ export default function DocumentsPage() {
         (check.visa && check.visa.daysUntilExpiry <= check.visa.alertDays) ||
         (check.civilId && check.civilId.daysUntilExpiry <= check.civilId.alertDays) ||
         (check.passport && check.passport.daysUntilExpiry <= check.passport.alertDays) ||
-        ((check as any).drivingLicense &&
-          (check as any).drivingLicense.daysUntilExpiry <= (check as any).drivingLicense.alertDays),
+        (check.drivingLicense &&
+          check.drivingLicense.daysUntilExpiry <= check.drivingLicense.alertDays) ||
+        (check.companyLicense &&
+          check.companyLicense.daysUntilExpiry <= check.companyLicense.alertDays),
     );
+
+    const expiredCheckCards = expiryChecks
+      .map((check) => ({
+        check,
+        cards: buildCards(check),
+      }))
+      .filter(({ cards }) => cards.length > 0);
 
     if (expiryLoading) {
       return (
@@ -1092,13 +1247,22 @@ export default function DocumentsPage() {
           </Card>
         </div>
 
-          <div className="space-y-4">
-            {expiryChecks.map(check => {
+        <div className="space-y-4">
+          {expiredCheckCards.length === 0 ? (
+            <Card>
+              <CardContent className="p-8 text-center text-muted-foreground">
+                {t(
+                  "documents.noExpired",
+                  "No expired documents require replacement right now.",
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            expiredCheckCards.map(({ check, cards }) => {
               const extended = check as DocumentExpiryCheck & {
                 employeePosition?: string | null;
                 nextAlertDate?: string | null;
               };
-              const cards = buildCards(check);
               return (
                 <Card key={check.employeeId ?? Math.random()}>
                   <CardHeader className="pb-4">
@@ -1113,41 +1277,103 @@ export default function DocumentsPage() {
                       </div>
                       <Badge variant="secondary" className="flex items-center gap-1">
                         <Clock className="h-4 w-4" />
-                        {t("documents.nextAlert", "Next alert")}: {extended.nextAlertDate ?? "—"}
+                        {t("documents.expiredBadge", "Expired")}
                       </Badge>
                     </div>
                   </CardHeader>
                   <CardContent className="grid gap-4 md:grid-cols-2">
-                    {cards.map(card => (
-                      <div
-                        key={`${check.employeeId}-${card.type}`}
-                        className="flex items-start space-x-3 rounded-lg border border-slate-200 dark:border-slate-800 p-4"
-                      >
-                        <div>{getDocumentIcon(card.type)}</div>
-                        <div className="flex-1 space-y-1">
-                          <div className="flex items-center justify-between">
-                            <p className="font-medium text-slate-900 dark:text-slate-100">
-                              {card.title}
-                            </p>
-                            {getUrgencyBadge(card.daysUntilExpiry)}
+                    {cards.map(card => {
+                      const linkedDocument = findMatchingDocument(card.ownerId, card);
+                      const entityKey = check.employeeId ?? check.companyId ?? "unknown";
+                      return (
+                        <div
+                          key={`${entityKey}-${card.type}`}
+                          className="flex flex-col gap-3 rounded-lg border border-slate-200 dark:border-slate-800 p-4"
+                        >
+                          <div className="flex items-start space-x-3">
+                            <div>{getDocumentIcon(card.type)}</div>
+                            <div className="flex-1 space-y-1">
+                              <div className="flex items-center justify-between">
+                                <p className="font-medium text-slate-900 dark:text-slate-100">
+                                  {card.title}
+                                </p>
+                                {getUrgencyBadge(card.daysUntilExpiry)}
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                {t("documents.number", "Number")}: {card.number ?? "—"}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {t("documents.expiryDate", "Expiry date")}: {card.expiryDate ?? "—"}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {t("documents.daysRemaining", "Days remaining")}: {card.daysUntilExpiry}
+                              </p>
+                            </div>
                           </div>
-                          <p className="text-sm text-muted-foreground">
-                            {t("documents.number", "Number")}: {card.number ?? "—"}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {t("documents.expiryDate", "Expiry date")}: {card.expiryDate ?? "—"}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {t("documents.daysRemaining", "Days remaining")}: {card.daysUntilExpiry}
-                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={!linkedDocument}
+                              onClick={() => {
+                                if (linkedDocument) {
+                                  setHistoryDoc(linkedDocument);
+                                } else {
+                                  toast({
+                                    title: t(
+                                      "documents.historyUnavailable",
+                                      "History unavailable for this document",
+                                    ),
+                                    variant: "destructive",
+                                  });
+                                }
+                              }}
+                            >
+                              <History className="h-4 w-4 mr-1" />
+                              {t("documents.viewHistory", "View history")}
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                const defaultTitle = `${card.title} - ${check.employeeName ?? ""}`.trim();
+                                const matched = linkedDocument;
+                                setReplacementContext({
+                                  employeeId: card.ownerId ?? null,
+                                  employeeName: check.employeeName,
+                                  companyId: check.companyId ?? null,
+                                  cardType: card.type,
+                                  cardTitle: card.title,
+                                  number: card.number,
+                                  expiryDate: card.expiryDate,
+                                  alertDays: card.alertDays,
+                                });
+                                setReplacementDocumentId(matched?.id ?? NEW_DOCUMENT_VALUE);
+                                setReplacementTitle(matched?.title ?? defaultTitle);
+                                setReplacementDescription(matched?.description ?? "");
+                                setReplacementExpiryDate(card.expiryDate ?? matched?.expiryDate ?? "");
+                                setReplacementAlertDays(
+                                  matched?.alertDays !== null && matched?.alertDays !== undefined
+                                    ? String(matched.alertDays)
+                                    : card.alertDays
+                                      ? String(card.alertDays)
+                                      : "",
+                                );
+                                setReplacementDataUrl(undefined);
+                              }}
+                            >
+                              <UploadCloud className="h-4 w-4 mr-1" />
+                              {t("documents.uploadReplacement", "Upload replacement")}
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </CardContent>
                 </Card>
               );
-            })}
-          </div>
+            })
+          )}
+        </div>
       </div>
     );
   };
@@ -1550,22 +1776,227 @@ export default function DocumentsPage() {
     </div>
   );
 
+  const handleTabChange = (value: string) => {
+    if (showExpiryOnly) return;
+    setActiveTab(value);
+  };
+
+  const replacementDocuments = replacementContext
+    ? replacementContext.cardType === "company_license"
+      ? documents.filter(
+          (doc) => (doc.category ?? "").toLowerCase() === "company_license",
+        )
+      : replacementContext.employeeId
+      ? documentsByEmployee.get(replacementContext.employeeId) ?? []
+      : []
+    : [];
+
+  const handleReplacementDocumentChange = (value: string) => {
+    setReplacementDocumentId(value);
+    if (!replacementContext) return;
+    if (value === NEW_DOCUMENT_VALUE) {
+      setReplacementTitle(
+        `${replacementContext.cardTitle} - ${replacementContext.employeeName ?? ""}`.trim(),
+      );
+      setReplacementDescription("");
+      setReplacementExpiryDate(replacementContext.expiryDate ?? "");
+      setReplacementAlertDays(
+        replacementContext.alertDays !== undefined && replacementContext.alertDays !== null
+          ? String(replacementContext.alertDays)
+          : "",
+      );
+      setReplacementDataUrl(undefined);
+      return;
+    }
+    const selectedDoc = replacementDocuments.find((doc) => doc.id === value);
+    if (selectedDoc) {
+      setReplacementTitle(selectedDoc.title);
+      setReplacementDescription(selectedDoc.description ?? "");
+      setReplacementExpiryDate(selectedDoc.expiryDate ?? "");
+      setReplacementAlertDays(
+        selectedDoc.alertDays !== null && selectedDoc.alertDays !== undefined
+          ? String(selectedDoc.alertDays)
+          : "",
+      );
+      setReplacementDataUrl(undefined);
+    }
+  };
+
+  const closeReplacementModal = () => {
+    setReplacementContext(null);
+    setReplacementTitle("");
+    setReplacementDescription("");
+    setReplacementExpiryDate("");
+    setReplacementAlertDays("");
+    setReplacementDocumentId(NEW_DOCUMENT_VALUE);
+    setReplacementDataUrl(undefined);
+  };
+
+  const syncReplacementExpiry = async () => {
+    if (!replacementContext) return;
+
+    const trimmedExpiry = replacementExpiryDate?.trim();
+    const normalizedAlert = replacementAlertDays?.trim();
+    const parsedAlert =
+      normalizedAlert && normalizedAlert.length > 0 ? Number(normalizedAlert) : undefined;
+    const alertDays =
+      parsedAlert !== undefined && Number.isFinite(parsedAlert) ? parsedAlert : undefined;
+    const trimmedNumber =
+      typeof replacementContext.number === "string" && replacementContext.number.trim().length > 0
+        ? replacementContext.number.trim()
+        : undefined;
+
+    const payload: Record<string, unknown> = {};
+    let endpoint: string | null = null;
+
+    const assignEmployeePayload = (
+      fields: { expiry: string; number: string; alert?: string },
+    ): void => {
+      if (!replacementContext?.employeeId) return;
+      endpoint = `/api/employees/${replacementContext.employeeId}`;
+      if (trimmedExpiry) {
+        payload[fields.expiry] = trimmedExpiry;
+      }
+      if (trimmedNumber) {
+        payload[fields.number] = trimmedNumber;
+      }
+      if (fields.alert && alertDays !== undefined) {
+        payload[fields.alert] = alertDays;
+      }
+    };
+
+    switch (replacementContext.cardType) {
+      case "visa":
+        assignEmployeePayload({
+          expiry: "visaExpiryDate",
+          number: "visaNumber",
+          alert: "visaAlertDays",
+        });
+        break;
+      case "civil_id":
+        assignEmployeePayload({
+          expiry: "civilIdExpiryDate",
+          number: "civilId",
+          alert: "civilIdAlertDays",
+        });
+        break;
+      case "passport":
+        assignEmployeePayload({
+          expiry: "passportExpiryDate",
+          number: "passportNumber",
+          alert: "passportAlertDays",
+        });
+        break;
+      case "driving_license":
+        assignEmployeePayload({
+          expiry: "drivingLicenseExpiryDate",
+          number: "drivingLicenseNumber",
+          alert: "drivingLicenseAlertDays",
+        });
+        break;
+      case "company_license":
+        if (!replacementContext.companyId) break;
+        endpoint = `/api/companies/${replacementContext.companyId}`;
+        if (trimmedExpiry) {
+          payload.companyLicenseExpiryDate = trimmedExpiry;
+        }
+        if (trimmedNumber) {
+          payload.companyLicenseNumber = trimmedNumber;
+        }
+        if (alertDays !== undefined) {
+          payload.companyLicenseAlertDays = alertDays;
+        }
+        break;
+      default:
+        break;
+    }
+
+    if (!endpoint || Object.keys(payload).length === 0) {
+      return;
+    }
+
+    const res = await apiPut(endpoint, payload);
+    if (!res.ok) {
+      throw res;
+    }
+  };
+
+  const handleReplacementSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!replacementContext) return;
+    if (!replacementDataUrl) {
+      toast({
+        title: t("documents.missingFile", "Attach a document to upload"),
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const metadata = {
+      replacedDocumentType: replacementContext.cardType,
+      replacedDocumentNumber: replacementContext.number,
+      replacedAt: new Date().toISOString(),
+    } as Record<string, unknown>;
+
+    const basePayload: Record<string, unknown> = {
+      title: replacementTitle,
+      description: replacementDescription,
+      pdfDataUrl: replacementDataUrl,
+      metadata,
+      expiryDate: replacementExpiryDate || undefined,
+      alertDays: replacementAlertDays || undefined,
+    };
+
+    try {
+      if (replacementDocumentId !== NEW_DOCUMENT_VALUE) {
+        await createVersionMutation.mutateAsync({
+          id: replacementDocumentId,
+          body: basePayload,
+        });
+      } else {
+        await createDocumentMutation.mutateAsync({
+          ...basePayload,
+          employeeId: replacementContext.employeeId,
+          category: replacementContext.cardType,
+          referenceNumber: replacementContext.number ?? undefined,
+        });
+      }
+    } catch (error) {
+      // handled by mutation error handlers
+      return;
+    }
+
+    try {
+      await syncReplacementExpiry();
+    } catch (error) {
+      toastApiError(error, t("documents.expiryUpdateFailed", "Failed to update expiry information"));
+      return;
+    }
+
+    await queryClient.invalidateQueries({ queryKey: ["/api/documents/expiry-check"] });
+    closeReplacementModal();
+  };
+
   return (
     <div className="space-y-6">
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="library">{t("documents.library", "Document Library")}</TabsTrigger>
-          <TabsTrigger value="expiry">{t("documents.expiryTracking", "Expiry Tracking")}</TabsTrigger>
-        </TabsList>
+      {showExpiryOnly ? (
+        renderExpiryTab()
+      ) : (
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="library">{t("documents.library", "Document Library")}</TabsTrigger>
+            <TabsTrigger value="expiry">{t("documents.expiryTracking", "Expiry Tracking")}</TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="library" className="space-y-6">
-          {documentsContent}
-        </TabsContent>
+          <TabsContent value="library" className="space-y-6">
+            {documentsContent}
+          </TabsContent>
 
-        <TabsContent value="expiry" className="space-y-6">
-          {renderExpiryTab()}
-        </TabsContent>
-      </Tabs>
+          <TabsContent value="expiry" className="space-y-6">
+            {renderExpiryTab()}
+          </TabsContent>
+        </Tabs>
+      )}
 
       <Dialog open={Boolean(historyDoc)} onOpenChange={(open) => !open && setHistoryDoc(null)}>
         <DialogContent className="max-w-3xl">
@@ -1649,6 +2080,112 @@ export default function DocumentsPage() {
               </DialogFooter>
             </form>
           </div>
+      </DialogContent>
+    </Dialog>
+
+      <Dialog open={Boolean(replacementContext)} onOpenChange={(open) => !open && closeReplacementModal()}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>
+              {t("documents.replacementDialogTitle", "Upload replacement document")}
+            </DialogTitle>
+            <DialogDescription>
+              {replacementContext
+                ? t(
+                    "documents.replacementDialogDescription",
+                    "Provide a new file to replace the expired {{type}} for {{employee}}.",
+                    {
+                      type:
+                        t(`documents.type.${replacementContext.cardType}` as any, replacementContext.cardTitle) ||
+                        replacementContext.cardTitle,
+                      employee: replacementContext.employeeName,
+                    },
+                  )
+                : null}
+            </DialogDescription>
+          </DialogHeader>
+          {replacementContext && (
+            <form className="space-y-4" onSubmit={handleReplacementSubmit}>
+              <div className="grid gap-3">
+                <div className="grid gap-1">
+                  <Label htmlFor="replacement-document">
+                    {t("documents.replacementExistingLabel", "Existing document")}
+                  </Label>
+                  <Select value={replacementDocumentId} onValueChange={handleReplacementDocumentChange}>
+                    <SelectTrigger id="replacement-document">
+                      <SelectValue placeholder={t("documents.replacementSelect", "Select a document")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NEW_DOCUMENT_VALUE}>
+                        {t("documents.replacementCreateNew", "Create new document")}
+                      </SelectItem>
+                      {replacementDocuments.map((doc) => (
+                        <SelectItem key={doc.id} value={doc.id}>
+                          {doc.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-1">
+                  <Label htmlFor="replacement-title">{t("documents.titleLabel", "Title")}</Label>
+                  <Input
+                    id="replacement-title"
+                    value={replacementTitle}
+                    onChange={(event) => setReplacementTitle(event.target.value)}
+                    required
+                  />
+                </div>
+                <div className="grid gap-1">
+                  <Label htmlFor="replacement-description">{t("documents.description", "Description")}</Label>
+                  <Textarea
+                    id="replacement-description"
+                    value={replacementDescription}
+                    onChange={(event) => setReplacementDescription(event.target.value)}
+                  />
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="grid gap-1">
+                    <Label htmlFor="replacement-expiry">{t("documents.expiryDate", "Expiry date")}</Label>
+                    <Input
+                      id="replacement-expiry"
+                      type="date"
+                      value={replacementExpiryDate}
+                      onChange={(event) => setReplacementExpiryDate(event.target.value)}
+                    />
+                  </div>
+                  <div className="grid gap-1">
+                    <Label htmlFor="replacement-alert">{t("documents.alertDays", "Alert days")}</Label>
+                    <Input
+                      id="replacement-alert"
+                      type="number"
+                      min={0}
+                      value={replacementAlertDays}
+                      onChange={(event) => setReplacementAlertDays(event.target.value)}
+                    />
+                  </div>
+                </div>
+                <ImageUpload
+                  label={t("documents.replacementFileLabel", "Replacement document")}
+                  value={replacementDataUrl}
+                  onChange={setReplacementDataUrl}
+                />
+              </div>
+              <DialogFooter className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={closeReplacementModal}>
+                  {t("actions.cancel", "Cancel")}
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={createDocumentMutation.isPending || createVersionMutation.isPending}
+                >
+                  {createDocumentMutation.isPending || createVersionMutation.isPending
+                    ? t("documents.saving", "Saving...")
+                    : t("documents.replacementSubmit", "Save replacement")}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
 

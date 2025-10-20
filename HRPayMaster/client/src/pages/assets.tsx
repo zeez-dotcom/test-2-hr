@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -13,11 +13,18 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { apiDelete, apiPost, apiPut } from "@/lib/http";
 import { toastApiError } from "@/lib/toastError";
-import { CheckCircle, Users, AlertTriangle, Package } from "lucide-react";
+import { CheckCircle, Package, Users, Wrench } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -421,13 +428,30 @@ export default function Assets() {
   });
 
   const getStatusBadge = (status: string) => {
+    const baseClasses =
+      "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium shadow-sm";
     switch (status) {
       case "available":
-        return <Badge className="bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1" />Available</Badge>;
+        return (
+          <span className={`${baseClasses} border-emerald-200 bg-gradient-to-r from-emerald-100 to-emerald-50 text-emerald-700`}>
+            <Package className="h-3.5 w-3.5" />
+            {t("assets.status.available", "Available")}
+          </span>
+        );
       case "assigned":
-        return <Badge className="bg-blue-100 text-blue-800"><Users className="w-3 h-3 mr-1" />Assigned</Badge>;
+        return (
+          <span className={`${baseClasses} border-sky-200 bg-gradient-to-r from-sky-100 to-sky-50 text-sky-700`}>
+            <Users className="h-3.5 w-3.5" />
+            {t("assets.status.assigned", "Assigned")}
+          </span>
+        );
       case "maintenance":
-        return <Badge variant="destructive"><AlertTriangle className="w-3 h-3 mr-1" />Maintenance</Badge>;
+        return (
+          <span className={`${baseClasses} border-amber-200 bg-gradient-to-r from-amber-100 to-amber-50 text-amber-700`}>
+            <Wrench className="h-3.5 w-3.5" />
+            {t("assets.status.maintenance", "Maintenance")}
+          </span>
+        );
       default:
         return <Badge variant="secondary">{status}</Badge>;
     }
@@ -622,217 +646,208 @@ export default function Assets() {
     <div className="space-y-6">
       <Card className="overflow-hidden border-none bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 shadow-md">
         <CardContent className="p-6 sm:p-8">
-          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-start gap-4">
+          <div className="flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-1 items-start gap-4">
               <div className="rounded-full bg-primary/15 p-3">
                 <Package className="h-8 w-8 text-primary" />
               </div>
               <div className="space-y-2">
                 <h1 className="text-3xl font-bold tracking-tight">
-                  {t("assets.heroTitle", "Assets workspace")}
+                  {t("assets.heroTitle")}
                 </h1>
                 <p className="text-base text-muted-foreground">
-                  {t(
-                    "assets.heroSubtitle",
-                    "Oversee inventory, assignments, and maintenance in a single workspace."
-                  )}
+                  {t("assets.heroSubtitle")}
                 </p>
               </div>
             </div>
-            <div className="grid w-full gap-3 sm:grid-cols-2 md:w-auto md:min-w-[420px]">
-              <Dialog open={isAssignOpen} onOpenChange={setIsAssignOpen}>
-                <div className="flex h-full flex-col justify-between gap-3 rounded-lg border border-border/60 bg-background/80 p-4 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-foreground">
-                      {t("assets.assignTitle", "Assign an asset")}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {t(
-                        "assets.assignDescription",
-                        "Match available equipment with team members and capture the assignment details."
-                      )}
-                    </p>
-                  </div>
-                  <DialogTrigger asChild>
-                    <Button size="sm">
-                      {t("assets.assignAction", "Assign Asset")}
-                    </Button>
-                  </DialogTrigger>
-                </div>
-                <DialogContent className="sm:max-w-[425px]">
-                  <DialogHeader>
-                    <DialogTitle>
-                      {t("assets.assignDialogTitle", "Assign Asset")}
-                    </DialogTitle>
-                    <DialogDescription>
-                      {t(
-                        "assets.assignDialogDescription",
-                        "Select an asset, employee, assignment date, and add optional notes."
-                      )}
-                    </DialogDescription>
-                  </DialogHeader>
-                  <Form {...assignmentForm}>
-                    <form onSubmit={assignmentForm.handleSubmit(onSubmitAssignment)} className="space-y-4">
-                      <FormField
-                        control={assignmentForm.control}
-                        name="assetId"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t("assets.assetLabel", "Asset")}</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value || undefined}>
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder={t("assets.assetPlaceholder", "Select asset")} />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {availableAssets.map(a => (
-                                  <SelectItem key={a.id} value={a.id}>
-                                    {a.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={assignmentForm.control}
-                        name="employeeId"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t("assets.employeeLabel", "Employee")}</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value || undefined}>
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder={t("assets.employeePlaceholder", "Select employee")} />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {employees.map((emp) => (
-                                  <SelectItem key={emp.id} value={emp.id}>
-                                    {emp.firstName} {emp.lastName}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={assignmentForm.control}
-                        name="assignedDate"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t("assets.assignmentDateLabel", "Assignment Date")}</FormLabel>
-                            <FormControl>
-                              <Input type="date" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={assignmentForm.control}
-                        name="notes"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t("assets.notesLabel", "Notes")}</FormLabel>
-                            <FormControl>
-                              <Textarea {...field} value={field.value || ""} placeholder={t("assets.notesPlaceholder", "Assignment notes...")} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <DialogFooter>
-                        <Button type="submit" disabled={assignAsset.isPending}>
-                          {assignAsset.isPending
-                            ? t("assets.assigning", "Assigning...")
-                            : t("assets.assignSubmit", "Assign")}
-                        </Button>
-                      </DialogFooter>
-                    </form>
-                  </Form>
-                </DialogContent>
-              </Dialog>
-
-              <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-                <div className="flex h-full flex-col justify-between gap-3 rounded-lg border border-border/60 bg-background/80 p-4 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-foreground">
-                      {t("assets.createTitle", "Add a new asset")}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {t(
-                        "assets.createDescription",
-                        "Capture asset details to grow your catalog and keep records current."
-                      )}
-                    </p>
-                  </div>
-                  <DialogTrigger asChild>
-                    <Button variant="secondary" size="sm">
-                      {t("assets.createAction", "Create Asset")}
-                    </Button>
-                  </DialogTrigger>
-                </div>
-                <DialogContent className="sm:max-w-[425px]">
-                  <DialogHeader>
-                    <DialogTitle>{t("assets.createDialogTitle", "New Asset")}</DialogTitle>
-                  </DialogHeader>
-                  <Form {...assetForm}>
-                    <form onSubmit={assetForm.handleSubmit(onSubmitAsset)} className="space-y-4">
-                      <FormField
-                        control={assetForm.control}
-                        name="name"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t("assets.nameLabel", "Name")}</FormLabel>
-                            <FormControl>
-                              <Input {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={assetForm.control}
-                        name="type"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t("assets.typeLabel", "Type")}</FormLabel>
-                            <FormControl>
-                              <Input {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={assetForm.control}
-                        name="details"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t("assets.detailsLabel", "Details")}</FormLabel>
-                            <FormControl>
-                              <Input {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <Button type="submit">
-                        {t("assets.saveAsset", "Save Asset")}
+            <div className="flex w-full flex-1 flex-col gap-4 rounded-xl border border-border/60 bg-background/80 p-4 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/60 lg:max-w-xl">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-foreground">
+                  {t("assets.heroActionsTitle")}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {t("assets.heroActionsSubtitle")}
+                </p>
+              </div>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                <div className="flex flex-1 flex-col gap-2">
+                  <p className="text-sm font-medium text-foreground">
+                    {t("assets.assignTitle")}
+                  </p>
+                  <Dialog open={isAssignOpen} onOpenChange={setIsAssignOpen}>
+                    <DialogTrigger asChild>
+                      <Button size="sm" className="w-full sm:w-auto">
+                        {t("assets.assignAction")}
                       </Button>
-                    </form>
-                  </Form>
-                </DialogContent>
-              </Dialog>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[425px]">
+                      <DialogHeader>
+                        <DialogTitle>{t("assets.assignDialogTitle")}</DialogTitle>
+                        <DialogDescription>
+                          {t("assets.assignDialogDescription")}
+                        </DialogDescription>
+                      </DialogHeader>
+                      <Form {...assignmentForm}>
+                        <form onSubmit={assignmentForm.handleSubmit(onSubmitAssignment)} className="space-y-4">
+                          <FormField
+                            control={assignmentForm.control}
+                            name="assetId"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>{t("assets.assetLabel")}</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value || undefined}>
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder={t("assets.assetPlaceholder")} />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    {availableAssets.map((a) => (
+                                      <SelectItem key={a.id} value={a.id}>
+                                        {a.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={assignmentForm.control}
+                            name="employeeId"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>{t("assets.employeeLabel")}</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value || undefined}>
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder={t("assets.employeePlaceholder")} />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    {employees.map((emp) => (
+                                      <SelectItem key={emp.id} value={emp.id}>
+                                        {emp.firstName} {emp.lastName}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={assignmentForm.control}
+                            name="assignedDate"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>{t("assets.assignmentDateLabel")}</FormLabel>
+                                <FormControl>
+                                  <Input type="date" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={assignmentForm.control}
+                            name="notes"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>{t("assets.notesLabel")}</FormLabel>
+                                <FormControl>
+                                  <Textarea
+                                    {...field}
+                                    value={field.value || ""}
+                                    placeholder={t("assets.notesPlaceholder")}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <DialogFooter>
+                            <Button type="submit" disabled={assignAsset.isPending}>
+                              {assignAsset.isPending ? t("assets.assigning") : t("assets.assignSubmit")}
+                            </Button>
+                          </DialogFooter>
+                        </form>
+                      </Form>
+                    </DialogContent>
+                  </Dialog>
+                  <p className="text-xs text-muted-foreground">
+                    {t("assets.assignDescription")}
+                  </p>
+                </div>
+                <div className="flex flex-1 flex-col gap-2">
+                  <p className="text-sm font-medium text-foreground">
+                    {t("assets.createTitle")}
+                  </p>
+                  <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+                    <DialogTrigger asChild>
+                      <Button variant="secondary" size="sm" className="w-full sm:w-auto">
+                        {t("assets.createAction")}
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[425px]">
+                      <DialogHeader>
+                        <DialogTitle>{t("assets.createDialogTitle")}</DialogTitle>
+                      </DialogHeader>
+                      <Form {...assetForm}>
+                        <form onSubmit={assetForm.handleSubmit(onSubmitAsset)} className="space-y-4">
+                          <FormField
+                            control={assetForm.control}
+                            name="name"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>{t("assets.nameLabel")}</FormLabel>
+                                <FormControl>
+                                  <Input {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={assetForm.control}
+                            name="type"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>{t("assets.typeLabel")}</FormLabel>
+                                <FormControl>
+                                  <Input {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={assetForm.control}
+                            name="details"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>{t("assets.detailsLabel")}</FormLabel>
+                                <FormControl>
+                                  <Input {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <Button type="submit">{t("assets.saveAsset")}</Button>
+                        </form>
+                      </Form>
+                    </DialogContent>
+                  </Dialog>
+                  <p className="text-xs text-muted-foreground">
+                    {t("assets.createDescription")}
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -991,7 +1006,7 @@ export default function Assets() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Maintenance</CardTitle>
-                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                <Wrench className="h-4 w-4 text-amber-500" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-amber-500">{maintenanceCount}</div>
@@ -1009,89 +1024,146 @@ export default function Assets() {
                 </CardHeader>
               </Card>
             ) : (
-              assets.map(asset => (
-                <div key={asset.id} className="border rounded p-4 space-y-2">
-                  <div className="font-medium">{asset.name}</div>
-                  <div className="text-sm text-muted-foreground">{asset.type}</div>
-                  <div className="text-sm flex items-center space-x-1">
-                    <span>Status:</span>
-                    {getStatusBadge(asset.status)}
-                  </div>
-                  {asset.currentAssignment && (
-                    <div className="text-sm">
-                      Assigned to: {asset.currentAssignment.employee?.firstName} {asset.currentAssignment.employee?.lastName}
-                    </div>
-                  )}
-                  <div>
-                    <Button size="sm" variant="outline" onClick={() => window.open(`/asset-file?id=${encodeURIComponent(asset.id)}`, '_blank')}>Print</Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="ml-2"
-                      onClick={() => {
-                        setDocAssetId(asset.id);
-                        setDocTitle("");
-                        setDocFile(null);
-                      }}
-                    >
-                      {t('assets.documentsButton', 'Documents')}
-                    </Button>
-                    {(() => {
-                      const docCount = queryClient.getQueryData<AssetDocument[]>(["/api/assets", asset.id, "documents"])?.length ?? 0;
-                      if (docCount === 0) return null;
-                      const badgeText =
-                        docCount === 1
-                          ? t('assets.documentsCount', '1 document', { count: docCount })
-                          : t('assets.documentsCount', `${docCount} documents`, { count: docCount });
-                      return (
-                        <Badge variant="secondary" className="ml-2">
-                          {badgeText}
+              assets.map((asset) => {
+                const docCount =
+                  queryClient.getQueryData<AssetDocument[]>(["/api/assets", asset.id, "documents"])?.length ?? 0;
+                const documentsBadgeText =
+                  docCount > 0
+                    ? docCount === 1
+                      ? t("assets.documentsCount", "1 document", { count: docCount })
+                      : t("assets.documentsCount", `${docCount} documents`, { count: docCount })
+                    : null;
+                const assignedDate = asset.currentAssignment?.assignedDate
+                  ? new Date(asset.currentAssignment.assignedDate)
+                  : null;
+                const formattedAssignedDate =
+                  assignedDate && !Number.isNaN(assignedDate.getTime())
+                    ? assignedDate.toLocaleDateString()
+                    : null;
+                const maintenanceDisabled =
+                  (assetStatusMutation.isPending && assetStatusMutation.variables?.assetId === asset.id) ||
+                  (updateAssetAssignmentStatus.isPending &&
+                    updateAssetAssignmentStatus.variables?.assetId === asset.id) ||
+                  (isReturningAsset && returnAssetDialog?.asset.id === asset.id);
+                const maintenanceLabel =
+                  asset.status === "maintenance"
+                    ? t("assets.returnToService", "Return to Service")
+                    : t("assets.markMaintenance", "Mark as Maintenance");
+                const isDeletePending =
+                  deleteAssetMutation.isPending && deleteAssetMutation.variables === asset.id;
+
+                return (
+                  <Card key={asset.id} className="flex h-full flex-col border border-border/70 shadow-sm">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <CardTitle className="flex items-center gap-2 text-base">
+                            <Package className="h-4 w-4 text-muted-foreground" />
+                            {asset.name}
+                          </CardTitle>
+                          <CardDescription className="capitalize">
+                            {asset.type || t("assets.type.unknown", "Unspecified type")}
+                          </CardDescription>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 text-right">
+                          <span className="text-xs font-medium text-muted-foreground">{t("assets.statusLabel", "Status")}</span>
+                          {getStatusBadge(asset.status)}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {asset.currentAssignment ? (
+                        <div className="rounded-lg border border-muted/40 bg-muted/40 p-3 shadow-inner">
+                          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                            <Users className="h-4 w-4 text-muted-foreground" />
+                            {asset.currentAssignment.employee?.firstName} {asset.currentAssignment.employee?.lastName}
+                          </div>
+                          {formattedAssignedDate ? (
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              {t("assets.assignedOn", "Assigned on {{date}}", { date: formattedAssignedDate })}
+                            </div>
+                          ) : null}
+                          {asset.currentAssignment.notes ? (
+                            <div className="mt-2 text-xs text-muted-foreground">{asset.currentAssignment.notes}</div>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20 p-3 text-sm text-muted-foreground">
+                          {t("assets.notAssigned", "Not currently assigned.")}
+                        </div>
+                      )}
+                      {documentsBadgeText ? (
+                        <Badge
+                          variant="secondary"
+                          className="inline-flex w-fit items-center gap-1 rounded-full bg-muted px-3 py-1 text-xs font-medium"
+                        >
+                          {documentsBadgeText}
                         </Badge>
-                      );
-                    })()}
-                    <Button size="sm" variant="outline" className="ml-2" onClick={() => setRepairsAsset(asset)}>Repairs</Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="ml-2"
-                      onClick={() => handleEditAsset(asset)}
-                    >
-                      {t('assets.edit', 'Edit')}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      className="ml-2"
-                      disabled={deleteAssetMutation.isPending && deleteAssetMutation.variables === asset.id}
-                      onClick={() => handleDeleteAsset(asset)}
-                    >
-                      {deleteAssetMutation.isPending && deleteAssetMutation.variables === asset.id
-                        ? t('assets.deleting', 'Deleting...')
-                        : t('assets.delete', 'Delete')}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="ml-2"
-                      disabled={
-                        (assetStatusMutation.isPending &&
-                          assetStatusMutation.variables?.assetId === asset.id) ||
-                        (updateAssetAssignmentStatus.isPending &&
-                          updateAssetAssignmentStatus.variables?.assetId === asset.id) ||
-                        (isReturningAsset && returnAssetDialog?.asset.id === asset.id)
-                      }
-                      onClick={() =>
-                        handleAssetStatusChange(
-                          asset,
-                          asset.status === "maintenance" ? "available" : "maintenance",
-                        )
-                      }
-                    >
-                      {asset.status === "maintenance" ? "Return to Service" : "Mark as Maintenance"}
-                    </Button>
-                  </div>
-                </div>
-              ))
+                      ) : null}
+                    </CardContent>
+                    <CardFooter className="mt-auto pt-4">
+                      <div className="flex w-full flex-wrap items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            window.open(`/asset-file?id=${encodeURIComponent(asset.id)}`, "_blank")
+                          }
+                        >
+                          {t("assets.print", "Print")}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setDocAssetId(asset.id);
+                            setDocTitle("");
+                            setDocFile(null);
+                          }}
+                        >
+                          {t("assets.documentsButton", "Documents")}
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button size="sm" variant="secondary" className="ml-auto">
+                              {t("common.moreActions", "More actions")}
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-56">
+                            <DropdownMenuItem onSelect={() => setRepairsAsset(asset)}>
+                              {t("assets.repairs", "Repairs")}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => handleEditAsset(asset)}>
+                              {t("assets.edit", "Edit")}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() =>
+                                handleAssetStatusChange(
+                                  asset,
+                                  asset.status === "maintenance" ? "available" : "maintenance",
+                                )
+                              }
+                              disabled={maintenanceDisabled}
+                            >
+                              {maintenanceLabel}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onSelect={() => handleDeleteAsset(asset)}
+                              disabled={isDeletePending}
+                            >
+                              {isDeletePending
+                                ? t("assets.deleting", "Deleting...")
+                                : t("assets.delete", "Delete")}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </CardFooter>
+                  </Card>
+                );
+              })
             )}
           </div>
         </TabsContent>
@@ -1512,16 +1584,29 @@ export default function Assets() {
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader><DialogTitle>Repairs - {repairsAsset?.name}</DialogTitle></DialogHeader>
           <div className="space-y-3 max-h-[60vh] overflow-y-auto">
-            {(repairsQuery?.data || []).map((r:any)=>(
-              <div key={r.id} className="border rounded p-2 text-sm">
-                <div className="flex justify-between">
-                  <div className="font-medium">{r.vendor || 'Repair'}</div>
-                  <div>{r.repairDate}</div>
-                </div>
-                <div className="mt-1">{r.description}</div>
-                <div className="text-muted-foreground">Cost: {r.cost ?? 'N/A'}</div>
-                {r.documentUrl && (<a className="text-blue-600 underline" href={r.documentUrl} target="_blank">View</a>)}
-              </div>
+            {(repairsQuery?.data || []).map((r: any) => (
+              <Card key={r.id} className="border border-muted/60 bg-muted/30 text-sm shadow-sm">
+                <CardHeader className="flex flex-col gap-1 space-y-0 pb-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2 font-medium text-foreground">
+                    <Wrench className="h-4 w-4 text-muted-foreground" />
+                    {r.vendor || t("assets.repairFallback", "Repair")}
+                  </div>
+                  <div className="text-xs text-muted-foreground">{r.repairDate}</div>
+                </CardHeader>
+                <CardContent className="space-y-2 pt-0">
+                  <div>{r.description}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {t("assets.repairCost", "Cost: {{cost}}", { cost: r.cost ?? "N/A" })}
+                  </div>
+                </CardContent>
+                {r.documentUrl ? (
+                  <CardFooter className="pt-0">
+                    <a className="text-xs font-medium text-primary underline" href={r.documentUrl} target="_blank" rel="noreferrer">
+                      {t("assets.viewDocument", "View")}
+                    </a>
+                  </CardFooter>
+                ) : null}
+              </Card>
             ))}
             <div className="border-t pt-3">
               <div className="text-sm font-medium mb-2">Add Repair</div>

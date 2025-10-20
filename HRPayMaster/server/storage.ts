@@ -6050,17 +6050,23 @@ export class DatabaseStorage implements IStorage {
 
   async updateCar(id: string, car: Partial<InsertCar>): Promise<Car | undefined> {
 
+    const filteredEntries = Object.entries(car).filter(([, value]) => value !== undefined);
+
+    const sanitized = Object.fromEntries(filteredEntries) as Partial<InsertCar>;
+
+    const updatePayload: Record<string, any> = { ...sanitized };
+
+    if (sanitized.purchasePrice !== undefined) {
+
+      updatePayload.purchasePrice = sanitized.purchasePrice?.toString();
+
+    }
+
     const [updated] = await db
 
       .update(cars)
 
-      .set({
-
-        ...car,
-
-        purchasePrice: car.purchasePrice?.toString(),
-
-      })
+      .set(updatePayload)
 
       .where(eq(cars.id, id))
 
@@ -10150,107 +10156,101 @@ export class DatabaseStorage implements IStorage {
   // Document expiry check methods
 
   async checkDocumentExpiries(): Promise<DocumentExpiryCheck[]> {
-
-    const allEmployees = await db.select().from(employees);
+    const employeeRows = await db
+      .select({
+        employee: employees,
+        company: companies,
+      })
+      .from(employees)
+      .leftJoin(companies, eq(employees.companyId, companies.id));
 
     const checks: DocumentExpiryCheck[] = [];
+    const processedCompanyIds = new Set<string>();
 
+    for (const row of employeeRows) {
+      const employee = row.employee;
+      const company = row.company ?? null;
 
-
-    allEmployees.forEach(employee => {
+      const fullName = `${employee.firstName ?? ""} ${employee.lastName ?? ""}`.trim();
 
       const check: DocumentExpiryCheck = {
-
         employeeId: employee.id,
-
-        employeeName: `${employee.firstName} ${employee.lastName}`,
-
-        email: employee.email,
-
+        employeeName:
+          fullName || employee.firstName || employee.lastName || employee.employeeCode || employee.id,
+        email: employee.email ?? null,
+        companyId: company?.id ?? null,
+        companyName: company?.name ?? null,
       };
 
-
-
-      // Check visa expiry
-
       if (employee.visaExpiryDate && employee.visaNumber) {
-
         const daysUntilExpiry = this.calculateDaysUntilExpiry(employee.visaExpiryDate);
-
         check.visa = {
-
           number: employee.visaNumber,
-
           expiryDate: employee.visaExpiryDate,
-
           alertDays: employee.visaAlertDays || 30,
-
           daysUntilExpiry,
-
         };
-
       }
-
-
-
-      // Check civil ID expiry
 
       if (employee.civilIdExpiryDate && employee.civilId) {
-
         const daysUntilExpiry = this.calculateDaysUntilExpiry(employee.civilIdExpiryDate);
-
         check.civilId = {
-
           number: employee.civilId,
-
           expiryDate: employee.civilIdExpiryDate,
-
           alertDays: employee.civilIdAlertDays || 60,
-
           daysUntilExpiry,
-
         };
-
       }
-
-
-
-      // Check passport expiry
 
       if (employee.passportExpiryDate && employee.passportNumber) {
-
         const daysUntilExpiry = this.calculateDaysUntilExpiry(employee.passportExpiryDate);
-
         check.passport = {
-
           number: employee.passportNumber,
-
           expiryDate: employee.passportExpiryDate,
-
           alertDays: employee.passportAlertDays || 90,
-
           daysUntilExpiry,
-
         };
-
       }
 
+      if (employee.drivingLicenseExpiryDate && employee.drivingLicenseNumber) {
+        const daysUntilExpiry = this.calculateDaysUntilExpiry(employee.drivingLicenseExpiryDate);
+        check.drivingLicense = {
+          number: employee.drivingLicenseNumber,
+          expiryDate: employee.drivingLicenseExpiryDate,
+          alertDays: employee.drivingLicenseAlertDays || 30,
+          daysUntilExpiry,
+        };
+      }
 
-
-      // Only add if employee has at least one document to track
-
-      if (check.visa || check.civilId || check.passport || (check as any).drivingLicense) {
-
+      if (check.visa || check.civilId || check.passport || check.drivingLicense) {
         checks.push(check);
-
       }
 
-    });
-
-
+      if (
+        company &&
+        company.companyLicenseExpiryDate &&
+        company.companyLicenseNumber &&
+        !processedCompanyIds.has(company.id)
+      ) {
+        const daysUntilExpiry = this.calculateDaysUntilExpiry(company.companyLicenseExpiryDate);
+        checks.push({
+          employeeId: null,
+          employeeName: company.name,
+          email: company.email ?? null,
+          companyId: company.id,
+          companyName: company.name,
+          companyLicense: {
+            number: company.companyLicenseNumber,
+            expiryDate: company.companyLicenseExpiryDate,
+            alertDays: company.companyLicenseAlertDays || 60,
+            daysUntilExpiry,
+          },
+        });
+        processedCompanyIds.add(company.id);
+      }
+    }
 
     return checks;
-
   }
 
   async checkFleetExpiries(): Promise<FleetExpiryCheck[]> {

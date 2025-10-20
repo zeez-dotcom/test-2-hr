@@ -5,15 +5,18 @@ import {
   screen,
   waitFor,
   fireEvent,
+  within,
 } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom";
 import DocumentsPage from "@/pages/documents";
 import type { GenericDocument } from "@shared/schema";
+import { queryClient } from "@/lib/queryClient";
 
 const httpMock = vi.hoisted(() => ({
   apiGet: vi.fn(),
   apiPost: vi.fn(),
+  apiPut: vi.fn(),
   apiDelete: vi.fn(),
 }));
 
@@ -125,7 +128,15 @@ vi.mock("@/components/ui/scroll-area", () => ({
 
 vi.mock("@/components/ui/image-upload", () => ({
   __esModule: true,
-  default: () => null,
+  default: ({ onChange }: any) => (
+    <button
+      type="button"
+      data-testid="mock-image-upload"
+      onClick={() => onChange?.("data:mock")}
+    >
+      Upload mock
+    </button>
+  ),
 }));
 
 vi.mock("@/hooks/use-toast", () => ({
@@ -172,7 +183,9 @@ describe("DocumentsPage", () => {
   beforeEach(() => {
     httpMock.apiGet.mockReset();
     httpMock.apiPost.mockReset();
+    httpMock.apiPut.mockReset();
     httpMock.apiDelete.mockReset();
+    queryClient.clear();
   });
 
   it("handles empty categories using sentinels without runtime errors", async () => {
@@ -230,12 +243,6 @@ describe("DocumentsPage", () => {
 
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false },
-      },
-    });
-
     render(
       <QueryClientProvider client={queryClient}>
         <DocumentsPage />
@@ -271,5 +278,120 @@ describe("DocumentsPage", () => {
     expect(documentCalls.every((url) => !url.includes("category="))).toBe(true);
     expect(consoleError).not.toHaveBeenCalled();
     consoleError.mockRestore();
+  });
+
+  it("updates employee expiry information after replacing an expired document", async () => {
+    const employeesFixture = [
+      {
+        id: "emp-1",
+        firstName: "Alice",
+        lastName: "Smith",
+      },
+    ];
+
+    const expiredChecks = [
+      {
+        employeeId: "emp-1",
+        employeeName: "Alice Smith",
+        email: "alice@example.com",
+        companyId: null,
+        visa: {
+          number: "V-123",
+          expiryDate: "2020-01-01",
+          alertDays: 30,
+          daysUntilExpiry: -1,
+        },
+      },
+    ];
+
+    let expiryCall = 0;
+
+    httpMock.apiGet.mockImplementation(async (url: string) => {
+      if (url.startsWith("/api/documents/expiry-check")) {
+        expiryCall += 1;
+        const data = expiryCall === 1 ? expiredChecks : [];
+        return createSuccessResponse(data);
+      }
+      if (url.startsWith("/api/documents")) {
+        return createSuccessResponse([]);
+      }
+      if (url.startsWith("/api/employees")) {
+        return createSuccessResponse(employeesFixture);
+      }
+      return createSuccessResponse({});
+    });
+
+    httpMock.apiPost.mockImplementation(async (url: string) => {
+      if (url === "/api/documents") {
+        return createSuccessResponse({ id: "doc-new" } as GenericDocument);
+      }
+      return createSuccessResponse({});
+    });
+
+    httpMock.apiPut.mockResolvedValue(createSuccessResponse({ id: "emp-1" }));
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <DocumentsPage showExpiryOnly expiredOnly />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(expiryCall).toBeGreaterThan(0));
+
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("button", {
+          name: /upload replacement/i,
+        }).length,
+      ).toBeGreaterThan(0),
+    );
+
+    const replaceButtons = screen.getAllByRole("button", {
+      name: /upload replacement/i,
+    });
+    expect(replaceButtons.length).toBeGreaterThan(0);
+    fireEvent.click(replaceButtons[0]);
+
+    const expiryInput = document.getElementById("replacement-expiry") as HTMLInputElement | null;
+    expect(expiryInput).not.toBeNull();
+    if (expiryInput) {
+      fireEvent.change(expiryInput, { target: { value: "2030-01-01" } });
+    }
+
+    const alertInput = document.getElementById("replacement-alert") as HTMLInputElement | null;
+    expect(alertInput).not.toBeNull();
+    if (alertInput) {
+      fireEvent.change(alertInput, { target: { value: "45" } });
+    }
+
+    const replacementTitleInput = document.getElementById("replacement-title");
+    expect(replacementTitleInput).not.toBeNull();
+    const replacementForm = replacementTitleInput?.closest("form");
+    expect(replacementForm).not.toBeNull();
+    if (replacementForm) {
+      fireEvent.click(within(replacementForm).getByTestId("mock-image-upload"));
+    }
+
+    const submitButton = screen.getByRole("button", {
+      name: /save replacement/i,
+    });
+    fireEvent.click(submitButton);
+
+    await waitFor(() =>
+      expect(httpMock.apiPut).toHaveBeenCalledWith(
+        "/api/employees/emp-1",
+        expect.objectContaining({
+          visaExpiryDate: "2030-01-01",
+          visaNumber: "V-123",
+          visaAlertDays: 45,
+        }),
+      ),
+    );
+
+    await waitFor(() => expect(expiryCall).toBeGreaterThan(1));
+
+    await screen.findByText(
+      "No expired documents require replacement right now.",
+    );
   });
 });

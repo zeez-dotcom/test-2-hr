@@ -42,7 +42,7 @@ vi.mock('./db', () => ({
 }));
 
 import { storage } from './storage';
-import { loanPayments, sickLeaveTracking, loanAmortizationSchedules } from '@shared/schema';
+import { loanPayments, sickLeaveTracking, loanAmortizationSchedules, employees } from '@shared/schema';
 
 describe('getMonthlyEmployeeSummary', () => {
   beforeEach(() => {
@@ -171,6 +171,7 @@ describe('getPayrollRuns', () => {
                 otherDeductions: 0,
                 netPay: 90,
                 adjustmentReason: null,
+                allowances: null,
                 employee: null,
               },
             ]),
@@ -681,6 +682,257 @@ describe('sick leave balance methods', () => {
     expect(sickLeaveTrackingFindFirstMock).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.any(Function) }),
     );
+  });
+});
+
+describe('updateEmployee', () => {
+  beforeEach(() => {
+    updateMock.mockReset();
+  });
+
+  it('persists document expiry fields to the employee record', async () => {
+    updateMock.mockImplementationOnce((table) => {
+      expect(table).toBe(employees);
+      return {
+        set: (vals: any) => {
+          expect(vals).toEqual({
+            visaExpiryDate: '2030-01-01',
+            visaNumber: 'V-999',
+            visaAlertDays: 60,
+            civilIdExpiryDate: '2030-06-01',
+          });
+          return {
+            where: vi.fn().mockReturnValue({
+              returning: vi.fn().mockResolvedValue([
+                { id: 'emp-1', ...vals },
+              ]),
+            }),
+          };
+        },
+      };
+    });
+
+    const result = await storage.updateEmployee('emp-1', {
+      visaExpiryDate: '2030-01-01',
+      visaNumber: 'V-999',
+      visaAlertDays: 60,
+      civilIdExpiryDate: '2030-06-01',
+      employeeCode: 'should-be-ignored' as any,
+    });
+
+    expect(result).toEqual({
+      id: 'emp-1',
+      visaExpiryDate: '2030-01-01',
+      visaNumber: 'V-999',
+      visaAlertDays: 60,
+      civilIdExpiryDate: '2030-06-01',
+    });
+  });
+});
+
+describe('checkDocumentExpiries', () => {
+  beforeEach(() => {
+    selectMock.mockReset();
+    vi.useRealTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('includes driving and company license information when available', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-03-01T00:00:00Z'));
+
+    const rows = [
+      {
+        employee: {
+          id: 'emp-1',
+          firstName: 'Alice',
+          lastName: 'Smith',
+          email: 'alice@example.com',
+          employeeCode: 'E001',
+          visaExpiryDate: null,
+          visaNumber: null,
+          visaAlertDays: null,
+          civilIdExpiryDate: null,
+          civilId: null,
+          civilIdAlertDays: null,
+          passportExpiryDate: null,
+          passportNumber: null,
+          passportAlertDays: null,
+          drivingLicenseNumber: 'DL-123',
+          drivingLicenseExpiryDate: '2024-03-06',
+          drivingLicenseAlertDays: 45,
+        },
+        company: {
+          id: 'comp-1',
+          name: 'Acme Corp',
+          email: 'info@acme.test',
+          companyLicenseNumber: 'LIC-99',
+          companyLicenseExpiryDate: '2024-03-04',
+          companyLicenseAlertDays: 120,
+        },
+      },
+    ];
+
+    selectMock.mockReturnValueOnce({
+      from: () => ({
+        leftJoin: () => Promise.resolve(rows),
+      }),
+    });
+
+    const result = await storage.checkDocumentExpiries();
+
+    const expectedDrivingDays = Math.ceil(
+      (Date.parse('2024-03-06') - Date.parse('2024-03-01T00:00:00Z')) /
+        (1000 * 60 * 60 * 24),
+    );
+    const expectedCompanyDays = Math.ceil(
+      (Date.parse('2024-03-04') - Date.parse('2024-03-01T00:00:00Z')) /
+        (1000 * 60 * 60 * 24),
+    );
+
+    expect(result).toEqual([
+      {
+        employeeId: 'emp-1',
+        employeeName: 'Alice Smith',
+        email: 'alice@example.com',
+        companyId: 'comp-1',
+        companyName: 'Acme Corp',
+        drivingLicense: {
+          number: 'DL-123',
+          expiryDate: '2024-03-06',
+          alertDays: 45,
+          daysUntilExpiry: expectedDrivingDays,
+        },
+      },
+      {
+        employeeId: null,
+        employeeName: 'Acme Corp',
+        email: 'info@acme.test',
+        companyId: 'comp-1',
+        companyName: 'Acme Corp',
+        companyLicense: {
+          number: 'LIC-99',
+          expiryDate: '2024-03-04',
+          alertDays: 120,
+          daysUntilExpiry: expectedCompanyDays,
+        },
+      },
+    ]);
+  });
+
+  it('avoids duplicate company license entries and applies alert defaults', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-05-01T00:00:00Z'));
+
+    const rows = [
+      {
+        employee: {
+          id: 'emp-1',
+          firstName: 'John',
+          lastName: 'Doe',
+          email: null,
+          employeeCode: 'E100',
+          visaExpiryDate: null,
+          visaNumber: null,
+          visaAlertDays: null,
+          civilIdExpiryDate: null,
+          civilId: null,
+          civilIdAlertDays: null,
+          passportExpiryDate: null,
+          passportNumber: null,
+          passportAlertDays: null,
+          drivingLicenseNumber: 'DL-999',
+          drivingLicenseExpiryDate: '2024-05-03',
+          drivingLicenseAlertDays: null,
+        },
+        company: {
+          id: 'comp-2',
+          name: 'Beta LLC',
+          email: null,
+          companyLicenseNumber: 'LIC-200',
+          companyLicenseExpiryDate: '2024-05-10',
+          companyLicenseAlertDays: null,
+        },
+      },
+      {
+        employee: {
+          id: 'emp-2',
+          firstName: 'NoDocs',
+          lastName: 'Person',
+          email: null,
+          employeeCode: 'E101',
+          visaExpiryDate: null,
+          visaNumber: null,
+          visaAlertDays: null,
+          civilIdExpiryDate: null,
+          civilId: null,
+          civilIdAlertDays: null,
+          passportExpiryDate: null,
+          passportNumber: null,
+          passportAlertDays: null,
+          drivingLicenseNumber: null,
+          drivingLicenseExpiryDate: null,
+          drivingLicenseAlertDays: null,
+        },
+        company: {
+          id: 'comp-2',
+          name: 'Beta LLC',
+          email: null,
+          companyLicenseNumber: 'LIC-200',
+          companyLicenseExpiryDate: '2024-05-10',
+          companyLicenseAlertDays: null,
+        },
+      },
+    ];
+
+    selectMock.mockReturnValueOnce({
+      from: () => ({
+        leftJoin: () => Promise.resolve(rows),
+      }),
+    });
+
+    const result = await storage.checkDocumentExpiries();
+
+    const expectedDrivingDays = Math.ceil(
+      (Date.parse('2024-05-03') - Date.parse('2024-05-01T00:00:00Z')) /
+        (1000 * 60 * 60 * 24),
+    );
+    const expectedCompanyDays = Math.ceil(
+      (Date.parse('2024-05-10') - Date.parse('2024-05-01T00:00:00Z')) /
+        (1000 * 60 * 60 * 24),
+    );
+
+    expect(result).toEqual([
+      {
+        employeeId: 'emp-1',
+        employeeName: 'John Doe',
+        email: null,
+        companyId: 'comp-2',
+        companyName: 'Beta LLC',
+        drivingLicense: {
+          number: 'DL-999',
+          expiryDate: '2024-05-03',
+          alertDays: 30,
+          daysUntilExpiry: expectedDrivingDays,
+        },
+      },
+      {
+        employeeId: null,
+        employeeName: 'Beta LLC',
+        email: null,
+        companyId: 'comp-2',
+        companyName: 'Beta LLC',
+        companyLicense: {
+          number: 'LIC-200',
+          expiryDate: '2024-05-10',
+          alertDays: 60,
+          daysUntilExpiry: expectedCompanyDays,
+        },
+      },
+    ]);
   });
 });
 

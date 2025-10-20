@@ -68,6 +68,27 @@ export default function Employees({ defaultStatus = "active" }: EmployeesProps) 
   const [taskNotes, setTaskNotes] = useState<Record<string, string>>({});
   const { toast } = useToast();
 
+  const getEmployeeDocumentValues = useCallback(
+    (fields: string[]) => {
+      if (!workflowState?.employee) {
+        return {};
+      }
+      const employeeData = workflowState.employee as Record<string, unknown>;
+      return fields.reduce<Record<string, string>>((acc, field) => {
+        const rawValue = employeeData[field];
+        if (rawValue == null) {
+          return acc;
+        }
+        const value = typeof rawValue === "string" ? rawValue : String(rawValue);
+        if (value.trim()) {
+          acc[field] = value;
+        }
+        return acc;
+      }, {});
+    },
+    [workflowState?.employee],
+  );
+
   const {
     data: employees,
     isLoading: employeesLoading,
@@ -134,9 +155,27 @@ export default function Employees({ defaultStatus = "active" }: EmployeesProps) 
       setTaskNotes({});
       return;
     }
-    setDocumentValues({});
+    const initialDocumentValues: Record<string, Record<string, string>> = {};
+
+    activeWorkflow.steps.forEach((step) => {
+      if (step.stepType !== "document") {
+        return;
+      }
+      const requiredFields = Array.isArray((step.metadata as any)?.requiredFields)
+        ? ((step.metadata as any).requiredFields as string[])
+        : [];
+      if (!requiredFields.length) {
+        return;
+      }
+      const employeeDocs = getEmployeeDocumentValues(requiredFields);
+      if (Object.keys(employeeDocs).length > 0) {
+        initialDocumentValues[step.id] = employeeDocs;
+      }
+    });
+
+    setDocumentValues(initialDocumentValues);
     setTaskNotes({});
-  }, [activeWorkflow?.id]);
+  }, [activeWorkflow?.id, getEmployeeDocumentValues]);
 
   const startWorkflowMutation = useMutation({
     mutationFn: async ({ employeeId, type }: { employeeId: string; type: WorkflowType }) => {
@@ -701,7 +740,12 @@ export default function Employees({ defaultStatus = "active" }: EmployeesProps) 
                             )}
                             <Button
                               onClick={() => {
-                                const documentsPayload = documentValues[step.id] ?? {};
+                                const employeeDocuments = getEmployeeDocumentValues(requiredFields);
+                                const stepDocumentOverrides = documentValues[step.id] ?? {};
+                                const documentsPayload = {
+                                  ...employeeDocuments,
+                                  ...stepDocumentOverrides,
+                                };
                                 const missing = requiredFields.filter((field) =>
                                   !(documentsPayload[field] ?? "").toString().trim(),
                                 );

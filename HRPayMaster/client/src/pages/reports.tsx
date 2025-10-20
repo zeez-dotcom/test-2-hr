@@ -419,6 +419,34 @@ export default function Reports() {
       employee.profileImage && dataUrlPattern.test(employee.profileImage)
         ? sanitizeImageSrc(employee.profileImage)
         : undefined;
+    const employeeAssets = assetAssignments
+      .filter(assignment => assignment.employeeId === employeeId)
+      .map(assignment => ({
+        name: String(
+          assignment.asset?.name ??
+          (assignment as any).assetName ??
+          assignment.assetId ??
+          ''
+        ),
+        type: String(
+          assignment.asset?.type ??
+          (assignment as any).assetType ??
+          ''
+        ),
+        status: String(
+          assignment.status ??
+          assignment.asset?.status ??
+          (assignment as any).assetStatus ??
+          ''
+        ),
+        assignedDate: assignment.assignedDate,
+        returnDate: assignment.returnDate,
+        notes: String(
+          assignment.notes ??
+          assignment.asset?.details ??
+          ''
+        ),
+      }));
     const doc = buildEmployeeReport({
       employee: {
         firstName: employee.firstName || '',
@@ -427,7 +455,22 @@ export default function Reports() {
         position: employee.position,
         profileImage,
       },
-      events: employeeEvents.map(e => ({ title: e.title, eventDate: e.eventDate })),
+      events: employeeEvents.map(e => {
+        const rawAmount = e.amount;
+        const parsedAmount =
+          typeof rawAmount === "number"
+            ? rawAmount
+            : Number.parseFloat(typeof rawAmount === "string" ? rawAmount : "");
+        const amount = Number.isFinite(parsedAmount) ? parsedAmount : null;
+
+        return {
+          title: e.title,
+          eventDate: e.eventDate,
+          eventType: e.eventType,
+          amount,
+        };
+      }),
+      assets: employeeAssets,
     });
     openPdf(doc);
   };

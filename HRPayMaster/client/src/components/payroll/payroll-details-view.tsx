@@ -135,6 +135,16 @@ export default function PayrollDetailsView({ payrollId, onRegisterPrint }: Payro
     return <div className="text-center text-gray-500">Payroll run not found</div>;
   }
 
+  const payrollEntries = payrollRun.entries ?? [];
+  const totalAllowances = payrollEntries.reduce(
+    (sum, entry) => sum + summarizeAllowances(entry.allowances).total,
+    0,
+  );
+  const totalBonuses = payrollEntries.reduce(
+    (sum, entry) => sum + (parseFloat(entry.bonusAmount) || 0),
+    0,
+  );
+
   return (
     <div
       ref={printContentRef}
@@ -177,7 +187,7 @@ export default function PayrollDetailsView({ payrollId, onRegisterPrint }: Payro
       <Card className="border-primary/20 bg-muted/30">
         <CardContent className="p-6">
           <h2 className="mb-4 text-lg font-semibold text-gray-900">Payroll Session Overview</h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
             <div>
               <p className="text-xs uppercase text-muted-foreground">Period</p>
               <p className="text-base font-medium text-gray-900">{payrollRun.period}</p>
@@ -206,7 +216,19 @@ export default function PayrollDetailsView({ payrollId, onRegisterPrint }: Payro
                 {formatCurrency(payrollRun.totalDeductions)}
               </p>
             </div>
-            <div className="sm:col-span-2 lg:col-span-5">
+            <div>
+              <p className="text-xs uppercase text-muted-foreground">Total Allowances</p>
+              <p className="text-base font-semibold text-gray-900">
+                {formatCurrency(totalAllowances || 0)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase text-muted-foreground">Total Bonuses</p>
+              <p className="text-base font-semibold text-gray-900">
+                {formatCurrency(totalBonuses || 0)}
+              </p>
+            </div>
+            <div className="sm:col-span-2 lg:col-span-6">
               <p className="text-xs uppercase text-muted-foreground">Net Total</p>
               <p className="text-base font-semibold text-gray-900">
                 {formatCurrency(payrollRun.netAmount)}
