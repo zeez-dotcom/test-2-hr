@@ -118,12 +118,33 @@ export function calculateEmployeePayroll({
     return total + Math.ceil((vacEnd.getTime() - vacStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
   }, 0);
 
-  const baseWorking = typeof attendanceDays === 'number' ? Math.min(workingDays, attendanceDays) : workingDays;
-  const actualWorkingDays = Math.max(0, baseWorking - vacationDays);
+  const MS_IN_DAY = 1000 * 60 * 60 * 24;
+  const totalPeriodDays = Math.max(
+    1,
+    Math.ceil((end.getTime() - start.getTime()) / MS_IN_DAY) + 1,
+  );
+
+  const normalizedWorkingDays = Math.max(0, workingDays);
+  const baseWorking =
+    typeof attendanceDays === "number" && attendanceDays >= 0
+      ? Math.min(normalizedWorkingDays, attendanceDays)
+      : normalizedWorkingDays;
+
+  let actualWorkingDays: number;
+  if (typeof attendanceDays === "number" && attendanceDays >= 0) {
+    actualWorkingDays = Math.min(normalizedWorkingDays, Math.round(attendanceDays));
+  } else {
+    const vacationShare = Math.min(vacationDays, totalPeriodDays);
+    const vacationEquivalent = Math.round((vacationShare / totalPeriodDays) * baseWorking);
+    actualWorkingDays = Math.max(0, Math.round(baseWorking - vacationEquivalent));
+  }
+  actualWorkingDays = Math.min(actualWorkingDays, normalizedWorkingDays);
+
+  const salaryDivisor = normalizedWorkingDays > 0 ? normalizedWorkingDays : 1;
 
   const baseSalary =
     employee.status === "active"
-      ? (monthlySalary * actualWorkingDays) / workingDays
+      ? (monthlySalary * actualWorkingDays) / salaryDivisor
       : 0;
 
   const skippedLoanIds = overrides?.skippedLoanIds;
@@ -260,6 +281,13 @@ export function calculateEmployeePayroll({
   const netPay = Math.max(0, grossPay - totalEmpDeductions);
 
   let adjustmentReason = "";
+  if (
+    employee.status === "active" &&
+    normalizedWorkingDays > 0 &&
+    actualWorkingDays !== normalizedWorkingDays
+  ) {
+    adjustmentReason += `Worked ${actualWorkingDays}/${normalizedWorkingDays} days. `;
+  }
   if (vacationDays > 0) {
     adjustmentReason += `${vacationDays} vacation days. `;
   }

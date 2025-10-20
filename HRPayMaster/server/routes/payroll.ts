@@ -1317,6 +1317,7 @@ payrollRouter.post(
         }
 
         if (shouldFinalizeLoans && activeLoansByEmployee.size > 0) {
+          const loanReductions = new Map<string, number>();
           for (const [employeeId, employeeLoans] of activeLoansByEmployee.entries()) {
             let remainingDeduction = entriesByEmployee.get(employeeId)?.loanDeduction ?? 0;
             if (!(remainingDeduction > 0)) continue;
@@ -1366,6 +1367,10 @@ payrollRouter.post(
                 source: "payroll",
               });
               remainingDeduction = Number(Math.max(0, remainingDeduction - appliedAmount));
+              loanReductions.set(
+                loan.id,
+                (loanReductions.get(loan.id) ?? 0) + appliedAmount,
+              );
 
               if (scheduleContext && scheduleContext.entries.length > 0) {
                 const installments = scheduleContext.entries.map(
@@ -1389,6 +1394,35 @@ payrollRouter.post(
 
             if (paymentsToInsert.length > 0) {
               await tx.insert(loanPaymentsTable).values(paymentsToInsert);
+            }
+          }
+
+          if (loanReductions.size > 0) {
+            for (const [loanId, totalPaid] of loanReductions.entries()) {
+              if (!(totalPaid > 0)) continue;
+              const loan = scenarioLoans.find(item => item.id === loanId);
+              if (!loan) continue;
+              const currentRemaining = parseAmount(
+                (loan as any).remainingAmount ?? loan.remainingAmount ?? 0,
+              );
+              const updatedRemainingRaw = Number(
+                Math.max(0, currentRemaining - totalPaid).toFixed(2),
+              );
+              const nextStatus =
+                updatedRemainingRaw <= 0.01
+                  ? "completed"
+                  : (loan.status as string) ?? "active";
+
+              await tx
+                .update(loansTable)
+                .set({
+                  remainingAmount: updatedRemainingRaw.toFixed(2),
+                  status: nextStatus,
+                })
+                .where(eq(loansTable.id, loanId));
+
+              (loan as any).remainingAmount = updatedRemainingRaw.toFixed(2);
+              (loan as any).status = nextStatus;
             }
           }
         }

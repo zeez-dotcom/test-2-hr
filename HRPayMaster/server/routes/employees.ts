@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { HttpError } from "../errorHandler";
 import { storage, DuplicateEmployeeCodeError, type EmployeeFilters } from "../storage";
 import { assetService } from "../assetService";
+import { db } from "../db";
 import {
   insertDepartmentSchema,
   insertCompanySchema,
@@ -45,6 +46,9 @@ import {
   type PayrollFrequencyConfig,
   type PayrollCalendarConfig,
   type PayrollExportFormatConfig,
+  employeeCustomFields,
+  employeeCustomValues,
+  employeeEvents,
 } from "@shared/schema";
 import {
   sendEmail,
@@ -59,6 +63,7 @@ import { z } from "zod";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import type Sharp from "sharp";
+import { and, eq, inArray } from "drizzle-orm";
 import {
   emptyToUndef,
   parseNumber,
@@ -843,7 +848,7 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
   );
 
   // Employee routes
-  employeesRouter.get("/api/employees", async (req, res, next) => {
+employeesRouter.get("/api/employees", async (req, res, next) => {
     try {
       const { page, limit, status, department, company, name, search, sort, order, includeTerminated } = req.query;
 
@@ -941,10 +946,271 @@ export const EMPLOYEE_IMPORT_TEMPLATE_HEADERS: string[] = [
     }
   });
 
-  employeesRouter.get("/api/employees/import/template", (_req, res) => {
-    const ws = XLSX.utils.aoa_to_sheet([EMPLOYEE_IMPORT_TEMPLATE_HEADERS]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Employees");
+employeesRouter.get("/api/employees/export", async (req, res, next) => {
+  try {
+    const { status, department, company, search, includeTerminated } = req.query;
+
+    const statusValues = Array.isArray(status)
+      ? status.reduce<string[]>((acc, value) => {
+          if (typeof value === "string") {
+            acc.push(...value.split(","));
+          }
+          return acc;
+        }, [])
+      : typeof status === "string"
+      ? status.split(",")
+      : [];
+
+    const normalizedStatuses = statusValues
+      .map(value => value.trim().toLowerCase())
+      .filter(value => value.length > 0);
+
+    const allowedStatuses = new Set(["active", "inactive", "on_leave", "resigned", "terminated"]);
+    const hasAllStatuses = normalizedStatuses.includes("all");
+    let includeTerminatedFlag = normalizedStatuses.includes("terminated") || hasAllStatuses;
+
+    if (typeof includeTerminated === "string") {
+      const normalizedInclude = includeTerminated.trim().toLowerCase();
+      if (["1", "true", "yes"].includes(normalizedInclude)) {
+        includeTerminatedFlag = true;
+      }
+    }
+
+    const filteredStatuses = normalizedStatuses.filter(value => allowedStatuses.has(value));
+
+    const filters: EmployeeFilters = {
+      includeTerminated: includeTerminatedFlag,
+    };
+
+    if (!hasAllStatuses && filteredStatuses.length > 0) {
+      filters.status = filteredStatuses;
+    }
+
+    if (typeof department === "string" && department.trim() !== "" && department !== "all") {
+      filters.departmentId = department.trim();
+    }
+
+    if (typeof company === "string" && company.trim() !== "") {
+      filters.companyId = company.trim();
+    }
+
+    if (typeof search === "string" && search.trim() !== "") {
+      filters.search = search.trim();
+    }
+
+    const employees = await storage.getEmployees(filters);
+
+    const formatDate = (value: string | Date | null | undefined): string => {
+      if (!value) return "";
+      const date = value instanceof Date ? value : new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return typeof value === "string" ? value : "";
+      }
+      return date.toISOString().split("T")[0];
+    };
+
+    const clampCell = (value: unknown): string => {
+      if (value === null || value === undefined) {
+        return "";
+      }
+      const text = String(value);
+      if (text.length > 32000) {
+        return `${text.slice(0, 32000)}… (truncated)`;
+      }
+      return text;
+    };
+
+    const employeeIds = employees.map(employee => employee.id);
+
+    const allowanceRows =
+      employeeIds.length > 0
+        ? await db
+            .select({
+              employeeId: employeeEvents.employeeId,
+              title: employeeEvents.title,
+              amount: employeeEvents.amount,
+              recurrenceType: employeeEvents.recurrenceType,
+              status: employeeEvents.status,
+              eventDate: employeeEvents.eventDate,
+            })
+            .from(employeeEvents)
+            .where(
+              and(
+                eq(employeeEvents.eventType, "allowance"),
+                inArray(employeeEvents.employeeId, employeeIds),
+              ),
+            )
+        : [];
+
+    const allowancesByEmployee = new Map<string, string[]>();
+    for (const allowance of allowanceRows) {
+      const list = allowancesByEmployee.get(allowance.employeeId) ?? [];
+      const amountNumber =
+        typeof allowance.amount === "number" ? allowance.amount : Number(allowance.amount ?? 0);
+      const formattedAmount = Number.isFinite(amountNumber)
+        ? amountNumber.toFixed(3)
+        : clampCell(allowance.amount);
+      const recurrence =
+        allowance.recurrenceType === "monthly" ? "Monthly" : "One-time";
+      const parts = [
+        allowance.title?.trim() || "Allowance",
+        `Amount: ${formattedAmount}`,
+        `Recurrence: ${recurrence}`,
+      ];
+      if (allowance.eventDate) {
+        parts.push(`Event Date: ${formatDate(allowance.eventDate)}`);
+      }
+      if (allowance.status) {
+        parts.push(`Status: ${allowance.status}`);
+      }
+      list.push(parts.join(" | "));
+      allowancesByEmployee.set(allowance.employeeId, list);
+    }
+
+    const customFieldRows =
+      employeeIds.length > 0
+        ? await db
+            .select({
+              employeeId: employeeCustomValues.employeeId,
+              fieldName: employeeCustomFields.name,
+              value: employeeCustomValues.value,
+            })
+            .from(employeeCustomValues)
+            .innerJoin(
+              employeeCustomFields,
+              eq(employeeCustomValues.fieldId, employeeCustomFields.id),
+            )
+            .where(inArray(employeeCustomValues.employeeId, employeeIds))
+        : [];
+
+    const customFieldNames = Array.from(
+      new Set(
+        customFieldRows
+          .map(row => row.fieldName?.trim())
+          .filter((name): name is string => Boolean(name && name.length > 0)),
+      ),
+    ).sort((a, b) => a.localeCompare(b));
+
+    const customValuesByEmployee = new Map<string, Record<string, string>>();
+    for (const row of customFieldRows) {
+      const fieldName = row.fieldName?.trim();
+      if (!fieldName) continue;
+      const entry = customValuesByEmployee.get(row.employeeId) ?? {};
+      entry[fieldName] = row.value ?? "";
+      customValuesByEmployee.set(row.employeeId, entry);
+    }
+
+    const formatDocument = (value: string | null | undefined): string =>
+      clampCell(value ?? "");
+
+    type ColumnDef = {
+      header: string;
+      getter: (employee: (typeof employees)[number]) => string;
+    };
+
+    const baseColumns: ColumnDef[] = [
+      { header: "Employee ID", getter: employee => employee.id },
+      { header: "Employee Code", getter: employee => employee.employeeCode ?? "" },
+      { header: "First Name", getter: employee => employee.firstName ?? "" },
+      { header: "Last Name", getter: employee => employee.lastName ?? "" },
+      { header: "Arabic Name", getter: employee => employee.arabicName ?? "" },
+      { header: "Nickname", getter: employee => employee.nickname ?? "" },
+      { header: "Status", getter: employee => employee.status ?? "" },
+      { header: "Position", getter: employee => employee.position ?? "" },
+      { header: "Department", getter: employee => employee.department?.name ?? "" },
+      { header: "Company", getter: employee => employee.company?.name ?? "" },
+      { header: "Work Location", getter: employee => employee.workLocation ?? "" },
+      { header: "Start Date", getter: employee => formatDate(employee.startDate) },
+      { header: "Email", getter: employee => employee.email ?? "" },
+      { header: "Phone", getter: employee => employee.phone ?? "" },
+      { header: "Nationality", getter: employee => employee.nationality ?? "" },
+      { header: "Salary", getter: employee => clampCell(employee.salary) },
+      { header: "Additions", getter: employee => clampCell(employee.additions) },
+      { header: "Standard Working Days", getter: employee => clampCell(employee.standardWorkingDays) },
+      { header: "Bank IBAN", getter: employee => employee.bankIban ?? "" },
+      { header: "Bank Name", getter: employee => employee.bankName ?? "" },
+      { header: "Emergency Contact", getter: employee => employee.emergencyContact ?? "" },
+      { header: "Emergency Phone", getter: employee => employee.emergencyPhone ?? "" },
+      { header: "Visa Number", getter: employee => employee.visaNumber ?? "" },
+      { header: "Visa Expiry Date", getter: employee => formatDate(employee.visaExpiryDate) },
+      { header: "Visa Alert Days", getter: employee => clampCell(employee.visaAlertDays) },
+      { header: "Civil ID Number", getter: employee => employee.civilId ?? "" },
+      { header: "Civil ID Expiry Date", getter: employee => formatDate(employee.civilIdExpiryDate) },
+      { header: "Civil ID Alert Days", getter: employee => clampCell(employee.civilIdAlertDays) },
+      { header: "Passport Number", getter: employee => employee.passportNumber ?? "" },
+      { header: "Passport Expiry Date", getter: employee => formatDate(employee.passportExpiryDate) },
+      { header: "Passport Alert Days", getter: employee => clampCell(employee.passportAlertDays) },
+      { header: "Driving License Number", getter: employee => employee.drivingLicenseNumber ?? "" },
+      { header: "Driving License Expiry Date", getter: employee => formatDate(employee.drivingLicenseExpiryDate) },
+      { header: "Driving License Alert Days", getter: employee => clampCell(employee.drivingLicenseAlertDays) },
+      { header: "Residency Name", getter: employee => employee.residencyName ?? "" },
+      {
+        header: "Residency On Company",
+        getter: employee => (employee.residencyOnCompany ? "Yes" : "No"),
+      },
+    ];
+
+    const documentColumns: ColumnDef[] = [
+      { header: "Profile Image (Base64)", getter: employee => formatDocument(employee.profileImage) },
+      { header: "Visa Document (Base64)", getter: employee => formatDocument(employee.visaImage) },
+      { header: "Civil ID Document (Base64)", getter: employee => formatDocument(employee.civilIdImage) },
+      { header: "Passport Document (Base64)", getter: employee => formatDocument(employee.passportImage) },
+      { header: "Driving License Document (Base64)", getter: employee => formatDocument(employee.drivingLicenseImage) },
+      { header: "Additional Documents (Base64)", getter: employee => formatDocument(employee.additionalDocs) },
+      { header: "Other Documents (Base64)", getter: employee => formatDocument(employee.otherDocs) },
+    ];
+
+    const allowancesColumn: ColumnDef = {
+      header: "Allowances",
+      getter: employee => (allowancesByEmployee.get(employee.id) ?? []).join("\n"),
+    };
+
+    const customColumns: ColumnDef[] = customFieldNames.map(fieldName => ({
+      header: `Custom: ${fieldName}`,
+      getter: employee => {
+        const values = customValuesByEmployee.get(employee.id);
+        return values?.[fieldName] ?? "";
+      },
+    }));
+
+    const columns: ColumnDef[] = [
+      ...baseColumns,
+      ...documentColumns,
+      allowancesColumn,
+      ...customColumns,
+    ];
+
+    const sheetData = [
+      columns.map(column => column.header),
+      ...employees.map(employee =>
+        columns.map(column => clampCell(column.getter(employee))),
+      ),
+    ];
+
+    const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
+    worksheet["!cols"] = columns.map(() => ({ wch: 30 }));
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Employees");
+    const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="employee-directory.xlsx"',
+    );
+    res.end(buffer);
+  } catch (error) {
+    next(error);
+  }
+});
+
+employeesRouter.get("/api/employees/import/template", (_req, res) => {
+  const ws = XLSX.utils.aoa_to_sheet([EMPLOYEE_IMPORT_TEMPLATE_HEADERS]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Employees");
     const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
     res.setHeader(
       "Content-Type",

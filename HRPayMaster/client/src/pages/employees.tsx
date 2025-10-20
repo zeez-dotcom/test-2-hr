@@ -18,7 +18,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Plus, Search } from "lucide-react";
+import { FileSpreadsheet, Loader2, Plus, Search } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import { apiGet, apiPost, apiPut } from "@/lib/http";
 import { buildBilingualActionReceipt, buildAndEncodePdf } from "@/lib/pdf";
@@ -28,6 +28,7 @@ import type {
   EmployeeWithDepartment,
   Department,
   InsertEmployee,
+  InsertEmployeeEvent,
   Company,
   EmployeeCustomValueMap,
   EmployeeWorkflowWithSteps,
@@ -41,6 +42,13 @@ interface EmployeesProps {
 
 type EmployeeMutationPayload = InsertEmployee & {
   customFieldValues?: EmployeeCustomValueMap;
+  pendingAllowances?: {
+    title: string;
+    amount: string;
+    recurrenceType: "none" | "monthly";
+    recurrenceEndDate: string | null;
+    eventDate: string | null;
+  }[];
 };
 
 type EmployeeMutationUpdatePayload = Partial<InsertEmployee> & {
@@ -58,6 +66,7 @@ export default function Employees({ defaultStatus = "active" }: EmployeesProps) 
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<EmployeeWithDepartment | null>(null);
@@ -304,17 +313,49 @@ export default function Employees({ defaultStatus = "active" }: EmployeesProps) 
     },
   });
 
-  const addEmployeeMutation = useMutation({
+const addEmployeeMutation = useMutation({
     mutationFn: async (employee: EmployeeMutationPayload) => {
-      const res = await apiPost("/api/employees", employee);
+      const { pendingAllowances = [], ...payload } = employee;
+      const res = await apiPost("/api/employees", payload);
       if (!res.ok) throw res;
-      return res.data;
+      return { employee: res.data, pendingAllowances };
     },
-    onSuccess: (data: any) => {
+    onSuccess: async ({ employee, pendingAllowances }: { employee: any; pendingAllowances: EmployeeMutationPayload["pendingAllowances"]; }) => {
+      if (employee?.id && pendingAllowances && pendingAllowances.length > 0) {
+        try {
+          for (const allowance of pendingAllowances) {
+            const payload: InsertEmployeeEvent = {
+              employeeId: employee.id,
+              eventType: "allowance",
+              title: allowance.title,
+              description: allowance.title,
+              amount: Number(allowance.amount).toString(),
+              eventDate: allowance.eventDate ?? new Date().toISOString().split("T")[0],
+              affectsPayroll: true,
+              status: "active",
+              recurrenceType: allowance.recurrenceType,
+              recurrenceEndDate:
+                allowance.recurrenceType === "monthly" ? allowance.recurrenceEndDate ?? null : null,
+            };
+            const allowanceRes = await apiPost("/api/employee-events", payload);
+            if (!allowanceRes.ok) {
+              throw allowanceRes;
+            }
+          }
+          queryClient.invalidateQueries({ queryKey: ["/api/employee-events", employee.id] });
+        } catch (error) {
+          console.error("Failed to create allowances for new employee", error);
+          toast({
+            title: "Employee created without allowances",
+            description: "We could not save the allowances. Please edit the employee and add them again.",
+            variant: "destructive",
+          });
+        }
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
-      if (data?.id) {
-        queryClient.invalidateQueries({ queryKey: ["/api/employees", data.id] });
-        queryClient.invalidateQueries({ queryKey: ["/api/employees", data.id, "custom-fields"] });
+      if (employee?.id) {
+        queryClient.invalidateQueries({ queryKey: ["/api/employees", employee.id] });
+        queryClient.invalidateQueries({ queryKey: ["/api/employees", employee.id, "custom-fields"] });
       }
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       setIsAddDialogOpen(false);
@@ -411,6 +452,60 @@ export default function Employees({ defaultStatus = "active" }: EmployeesProps) 
     }
   };
 
+  const handleExportDirectory = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (searchQuery.trim().length > 0) {
+        params.set("search", searchQuery.trim());
+      }
+      if (departmentFilter && departmentFilter !== "all") {
+        params.set("department", departmentFilter);
+      }
+      if (statusFilterParam && statusFilterParam.trim().length > 0) {
+        params.set("status", statusFilterParam);
+      }
+
+      const response = await fetch(
+        `/api/employees/export${params.size > 0 ? `?${params.toString()}` : ""}`,
+        { credentials: "include" },
+      );
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || "Failed to export employee directory");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const timestamp = new Date().toISOString().slice(0, 10);
+      link.download = `employee-directory-${timestamp}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: t("employeesPage.exportReady", "Export ready"),
+        description: t("employeesPage.exportDownloaded", "Employee directory downloaded."),
+      });
+    } catch (error) {
+      const description =
+        error instanceof Error
+          ? error.message
+          : t("employeesPage.exportFailed", "Failed to export employee directory");
+      toast({
+        title: t("employeesPage.exportFailed", "Failed to export employee directory"),
+        description,
+        variant: "destructive",
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const handleAddEmployee = (employee: EmployeeMutationPayload) => {
     addEmployeeMutation.mutate(employee);
   };
@@ -476,7 +571,7 @@ export default function Employees({ defaultStatus = "active" }: EmployeesProps) 
 
   const handleUpdateEmployee = (employee: EmployeeMutationPayload) => {
     if (editingEmployee) {
-      const { employeeCode, ...updates } = employee;
+      const { employeeCode, pendingAllowances, ...updates } = employee;
       updateEmployeeMutation.mutate({
         id: editingEmployee.id,
         employee: updates as EmployeeMutationUpdatePayload,
@@ -541,6 +636,25 @@ export default function Employees({ defaultStatus = "active" }: EmployeesProps) 
                   />
                 </DialogContent>
                 </Dialog>
+              <Button
+                type="button"
+                variant="outline"
+                className="flex items-center justify-center gap-2"
+                onClick={handleExportDirectory}
+                disabled={isExporting}
+              >
+                {isExporting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {t("employeesPage.exporting", "Exporting...")}
+                  </>
+                ) : (
+                  <>
+                    <FileSpreadsheet className="h-4 w-4" />
+                    {t("employeesPage.exportExcel", "Export Excel")}
+                  </>
+                )}
+              </Button>
               <EmployeeImport />
             </div>
           </div>

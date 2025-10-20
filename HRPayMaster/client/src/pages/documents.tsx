@@ -1850,7 +1850,7 @@ export default function DocumentsPage({
     let endpoint: string | null = null;
 
     const assignEmployeePayload = (
-      fields: { expiry: string; number: string; alert?: string },
+      fields: { expiry: string; number: string; alert?: string; image?: string },
     ): void => {
       if (!replacementContext?.employeeId) return;
       endpoint = `/api/employees/${replacementContext.employeeId}`;
@@ -1863,6 +1863,9 @@ export default function DocumentsPage({
       if (fields.alert && alertDays !== undefined) {
         payload[fields.alert] = alertDays;
       }
+      if (fields.image && replacementDataUrl) {
+        payload[fields.image] = replacementDataUrl;
+      }
     };
 
     switch (replacementContext.cardType) {
@@ -1871,6 +1874,7 @@ export default function DocumentsPage({
           expiry: "visaExpiryDate",
           number: "visaNumber",
           alert: "visaAlertDays",
+          image: "visaImage",
         });
         break;
       case "civil_id":
@@ -1878,6 +1882,7 @@ export default function DocumentsPage({
           expiry: "civilIdExpiryDate",
           number: "civilId",
           alert: "civilIdAlertDays",
+          image: "civilIdImage",
         });
         break;
       case "passport":
@@ -1885,6 +1890,7 @@ export default function DocumentsPage({
           expiry: "passportExpiryDate",
           number: "passportNumber",
           alert: "passportAlertDays",
+          image: "passportImage",
         });
         break;
       case "driving_license":
@@ -1892,6 +1898,7 @@ export default function DocumentsPage({
           expiry: "drivingLicenseExpiryDate",
           number: "drivingLicenseNumber",
           alert: "drivingLicenseAlertDays",
+          image: "drivingLicenseImage",
         });
         break;
       case "company_license":
@@ -1971,6 +1978,12 @@ export default function DocumentsPage({
     } catch (error) {
       toastApiError(error, t("documents.expiryUpdateFailed", "Failed to update expiry information"));
       return;
+    }
+
+    if (replacementContext.employeeId) {
+      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/employees", replacementContext.employeeId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/employees", replacementContext.employeeId, "custom-fields"] });
     }
 
     await queryClient.invalidateQueries({ queryKey: ["/api/documents/expiry-check"] });

@@ -7,7 +7,7 @@ import Notifications from "@/pages/notifications";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { apiPut } from "@/lib/http";
+import { apiGet, apiPut } from "@/lib/http";
 import { useToast } from "@/hooks/use-toast";
 import { sanitizeImageSrc } from "@/lib/sanitizeImageSrc";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,7 @@ import type { FleetExpiryCheck } from "@shared/schema";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import ImageUpload from "@/components/ui/image-upload";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -83,6 +84,8 @@ function FleetExpiry() {
   });
 
   const [selectedCar, setSelectedCar] = useState<FleetExpiryCheck | null>(null);
+  const [selectedCarDetails, setSelectedCarDetails] = useState<any | null>(null);
+  const [fetchingCarDetails, setFetchingCarDetails] = useState(false);
 
   const replaceRegistrationSchema = useMemo(
     () =>
@@ -91,36 +94,81 @@ function FleetExpiry() {
           .string()
           .min(1, t("compliance.registrationExpiryRequired", "Registration expiry is required")),
         registrationDocumentImage: z
-          .any()
-          .superRefine((value, ctx) => {
-            if (!value) {
-              ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: t("compliance.registrationDocumentRequired", "Registration document is required"),
-              });
-              return;
-            }
-            if (typeof File !== "undefined" && !(value instanceof File)) {
-              ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: t("compliance.registrationDocumentRequired", "Registration document is required"),
-              });
-            }
-          }),
+          .string()
+          .transform(value => value.trim())
+          .nullable()
+          .optional(),
       }),
     [t],
   );
 
-  const replaceRegistrationForm = useForm<{
+const replaceRegistrationForm = useForm<{
     registrationExpiry: string;
-    registrationDocumentImage: File | undefined;
+    registrationDocumentImage: string | null;
   }>({
     resolver: zodResolver(replaceRegistrationSchema),
     defaultValues: {
       registrationExpiry: "",
-      registrationDocumentImage: undefined,
+      registrationDocumentImage: null,
     },
   });
+
+  const dataUrlToFile = (dataUrl: string, fallbackName: string): File => {
+    const match = dataUrl.match(/^data:(.*?);base64,(.*)$/);
+    if (!match) {
+      throw new Error(t("compliance.invalidDocumentData", "Invalid document data provided."));
+    }
+    const mime = match[1] || "application/octet-stream";
+    const base64 = match[2];
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    const rawExtension = mime === "application/pdf" ? "pdf" : mime.split("/")[1]?.split("+")[0] ?? "bin";
+    const safeName = (fallbackName || "registration").replace(/[^a-zA-Z0-9_-]+/g, "_") || "registration";
+    return new File([bytes], `${safeName}.${rawExtension}`, { type: mime });
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!selectedCar) {
+      setSelectedCarDetails(null);
+      setFetchingCarDetails(false);
+      return;
+    }
+    setFetchingCarDetails(true);
+    (async () => {
+      try {
+        const res = await apiGet(`/api/cars/${selectedCar.carId}`);
+        if (cancelled) return;
+        if (res.ok) {
+          setSelectedCarDetails(res.data);
+        } else {
+          setSelectedCarDetails(null);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setSelectedCarDetails(null);
+          console.error("Failed to load car details", error);
+        }
+      } finally {
+        if (!cancelled) {
+          setFetchingCarDetails(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCar]);
+
+  const existingRegistrationDocument = selectedCarDetails?.registrationDocumentImage
+    ? sanitizeImageSrc(selectedCarDetails.registrationDocumentImage)
+    : undefined;
+  const existingDocumentIsPdf =
+    typeof existingRegistrationDocument === "string" &&
+    existingRegistrationDocument.startsWith("data:application/pdf");
 
   const replaceRegistrationMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: FormData }) => {
@@ -132,8 +180,7 @@ function FleetExpiry() {
       queryClient.invalidateQueries({ queryKey: ["/api/fleet/expiry-check"] });
       queryClient.invalidateQueries({ queryKey: ["/api/cars"] });
       toast({ title: t("compliance.registrationReplaced", "Registration updated") });
-      setSelectedCar(null);
-      replaceRegistrationForm.reset({ registrationExpiry: "", registrationDocumentImage: undefined });
+      closeDialog();
     },
     onError: (err: any) => {
       const description = err?.error ? String(err.error) : undefined;
@@ -147,14 +194,38 @@ function FleetExpiry() {
 
   const closeDialog = () => {
     setSelectedCar(null);
-    replaceRegistrationForm.reset({ registrationExpiry: "", registrationDocumentImage: undefined });
+    setSelectedCarDetails(null);
+    setFetchingCarDetails(false);
+    replaceRegistrationForm.reset({ registrationExpiry: "", registrationDocumentImage: null });
   };
 
-  const onSubmitReplaceRegistration = (data: { registrationExpiry: string; registrationDocumentImage: File | undefined }) => {
-    if (!selectedCar || !data.registrationDocumentImage) return;
+  const onSubmitReplaceRegistration = (data: { registrationExpiry: string; registrationDocumentImage: string | null }) => {
+    if (!selectedCar) return;
+    if (!data.registrationDocumentImage && !selectedCarDetails?.registrationDocumentImage) {
+      replaceRegistrationForm.setError("registrationDocumentImage", {
+        type: "manual",
+        message: t("compliance.registrationDocumentRequired", "Registration document is required"),
+      });
+      return;
+    }
     const formData = new FormData();
-    formData.append("registrationExpiry", data.registrationExpiry);
-    formData.append("registrationDocumentImage", data.registrationDocumentImage);
+    if (data.registrationExpiry) {
+      formData.append("registrationExpiry", data.registrationExpiry);
+    }
+    if (data.registrationDocumentImage) {
+      try {
+        const fallbackName = selectedCar.plateNumber || selectedCar.carId || "registration";
+        const file = dataUrlToFile(data.registrationDocumentImage, fallbackName);
+        formData.append("registrationDocumentImage", file, file.name);
+      } catch (error) {
+        console.error("Failed to process registration document", error);
+        replaceRegistrationForm.setError("registrationDocumentImage", {
+          type: "manual",
+          message: t("compliance.registrationDocumentInvalid", "The uploaded document could not be processed."),
+        });
+        return;
+      }
+    }
     replaceRegistrationMutation.mutate({ id: selectedCar.carId, data: formData });
   };
 
@@ -280,11 +351,7 @@ function FleetExpiry() {
                 </TableHeader>
                 <TableBody>
                   {fleetChecks.map((check) => {
-                    const vehicleLabel = `${check.year ? `${check.year} ` : ''}${check.make} ${check.model}`.trim();
-                    const eligibleForReplacement =
-                      !check.registrationExpiry ||
-                      check.daysUntilRegistrationExpiry === null ||
-                      (check.daysUntilRegistrationExpiry ?? 0) <= 0;
+                    const vehicleLabel = `${check.year ? `${check.year} ` : ""}${check.make} ${check.model}`.trim();
                     return (
                       <TableRow key={check.carId}>
                         <TableCell>
@@ -306,30 +373,25 @@ function FleetExpiry() {
                         </TableCell>
                         <TableCell>{check.registrationOwner || '—'}</TableCell>
                         <TableCell>
-                          {eligibleForReplacement ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setSelectedCar(check);
-                                const parsedExpiry = check.registrationExpiry
-                                  ? new Date(check.registrationExpiry)
-                                  : null;
-                                const formattedExpiry =
-                                  parsedExpiry && !Number.isNaN(parsedExpiry.getTime())
-                                    ? parsedExpiry.toISOString().split('T')[0]
-                                    : '';
-                                replaceRegistrationForm.reset({
-                                  registrationExpiry: formattedExpiry,
-                                  registrationDocumentImage: undefined,
-                                });
-                              }}
-                            >
-                              {t('compliance.replaceRegistration','Replace registration')}
-                            </Button>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedCarDetails(null);
+                              setSelectedCar(check);
+                              const parsedExpiry = check.registrationExpiry ? new Date(check.registrationExpiry) : null;
+                              const formattedExpiry =
+                                parsedExpiry && !Number.isNaN(parsedExpiry.getTime())
+                                  ? parsedExpiry.toISOString().split("T")[0]
+                                  : "";
+                              replaceRegistrationForm.reset({
+                                registrationExpiry: formattedExpiry,
+                                registrationDocumentImage: null,
+                              });
+                            }}
+                          >
+                            {t('compliance.replaceRegistration','Update registration')}
+                          </Button>
                         </TableCell>
                       </TableRow>
                     );
@@ -356,6 +418,11 @@ function FleetExpiry() {
                 : null}
             </DialogDescription>
           </DialogHeader>
+          {fetchingCarDetails && (
+            <div className="mb-3 rounded-md border border-dashed border-muted-foreground/40 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+              {t("compliance.loadingRegistrationDocument", "Loading current registration document...")}
+            </div>
+          )}
           <Form {...replaceRegistrationForm}>
             <form onSubmit={replaceRegistrationForm.handleSubmit(onSubmitReplaceRegistration)} className="space-y-4">
               <FormField
@@ -376,17 +443,41 @@ function FleetExpiry() {
                 name="registrationDocumentImage"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t('compliance.registrationDocumentLabel','New registration document')}</FormLabel>
+                    <FormLabel>{t("compliance.registrationDocumentLabel", "New registration document")}</FormLabel>
                     <FormControl>
-                      <Input
-                        type="file"
+                      <ImageUpload
+                        label={t("compliance.registrationUploadControl", "Upload replacement document")}
+                        value={field.value ?? ""}
+                        onChange={(value) => field.onChange(value ?? null)}
                         accept="image/*,application/pdf"
-                        onChange={(event) => {
-                          const file = event.target.files?.[0];
-                          field.onChange(file);
-                        }}
+                        variant="document"
+                        maxSizeMB={5}
                       />
                     </FormControl>
+                    {existingRegistrationDocument && (
+                      <div className="mt-3 space-y-2 rounded-md border border-dashed border-muted-foreground/40 bg-muted/30 p-3 text-xs text-muted-foreground">
+                        <div className="font-medium text-foreground">
+                          {t("compliance.currentRegistrationDocument", "Current registration document")}
+                        </div>
+                        {existingDocumentIsPdf ? (
+                          <Button asChild variant="link" className="px-0 text-blue-600 hover:text-blue-700">
+                            <a
+                              href={existingRegistrationDocument}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              {t("compliance.viewCurrentRegistrationDocument", "View current document")}
+                            </a>
+                          </Button>
+                        ) : (
+                          <img
+                            src={existingRegistrationDocument}
+                            alt={t("compliance.currentRegistrationAlt", "Current registration document preview")}
+                            className="max-h-48 rounded border border-muted-foreground/30 object-contain"
+                          />
+                        )}
+                      </div>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}

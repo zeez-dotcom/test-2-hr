@@ -1,9 +1,9 @@
 import { useForm, type SubmitHandler } from "react-hook-form";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertEmployeeSchema } from "@shared/schema";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -63,8 +63,25 @@ const allowanceFormSchema = z.object({
 
 type FormData = z.infer<typeof formSchema>;
 type AllowanceFormValues = z.infer<typeof allowanceFormSchema>;
+type AllowanceListItem = {
+  id: string;
+  title: string;
+  amount: number;
+  recurrenceType: "none" | "monthly";
+  recurrenceEndDate: string | null;
+  eventDate: string | null;
+  isLocal?: boolean;
+};
+type PendingAllowanceDraft = {
+  title: string;
+  amount: string;
+  recurrenceType: "none" | "monthly";
+  recurrenceEndDate: string | null;
+  eventDate: string | null;
+};
 type EmployeeFormSubmission = InsertEmployee & {
   customFieldValues?: EmployeeCustomValueMap;
+  pendingAllowances?: PendingAllowanceDraft[];
 };
 
 interface EmployeeFormProps {
@@ -186,9 +203,9 @@ export default function EmployeeForm({
   const employeeStartDateValue = form.watch("startDate");
 
   const [isAllowanceDialogOpen, setIsAllowanceDialogOpen] = useState(false);
-  const [allowanceToEdit, setAllowanceToEdit] = useState<EmployeeEvent | null>(null);
+  const [allowanceToEdit, setAllowanceToEdit] = useState<AllowanceListItem | null>(null);
   const [isAllowanceConfirmOpen, setIsAllowanceConfirmOpen] = useState(false);
-  const [allowanceToDelete, setAllowanceToDelete] = useState<string | null>(null);
+  const [allowanceToDelete, setAllowanceToDelete] = useState<AllowanceListItem | null>(null);
 
   const allowanceForm = useForm<AllowanceFormValues>({
     resolver: zodResolver(allowanceFormSchema),
@@ -199,6 +216,8 @@ export default function EmployeeForm({
       recurrenceEndDate: null,
     },
   });
+  const [localAllowances, setLocalAllowances] = useState<AllowanceListItem[]>([]);
+  const isNewEmployee = !employeeId;
 
   const allowanceRecurrenceType = allowanceForm.watch("recurrenceType");
 
@@ -299,7 +318,7 @@ export default function EmployeeForm({
   }, [customFields]);
 
   const {
-    data: allowanceEvents = [],
+    data: fetchedAllowanceEvents = [],
     isLoading: allowancesLoading,
     error: allowanceError,
   } = useQuery<EmployeeEvent[]>({
@@ -315,6 +334,22 @@ export default function EmployeeForm({
       return res.data as EmployeeEvent[];
     },
   });
+
+  const remoteAllowances = useMemo<AllowanceListItem[]>(() => {
+    return fetchedAllowanceEvents.map((event) => ({
+      id: event.id,
+      title: event.title ?? "",
+      amount: Number(event.amount ?? 0),
+      recurrenceType: (event.recurrenceType as "none" | "monthly") ?? "none",
+      recurrenceEndDate: event.recurrenceEndDate ?? null,
+      eventDate: event.eventDate ?? null,
+      isLocal: false,
+    }));
+  }, [fetchedAllowanceEvents]);
+
+  const allowancesList = isNewEmployee ? localAllowances : remoteAllowances;
+  const isAllowancesLoading = isNewEmployee ? false : allowancesLoading;
+  const allowanceErrorMessage = isNewEmployee ? null : allowanceError;
 
   const allowanceRecurrenceStartDate = (() => {
     const base = allowanceToEdit?.eventDate ?? employeeStartDateValue;
@@ -343,16 +378,16 @@ export default function EmployeeForm({
     return new Date().toISOString().split("T")[0];
   };
 
-  const handleOpenAllowanceDialog = (event?: EmployeeEvent) => {
-    if (event) {
-      setAllowanceToEdit(event);
-      allowanceForm.reset({
-        title: event.title ?? "",
-        amount: String(event.amount ?? ""),
-        recurrenceType: (event.recurrenceType as AllowanceFormValues["recurrenceType"]) ?? "none",
-        recurrenceEndDate: event.recurrenceEndDate ?? null,
-      });
-    } else {
+const handleOpenAllowanceDialog = (event?: AllowanceListItem) => {
+  if (event) {
+    setAllowanceToEdit(event);
+    allowanceForm.reset({
+      title: event.title ?? "",
+      amount: String(event.amount ?? ""),
+      recurrenceType: (event.recurrenceType as AllowanceFormValues["recurrenceType"]) ?? "none",
+      recurrenceEndDate: event.recurrenceType === "monthly" ? event.recurrenceEndDate ?? null : null,
+    });
+  } else {
       setAllowanceToEdit(null);
       resetAllowanceForm();
     }
@@ -445,9 +480,33 @@ export default function EmployeeForm({
     },
   });
 
-  const isSavingAllowance = createAllowanceMutation.isPending || updateAllowanceMutation.isPending;
+  const isSavingAllowance = employeeId
+    ? createAllowanceMutation.isPending || updateAllowanceMutation.isPending
+    : false;
 
   const handleAllowanceSubmit = allowanceForm.handleSubmit((values) => {
+    if (!employeeId) {
+      const eventDate = resolveAllowanceEventDate(allowanceToEdit?.eventDate);
+      const draft: AllowanceListItem = {
+        id: allowanceToEdit?.id ?? `draft-${Date.now()}`,
+        title: values.title,
+        amount: Number(values.amount),
+        recurrenceType: values.recurrenceType,
+        recurrenceEndDate: values.recurrenceType === "monthly" ? values.recurrenceEndDate ?? null : null,
+        eventDate: eventDate ?? null,
+        isLocal: true,
+      };
+      setLocalAllowances((current) =>
+        allowanceToEdit
+          ? current.map(item => (item.id === allowanceToEdit.id ? draft : item))
+          : [...current, draft],
+      );
+      setIsAllowanceDialogOpen(false);
+      setAllowanceToEdit(null);
+      resetAllowanceForm();
+      return;
+    }
+
     if (allowanceToEdit) {
       updateAllowanceMutation.mutate({
         id: allowanceToEdit.id,
@@ -499,6 +558,17 @@ export default function EmployeeForm({
         payload.customFieldValues = nextValues;
       }
     }
+    if (isNewEmployee && localAllowances.length > 0) {
+      const defaultEventDate =
+        form.getValues("startDate") || new Date().toISOString().split("T")[0];
+      payload.pendingAllowances = localAllowances.map((allowance) => ({
+        title: allowance.title,
+        amount: allowance.amount.toString(),
+        recurrenceType: allowance.recurrenceType,
+        recurrenceEndDate: allowance.recurrenceType === "monthly" ? allowance.recurrenceEndDate ?? null : null,
+        eventDate: allowance.eventDate ?? defaultEventDate,
+      }));
+    }
     onSubmit(payload);
   };
 
@@ -515,6 +585,9 @@ export default function EmployeeForm({
                 <FormControl>
                   <Input placeholder="EMP001" disabled={!!initialData?.employeeCode} {...field} />
                 </FormControl>
+                <FormDescription>
+                  Use any format you prefer—just keep each employee code unique.
+                </FormDescription>
                 {fieldState.error && (
                   <p className="text-sm text-red-500">{fieldState.error.message}</p>
                 )}
@@ -1141,7 +1214,7 @@ export default function EmployeeForm({
           </div>
         ) : null}
 
-        {employeeId && (
+        {(isNewEmployee || employeeId) && (
           <div className="space-y-4 rounded-lg bg-gray-50 p-6">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -1149,6 +1222,11 @@ export default function EmployeeForm({
                 <p className="text-sm text-muted-foreground">
                   Manage recurring allowances that are applied to this employee's payroll.
                 </p>
+                {isNewEmployee && (
+                  <p className="text-xs text-muted-foreground">
+                    Allowances added here will be created after the employee profile is saved.
+                  </p>
+                )}
               </div>
               <Button
                 type="button"
@@ -1160,16 +1238,20 @@ export default function EmployeeForm({
               </Button>
             </div>
 
-            {allowancesLoading ? (
+            {isAllowancesLoading ? (
               <p className="text-sm text-muted-foreground">Loading allowances...</p>
-            ) : allowanceError ? (
+            ) : allowanceErrorMessage ? (
               <p className="text-sm text-red-500">
-                {allowanceError instanceof Error
-                  ? allowanceError.message
+                {allowanceErrorMessage instanceof Error
+                  ? allowanceErrorMessage.message
                   : "Failed to load allowances."}
               </p>
-            ) : allowanceEvents.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No allowances recorded for this employee.</p>
+            ) : allowancesList.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {isNewEmployee
+                  ? "No allowances added yet."
+                  : "No allowances recorded for this employee."}
+              </p>
             ) : (
               <Table>
                 <TableHeader>
@@ -1182,7 +1264,7 @@ export default function EmployeeForm({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {allowanceEvents.map((event) => (
+                  {allowancesList.map((event) => (
                     <TableRow key={event.id}>
                       <TableCell className="font-medium">{event.title}</TableCell>
                       <TableCell>{formatCurrency(event.amount ?? 0)}</TableCell>
@@ -1213,10 +1295,10 @@ export default function EmployeeForm({
                             variant="ghost"
                             size="icon"
                             onClick={() => {
-                              setAllowanceToDelete(event.id);
+                              setAllowanceToDelete(event);
                               setIsAllowanceConfirmOpen(true);
                             }}
-                            disabled={deleteAllowanceMutation.isPending}
+                            disabled={employeeId ? deleteAllowanceMutation.isPending : false}
                             aria-label="Delete allowance"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -1653,7 +1735,7 @@ export default function EmployeeForm({
                             onChange={name => field.onChange(name)}
                             placeholder="Housing allowance"
                             disabled={isSavingAllowance}
-                            extraOptions={allowanceEvents
+                            extraOptions={allowancesList
                               .map(event => event.title ?? "")
                               .filter(title => title.trim().length > 0)}
                           />
@@ -1721,8 +1803,19 @@ export default function EmployeeForm({
             description="This allowance will be removed from the employee profile."
             confirmText="Delete"
             onConfirm={() => {
-              if (allowanceToDelete && !deleteAllowanceMutation.isPending) {
-                deleteAllowanceMutation.mutate(allowanceToDelete);
+              if (!allowanceToDelete) {
+                return;
+              }
+              if (!employeeId || allowanceToDelete.isLocal) {
+                setLocalAllowances((current) =>
+                  current.filter(item => item.id !== allowanceToDelete.id),
+                );
+                setAllowanceToDelete(null);
+                setIsAllowanceConfirmOpen(false);
+                return;
+              }
+              if (!deleteAllowanceMutation.isPending) {
+                deleteAllowanceMutation.mutate(allowanceToDelete.id);
               }
             }}
           />

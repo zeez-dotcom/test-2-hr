@@ -37,6 +37,15 @@ interface EmployeeTableProps {
   isMutating: boolean;
   initialStatusFilter?: string;
   onStartWorkflow: (employee: EmployeeWithDepartment, type: "onboarding" | "offboarding") => void;
+  vacationsThisMonth?: Record<
+    string,
+    {
+      startDate: string;
+      endDate: string;
+      status: string;
+      currentlyOnVacation: boolean;
+    }
+  >;
 }
 
 export default function EmployeeTable({
