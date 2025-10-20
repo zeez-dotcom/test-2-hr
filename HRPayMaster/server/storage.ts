@@ -5041,11 +5041,36 @@ export class DatabaseStorage implements IStorage {
 
 
 
+  private async deleteLoanDependencies(
+    tx: TransactionClient,
+    loanId: string,
+  ): Promise<void> {
+
+    await tx.delete(loanApprovalStages).where(eq(loanApprovalStages.loanId, loanId));
+
+    await tx.delete(loanDocuments).where(eq(loanDocuments.loanId, loanId));
+
+    await tx
+      .delete(loanAmortizationSchedules)
+      .where(eq(loanAmortizationSchedules.loanId, loanId));
+
+    await tx.delete(loanPayments).where(eq(loanPayments.loanId, loanId));
+
+  }
+
+
+
   async deleteLoan(id: string): Promise<boolean> {
 
-    const result = await db.delete(loans).where(eq(loans.id, id));
+    return await db.transaction(async tx => {
 
-    return (result.rowCount ?? 0) > 0;
+      await this.deleteLoanDependencies(tx, id);
+
+      const result = await tx.delete(loans).where(eq(loans.id, id));
+
+      return (result.rowCount ?? 0) > 0;
+
+    });
 
   }
 
