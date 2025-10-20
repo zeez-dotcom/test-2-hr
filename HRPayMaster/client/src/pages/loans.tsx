@@ -348,7 +348,6 @@ export default function Loans() {
     return <div>Error loading loans</div>;
   }
 
-  const validCreateDocuments = createDocuments.filter((doc) => doc.title.trim() && doc.fileUrl);
   const editingDocState = editingLoan ? loanDocumentState[editingLoan.id] : undefined;
   const editingRemovedIds = editingDocState ? new Set(editingDocState.removedDocumentIds) : new Set<string>();
   const editingExistingDocs = editingLoan
@@ -368,15 +367,11 @@ export default function Loans() {
         title: doc.title.trim(),
         fileUrl: doc.fileUrl!,
       }));
-    if (documentsPayload.length === 0) {
-      toast({
-        title: "Supporting documents required",
-        description: "Upload at least one document before creating a loan.",
-        variant: "destructive",
-      });
-      return;
+    const payload = { ...data };
+    if (documentsPayload.length > 0) {
+      payload.documents = documentsPayload;
     }
-    createMutation.mutate({ ...data, documents: documentsPayload });
+    createMutation.mutate(payload);
   };
 
   const handleApprove = (loan: LoanWithEmployee) => {
@@ -673,7 +668,7 @@ export default function Loans() {
                     </div>
                   )}
                   <p className="text-xs text-muted-foreground">
-                    Upload at least one supporting document before submitting the loan request.
+                    Supporting documents are optional for creation but required before approval.
                   </p>
                 </div>
 
@@ -682,8 +677,7 @@ export default function Loans() {
                     type="submit"
                     disabled={
                       createMutation.isPending ||
-                      !form.formState.isValid ||
-                      validCreateDocuments.length === 0
+                      !form.formState.isValid
                     }
                   >
                     {createMutation.isPending ? t('loansPage.creating','Creating...') : t('loansPage.newLoan','Create Loan')}
