@@ -1,4 +1,4 @@
-{
+﻿{
     "greeting":  "مرحبا",
     "dashboard":  {
                       "title":  "لوحة التحكم",
@@ -34,6 +34,7 @@
                 "reports":  "التقارير",
                 "vacations":  "الإجازات",
                 "loans":  "القروض",
+                "allowances":  "البدلات",
                 "assets":  "الأصول",
                 "cars":  "الأسطول",
                 "documents":  "الوثائق",
@@ -270,6 +271,76 @@
             "affectsPayrollHelp":  "عطّل الخيار إذا كان يجب استبعاد هذا البدل من حسابات الرواتب."
         }
     },
+
+
+  "allowances":  {
+    "titleHeading":  "البدلات",
+    "subtitle":  "تتبع بدلات الموظفين، وأدِر الأحداث المتكررة، واطلع على اتجاهات البدلات.",
+    "add":  "إضافة بدل",
+    "filters":  {
+      "title":  "عوامل التصفية",
+      "startDate":  "تاريخ البدء",
+      "endDate":  "تاريخ الانتهاء",
+      "recurrence":  "النوع",
+      "search":  "بحث"
+    },
+    "searchPlaceholder":  "ابحث حسب الموظف أو العنوان",
+    "totalAllowances":  "إجمالي البدلات",
+    "totalRecurring":  "إجمالي البدلات المتكررة",
+    "totalOneTime":  "إجمالي بدلات المرة الواحدة",
+    "loadError":  "تعذر تحميل البدلات.",
+    "listTitle":  "سجلات البدلات",
+    "loading":  "جاري تحميل البدلات...",
+    "noResults":  "لا توجد بدلات للفترة المحددة.",
+    "employeeColumn":  "الموظف",
+    "titleColumn":  "العنوان",
+    "amountColumn":  "المبلغ",
+    "typeColumn":  "النوع",
+    "eventDateColumn":  "تاريخ السريان",
+    "recurrenceEndColumn":  "ينتهي التكرار في",
+    "statusColumn":  "الحالة",
+    "actionsColumn":  "الإجراءات",
+    "unknownEmployee":  "موظف غير معروف",
+    "topEmployees":  "أعلى الموظفين",
+    "loadingReport":  "جاري تحميل التقرير...",
+    "noReportData":  "لا توجد بيانات بدلات لهذه الفترة.",
+    "typesBreakdown":  "أنواع البدلات",
+    "entries":  "{{count}} إدخالات",
+    "toastSaved":  "تم حفظ البدل",
+    "toastSaveError":  "فشل حفظ البدل",
+    "toastUpdated":  "تم تحديث البدل",
+    "toastDeleted":  "تم حذف البدل",
+    "toastDeleteError":  "فشل حذف البدل",
+    "deleteTitle":  "حذف بدل",
+    "deleteDescription":  "سيتم إزالة هذا البدل من احتسابات الرواتب المستقبلية.",
+    "delete":  "حذف البدل",
+    "deleting":  "جاري الحذف...",
+    "cancel":  "إلغاء",
+    "createDialogTitle":  "بدل جديد",
+    "editDialogTitle":  "تعديل بدل",
+    "create":  "إنشاء بدل",
+    "update":  "تحديث البدل",
+    "saving":  "جاري الحفظ...",
+    "recurrence":  {
+      "all":  "جميع الأنواع",
+      "monthly":  "متكرر",
+      "none":  "مرة واحدة"
+    },
+    "form":  {
+      "employee":  "الموظف",
+      "employeePlaceholder":  "اختر موظفاً",
+      "title":  "العنوان",
+      "titlePlaceholder":  "اسم البدل",
+      "description":  "الوصف",
+      "descriptionPlaceholder":  "وصف اختياري",
+      "amount":  "المبلغ",
+      "eventDate":  "تاريخ السريان",
+      "recurrenceType":  "التكرار",
+      "recurrenceEndDate":  "ينتهي التكرار في",
+      "affectsPayroll":  "يؤثر على إجمالي الرواتب",
+      "affectsPayrollHelp":  "عطّل الخيار إذا كان يجب استبعاد هذا البدل من حسابات الرواتب."
+    }
+  },
 
   "cars":  {
                  "title":  "إدارة الأسطول",
