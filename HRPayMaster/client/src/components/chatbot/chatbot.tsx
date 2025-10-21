@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { Employee, InsertEmployeeEvent } from "@shared/schema";
 import { resolveDate, ChatIntent } from "@shared/chatbot";
 import { differenceInCalendarDays } from "date-fns";
-import { apiGet, apiPost } from "@/lib/http";
+import { apiGet, apiPost, apiPut } from "@/lib/http";
 import { updateLatestLoanMonthlyDeduction, updateEmployeeFieldValue } from "./chatbot-actions";
 import { getNewTabRel } from "@/lib/utils";
 import { buildBilingualActionReceipt, buildAndEncodePdf } from "@/lib/pdf";
@@ -18,6 +18,8 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import ImageUpload from "@/components/ui/image-upload";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { AlertCircle, Loader2, Plus, Sparkles } from "lucide-react";
 
@@ -78,7 +80,10 @@ interface ProactivePrompt {
   };
 }
 
-export function Chatbot() {
+export function Chatbot({
+  initialTab = "chat",
+  initialDocuments,
+}: { initialTab?: "chat" | "drawer"; initialDocuments?: any[] } = {}) {
   const { t } = useTranslation();
   const { data: employees = [] } = useQuery<Employee[]>({ queryKey: ["/api/employees"] });
   const { data: assets = [] } = useQuery<any[]>({ queryKey: ["/api/assets"] });
@@ -93,7 +98,7 @@ export function Chatbot() {
   const [pending, setPending] = useState<PendingIntent | null>(null);
   const [currentDate] = useState(new Date());
   const [docs, setDocs] = useState<any[] | null>(null);
-  const [tab, setTab] = useState<"chat" | "drawer">("chat");
+  const [tab, setTab] = useState<"chat" | "drawer">(initialTab);
   const [drawerQuery, setDrawerQuery] = useState("");
   const [drawerEmployeeId, setDrawerEmployeeId] = useState<string>("");
   const [docCategoryFilter, setDocCategoryFilter] = useState<string>("");
@@ -111,6 +116,35 @@ export function Chatbot() {
   });
   const [docUpload, setDocUpload] = useState<string | undefined>();
   const [docSaving, setDocSaving] = useState(false);
+  const [historyDoc, setHistoryDoc] = useState<any | null>(null);
+  const [historyTitle, setHistoryTitle] = useState("");
+  const [historyDescription, setHistoryDescription] = useState("");
+  const [historyMetadata, setHistoryMetadata] = useState("");
+  const [historyDataUrl, setHistoryDataUrl] = useState<string | undefined>();
+  const [historySaving, setHistorySaving] = useState(false);
+  interface DocumentEditFormState {
+    title: string;
+    description: string;
+    category: string;
+    tags: string;
+    referenceNumber: string;
+    controllerNumber: string;
+    expiryDate: string;
+    alertDays: string;
+  }
+  const [editDoc, setEditDoc] = useState<any | null>(null);
+  const [editForm, setEditForm] = useState<DocumentEditFormState>({
+    title: "",
+    description: "",
+    category: "",
+    tags: "",
+    referenceNumber: "",
+    controllerNumber: "",
+    expiryDate: "",
+    alertDays: "",
+  });
+  const [editUpload, setEditUpload] = useState<string | undefined>();
+  const [editSaving, setEditSaving] = useState(false);
   const [serverConfirmation, setServerConfirmation] = useState<ServerConfirmationState | null>(null);
   const [serverActionLoading, setServerActionLoading] = useState(false);
   const [knowledgeQuery, setKnowledgeQuery] = useState("");
@@ -122,9 +156,17 @@ export function Chatbot() {
 
   const { toast } = useToast();
 
-  const { data: companyDocuments = [], refetch: refetchCompanyDocuments, isFetching: documentsLoading } = useQuery<any[]>({
+  const { data: companyDocuments = initialDocuments ?? [], refetch: refetchCompanyDocuments, isFetching: documentsLoading } = useQuery<any[]>({
     queryKey: ["/api/documents"],
     enabled: tab === "drawer",
+  });
+  const {
+    data: historyVersions = [],
+    refetch: refetchHistoryVersions,
+    isFetching: historyLoading,
+  } = useQuery<any[]>({
+    queryKey: historyDoc ? ["/api/documents", historyDoc.id, "versions"] : ["/api/documents", "", "versions"],
+    enabled: Boolean(historyDoc),
   });
   const employeeLookup = useMemo(() => {
     const lookup = new Map<string, Employee>();
@@ -353,6 +395,62 @@ export function Chatbot() {
     setMessages([{ from: "bot", text: t("chatbot.selectAction") }]);
   }, [t]);
 
+  useEffect(() => {
+    if (!historyDoc) {
+      setHistoryTitle("");
+      setHistoryDescription("");
+      setHistoryMetadata("");
+      setHistoryDataUrl(undefined);
+      return;
+    }
+    setHistoryTitle(historyDoc.title ?? "");
+    setHistoryDescription(historyDoc.description ?? "");
+    setHistoryMetadata(
+      historyDoc.metadata ? JSON.stringify(historyDoc.metadata, null, 2) : "",
+    );
+    setHistoryDataUrl(undefined);
+  }, [historyDoc]);
+
+  useEffect(() => {
+    if (!editDoc) {
+      setEditForm({
+        title: "",
+        description: "",
+        category: "",
+        tags: "",
+        referenceNumber: "",
+        controllerNumber: "",
+        expiryDate: "",
+        alertDays: "",
+      });
+      setEditUpload(undefined);
+      return;
+    }
+    const formatDate = (value: any) => {
+      if (!value) return "";
+      const iso = typeof value === "string" ? value : new Date(value).toISOString();
+      return iso.slice(0, 10);
+    };
+    setEditForm({
+      title: editDoc.title ?? "",
+      description: editDoc.description ?? "",
+      category: editDoc.category ?? "",
+      tags: typeof editDoc.tags === "string"
+        ? editDoc.tags
+        : Array.isArray(editDoc.tags)
+        ? editDoc.tags.join(", ")
+        : "",
+      referenceNumber: editDoc.referenceNumber ?? "",
+      controllerNumber: editDoc.controllerNumber ?? "",
+      expiryDate: formatDate(editDoc.expiryDate),
+      alertDays:
+        editDoc.alertDays === 0 || editDoc.alertDays
+          ? String(editDoc.alertDays)
+          : "",
+    });
+    setEditUpload(undefined);
+  }, [editDoc]);
+
   const runKnowledgeSearch = async (event?: FormEvent) => {
     if (event) event.preventDefault();
     const query = knowledgeQuery.trim();
@@ -385,6 +483,214 @@ export function Chatbot() {
       setKnowledgeResults([]);
     }
   }, [knowledgeQuery]);
+
+  const parseMetadataJson = (value: string): Record<string, unknown> | undefined | null => {
+    if (!value.trim()) {
+      return undefined;
+    }
+    try {
+      const parsed = JSON.parse(value);
+      if (typeof parsed === "object" && parsed !== null) {
+        return parsed as Record<string, unknown>;
+      }
+      toast({
+        title: "Metadata must be a JSON object",
+        variant: "destructive",
+      });
+      return null;
+    } catch {
+      toast({
+        title: "Invalid metadata JSON",
+        description: "Update the metadata field with valid JSON before saving.",
+        variant: "destructive",
+      });
+      return null;
+    }
+  };
+
+  const handleHistoryVersionSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!historyDoc) return;
+    const metadata = parseMetadataJson(historyMetadata);
+    if (metadata === null) {
+      return;
+    }
+
+    const trimmedTitle = historyTitle.trim();
+    if (!trimmedTitle) {
+      toast({
+        title: "Title is required",
+        description: "Provide a title for this document before saving.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const trimmedDescription = historyDescription.trim();
+    const updatePayload: Record<string, unknown> = {
+      title: trimmedTitle,
+    };
+    if (trimmedDescription) {
+      updatePayload.description = trimmedDescription;
+    }
+    if (metadata !== undefined) {
+      updatePayload.metadata = metadata;
+    }
+
+    setHistorySaving(true);
+    try {
+      if (Object.keys(updatePayload).length > 0) {
+        const updateRes = await apiPut(`/api/documents/${historyDoc.id}`, updatePayload);
+        if (!updateRes.ok) {
+          throw new Error(updateRes.error || "Failed to update document details");
+        }
+      }
+
+      if (historyDataUrl) {
+        const versionPayload: Record<string, unknown> = {
+          title: trimmedTitle,
+          pdfDataUrl: historyDataUrl,
+        };
+        if (trimmedDescription) {
+          versionPayload.description = trimmedDescription;
+        }
+        if (metadata !== undefined) {
+          versionPayload.metadata = metadata;
+        }
+        if (historyDoc.expiryDate) {
+          versionPayload.expiryDate = historyDoc.expiryDate;
+        }
+        if (historyDoc.alertDays !== undefined && historyDoc.alertDays !== null) {
+          versionPayload.alertDays = historyDoc.alertDays;
+        }
+
+        const versionRes = await apiPost(`/api/documents/${historyDoc.id}/versions`, versionPayload);
+        if (!versionRes.ok) {
+          throw new Error(versionRes.error || "Failed to create a new version");
+        }
+        await refetchHistoryVersions();
+        toast({
+          title: "New version saved",
+          description: "A new version of this document has been uploaded.",
+        });
+      } else {
+        toast({
+          title: "Document updated",
+          description: "Document details have been updated.",
+        });
+      }
+
+      await refetchCompanyDocuments();
+      setHistoryDataUrl(undefined);
+    } catch (error) {
+      console.error("Failed to save document history", error);
+      toast({
+        title: "Failed to save document",
+        description: error instanceof Error ? error.message : "Please try again shortly.",
+        variant: "destructive",
+      });
+    } finally {
+      setHistorySaving(false);
+    }
+  };
+
+  const closeEditModal = () => {
+    setEditDoc(null);
+    setEditUpload(undefined);
+  };
+
+  const handleEditFieldChange = <K extends keyof DocumentEditFormState>(field: K, value: DocumentEditFormState[K]) => {
+    setEditForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const handleDocumentUpdateSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!editDoc) return;
+
+    const trimmedTitle = editForm.title.trim();
+    if (!trimmedTitle) {
+      toast({
+        title: "Title is required",
+        description: "Enter a document title before saving.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const trimmedDescription = editForm.description.trim();
+    const trimmedCategory = editForm.category.trim();
+    const trimmedTags = editForm.tags.trim();
+    const trimmedReference = editForm.referenceNumber.trim();
+    const trimmedController = editForm.controllerNumber.trim();
+    const updatePayload: Record<string, unknown> = {
+      title: trimmedTitle,
+    };
+    if (trimmedDescription) updatePayload.description = trimmedDescription;
+    if (trimmedCategory) updatePayload.category = trimmedCategory;
+    if (trimmedTags) updatePayload.tags = trimmedTags;
+    if (trimmedReference) updatePayload.referenceNumber = trimmedReference;
+    if (trimmedController) updatePayload.controllerNumber = trimmedController;
+    if (editForm.expiryDate) updatePayload.expiryDate = editForm.expiryDate;
+    if (editForm.alertDays) {
+      const parsedAlert = Number(editForm.alertDays);
+      if (!Number.isNaN(parsedAlert)) {
+        updatePayload.alertDays = parsedAlert;
+      }
+    }
+
+    setEditSaving(true);
+    try {
+      if (Object.keys(updatePayload).length > 0) {
+        const updateRes = await apiPut(`/api/documents/${editDoc.id}`, updatePayload);
+        if (!updateRes.ok) {
+          throw new Error(updateRes.error || "Failed to update document");
+        }
+      }
+
+      if (editUpload) {
+        const versionPayload: Record<string, unknown> = {
+          title: trimmedTitle,
+          pdfDataUrl: editUpload,
+        };
+        if (trimmedDescription) versionPayload.description = trimmedDescription;
+        if (editForm.expiryDate) versionPayload.expiryDate = editForm.expiryDate;
+        if (editForm.alertDays) {
+          const parsedAlert = Number(editForm.alertDays);
+          if (!Number.isNaN(parsedAlert)) {
+            versionPayload.alertDays = parsedAlert;
+          }
+        }
+        if (trimmedCategory) versionPayload.category = trimmedCategory;
+        if (trimmedReference) versionPayload.referenceNumber = trimmedReference;
+        if (trimmedController) versionPayload.controllerNumber = trimmedController;
+        const versionRes = await apiPost(`/api/documents/${editDoc.id}/versions`, versionPayload);
+        if (!versionRes.ok) {
+          throw new Error(versionRes.error || "Failed to upload new version");
+        }
+      }
+
+      toast({
+        title: editUpload ? "Document updated" : "Document saved",
+        description: editUpload
+          ? "A new version has been uploaded successfully."
+          : "Document details updated successfully.",
+      });
+      await refetchCompanyDocuments();
+      closeEditModal();
+    } catch (error) {
+      console.error("Failed to update document", error);
+      toast({
+        title: "Failed to update document",
+        description: error instanceof Error ? error.message : "Please try again shortly.",
+        variant: "destructive",
+      });
+    } finally {
+      setEditSaving(false);
+    }
+  };
 
   const submitServerIntent = async (
     intent: ServerActionIntent,
@@ -1808,7 +2114,7 @@ export function Chatbot() {
 
                           <div className="flex flex-col items-end gap-2">
 
-                            <div className="flex gap-2">
+                            <div className="flex flex-wrap justify-end gap-2">
 
                               {doc.documentUrl ? (
 
@@ -1829,6 +2135,18 @@ export function Chatbot() {
                                 </Button>
 
                               )}
+
+                              <Button size="sm" variant="outline" onClick={() => setHistoryDoc(doc)}>
+
+                                History
+
+                              </Button>
+
+                              <Button size="sm" variant="outline" onClick={() => setEditDoc(doc)}>
+
+                                Replace
+
+                              </Button>
 
                             </div>
 
@@ -2123,6 +2441,199 @@ export function Chatbot() {
         </div>
 
       </TabsContent>
+
+      <Dialog open={Boolean(historyDoc)} onOpenChange={(open) => !open && setHistoryDoc(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Document history</DialogTitle>
+            <DialogDescription>
+              {historyDoc?.title ? `${historyDoc.title} • Version ${historyDoc.version ?? 1}` : "Review document versions"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium text-muted-foreground">Versions</h3>
+              <ScrollArea className="max-h-48 rounded border border-slate-200 dark:border-slate-800">
+                <div className="divide-y divide-slate-200 dark:divide-slate-800">
+                  {historyLoading ? (
+                    <div className="flex items-center justify-center gap-2 p-4 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading history...
+                    </div>
+                  ) : historyVersions.length === 0 ? (
+                    <div className="p-4 text-sm text-muted-foreground">No previous versions yet.</div>
+                  ) : (
+                    historyVersions.map((version) => (
+                      <div key={version.id} className="p-3 text-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">Version {version.version}</span>
+                          <Badge variant={version.isLatest ? "default" : "secondary"}>
+                            {version.isLatest ? "Latest" : "Archived"}
+                          </Badge>
+                        </div>
+                        <div className="text-muted-foreground">
+                          {new Date(version.createdAt ?? version.updatedAt ?? Date.now()).toLocaleString()}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </ScrollArea>
+            </div>
+            <form className="space-y-3" onSubmit={handleHistoryVersionSubmit}>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="history-title">Title</Label>
+                  <Input
+                    id="history-title"
+                    value={historyTitle}
+                    onChange={(event) => setHistoryTitle(event.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="history-description">Description</Label>
+                  <Input
+                    id="history-description"
+                    value={historyDescription}
+                    onChange={(event) => setHistoryDescription(event.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label>Upload new version (optional)</Label>
+                <ImageUpload
+                  label="Upload file"
+                  value={historyDataUrl}
+                  onChange={setHistoryDataUrl}
+                  accept="image/*,application/pdf"
+                  maxSizeMB={5}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="history-metadata">Metadata (JSON)</Label>
+                <Textarea
+                  id="history-metadata"
+                  value={historyMetadata}
+                  onChange={(event) => setHistoryMetadata(event.target.value)}
+                  rows={4}
+                />
+              </div>
+              <DialogFooter>
+                <Button type="submit" disabled={historySaving}>
+                  {historySaving ? "Saving..." : historyDataUrl ? "Save new version" : "Save changes"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(editDoc)} onOpenChange={(open) => !open && closeEditModal()}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Update document</DialogTitle>
+            <DialogDescription>
+              Adjust document metadata or upload a replacement file.
+            </DialogDescription>
+          </DialogHeader>
+          {editDoc ? (
+            <form className="space-y-4" onSubmit={handleDocumentUpdateSubmit}>
+              <div className="grid gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="edit-title">Title</Label>
+                  <Input
+                    id="edit-title"
+                    value={editForm.title}
+                    onChange={(event) => handleEditFieldChange("title", event.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="edit-description">Description</Label>
+                  <Textarea
+                    id="edit-description"
+                    value={editForm.description}
+                    onChange={(event) => handleEditFieldChange("description", event.target.value)}
+                    rows={3}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="edit-category">Category</Label>
+                  <Input
+                    id="edit-category"
+                    value={editForm.category}
+                    onChange={(event) => handleEditFieldChange("category", event.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="edit-tags">Tags</Label>
+                  <Input
+                    id="edit-tags"
+                    value={editForm.tags}
+                    onChange={(event) => handleEditFieldChange("tags", event.target.value)}
+                    placeholder="Comma separated"
+                  />
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="edit-reference">Reference #</Label>
+                    <Input
+                      id="edit-reference"
+                      value={editForm.referenceNumber}
+                      onChange={(event) => handleEditFieldChange("referenceNumber", event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="edit-controller">Controller #</Label>
+                    <Input
+                      id="edit-controller"
+                      value={editForm.controllerNumber}
+                      onChange={(event) => handleEditFieldChange("controllerNumber", event.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="edit-expiry">Expiry date</Label>
+                    <Input
+                      id="edit-expiry"
+                      type="date"
+                      value={editForm.expiryDate}
+                      onChange={(event) => handleEditFieldChange("expiryDate", event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="edit-alert">Alert days</Label>
+                    <Input
+                      id="edit-alert"
+                      type="number"
+                      min="0"
+                      value={editForm.alertDays}
+                      onChange={(event) => handleEditFieldChange("alertDays", event.target.value)}
+                    />
+                  </div>
+                </div>
+                <ImageUpload
+                  label="Upload replacement (optional)"
+                  value={editUpload}
+                  onChange={setEditUpload}
+                  accept="image/*,application/pdf"
+                  maxSizeMB={5}
+                />
+              </div>
+              <DialogFooter className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={closeEditModal} disabled={editSaving}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={editSaving}>
+                  {editSaving ? "Saving..." : "Save changes"}
+                </Button>
+              </DialogFooter>
+            </form>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
     </Tabs>
 
