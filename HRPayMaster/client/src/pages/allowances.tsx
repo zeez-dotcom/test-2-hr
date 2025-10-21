@@ -33,6 +33,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -414,8 +415,11 @@ export default function Allowances() {
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <div className="flex flex-col gap-2">
-              <FormLabel>{t("allowances.filters.startDate", "Start date")}</FormLabel>
+              <Label htmlFor="allowance-filter-start-date">
+                {t("allowances.filters.startDate", "Start date")}
+              </Label>
               <Input
+                id="allowance-filter-start-date"
                 type="date"
                 value={filters.startDate}
                 onChange={(event) =>
@@ -424,8 +428,11 @@ export default function Allowances() {
               />
             </div>
             <div className="flex flex-col gap-2">
-              <FormLabel>{t("allowances.filters.endDate", "End date")}</FormLabel>
+              <Label htmlFor="allowance-filter-end-date">
+                {t("allowances.filters.endDate", "End date")}
+              </Label>
               <Input
+                id="allowance-filter-end-date"
                 type="date"
                 value={filters.endDate}
                 onChange={(event) =>
@@ -434,14 +441,16 @@ export default function Allowances() {
               />
             </div>
             <div className="flex flex-col gap-2">
-              <FormLabel>{t("allowances.filters.recurrence", "Type")}</FormLabel>
+              <Label htmlFor="allowance-filter-recurrence">
+                {t("allowances.filters.recurrence", "Type")}
+              </Label>
               <Select
                 value={filters.recurrenceType}
                 onValueChange={(value: RecurrenceFilter) =>
                   setFilters((prev) => ({ ...prev, recurrenceType: value }))
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger id="allowance-filter-recurrence">
                   <SelectValue placeholder={t("allowances.filters.recurrence", "Type")} />
                 </SelectTrigger>
                 <SelectContent>
@@ -454,8 +463,11 @@ export default function Allowances() {
               </Select>
             </div>
             <div className="flex flex-col gap-2">
-              <FormLabel>{t("allowances.filters.search", "Search")}</FormLabel>
+              <Label htmlFor="allowance-filter-search">
+                {t("allowances.filters.search", "Search")}
+              </Label>
               <Input
+                id="allowance-filter-search"
                 placeholder={t(
                   "allowances.searchPlaceholder",
                   "Search by employee or title",
